@@ -1,4 +1,4 @@
-# Axle — Fleet PMS & Maintenance
+# MekanikoMoR — Fleet PMS & Maintenance
 
 Next.js 14 (App Router) · TypeScript · Tailwind · Radix primitives · Recharts ·
 date-fns · lucide-react. No backend — see "Data" below.
@@ -32,6 +32,21 @@ page reads them from there, so change them in one place.
 due-soon critical −8, due-soon −4). A vehicle with two breached safety intervals
 must not read as a 90-something — that was a real bug, don't soften it back.
 
+## Permissions, alerts, documents
+
+- **`lib/rbac.ts`** — four roles, eight capabilities. Gate inside the action
+  component (`NewWorkOrderDialog`, `OdometerDialog`, `UploadDocumentDialog`), not
+  at call sites, so new screens inherit the gate. Denied controls render through
+  `DeniedAction` — dimmed with a reason, never hidden. **This is a UI affordance,
+  not security**; mirror it server-side when an API exists.
+- **`lib/alerts.ts`** — alerts are *derived on every read*, never stored, so they
+  can't outlive their trigger. Ids must stay deterministic or dismissals stop
+  sticking. Only `readIds`/`dismissedIds` persist.
+- **`lib/documents.ts`** — uploads become data URLs in localStorage, hence the
+  1.5 MB cap and `setStateChecked`'s rollback on quota failure. Only insurance,
+  registration, and warranty offer an expiry (it feeds alerts); an expiry on an
+  invoice is noise.
+
 ## Data
 
 State is client-side: `lib/store.ts` wraps `localStorage` in a
@@ -46,6 +61,14 @@ Two constraints that follow from this:
   mount. Check `ready` before rendering data.
 - **Seed dates are drawn inside their calendar month**, not by 30-day
   arithmetic — the naive version left the current month reading zero spend.
+
+Two more rules that bite:
+
+- **`normalise()` in `lib/store.ts` is the migration path.** Older payloads are
+  live in people's browsers; any new required field on a persisted type needs a
+  default there or their first load throws.
+- **Read parts cost via `resolvePartsCost`**, never `order.partsCost`. Estimates
+  carry only the aggregate; itemised lines win once a technician records them.
 
 To point at a real API, replace `lib/store.ts`. Nothing else knows the source.
 

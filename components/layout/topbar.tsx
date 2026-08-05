@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Bell, ChevronDown, LogOut, Menu, Search, UserCog } from "lucide-react";
+import { ChevronDown, LogOut, Menu, Search, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import {
@@ -27,20 +28,24 @@ import {
   CommandPalette,
   useCommandPalette,
 } from "@/components/layout/command-palette";
-import { useFleet } from "@/lib/store";
-
-const CURRENT_USER = { name: "Jehnsen Ricardo", role: "Fleet Manager" };
+import { useAuthActions, useSession } from "@/lib/auth";
+import { AlertsPanel } from "@/components/alerts/alerts-panel";
+import { ROLE_LABEL } from "@/lib/rbac";
 
 export function Topbar() {
+  const router = useRouter();
   const { open, setOpen } = useCommandPalette();
   const [mobileNav, setMobileNav] = React.useState(false);
-  const { ready, summary } = useFleet();
+  const { session } = useSession();
+  const { signOut } = useAuthActions();
   const [today, setToday] = React.useState<string | null>(null);
+
+  // The shell only renders behind AuthGuard, so a session is always present by
+  // the time this paints; the fallback is purely for type narrowing.
+  const user = session ?? { name: "Signed out", title: "—", role: "viewer" as const };
 
   // Rendered after mount so the server and client don't disagree about "today".
   React.useEffect(() => setToday(format(new Date(), "EEEE, dd MMMM yyyy")), []);
-
-  const alerts = ready ? summary.overdue + summary.dueSoon : 0;
 
   return (
     <>
@@ -76,39 +81,33 @@ export function Topbar() {
         </p>
 
         <div className="flex items-center gap-1">
-          <Link
-            href="/schedule"
-            className="relative inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
-            aria-label={`${alerts} maintenance alerts`}
-          >
-            <Bell className="size-4" />
-            {alerts > 0 ? (
-              <span className="absolute right-1 top-1 flex size-2">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-critical opacity-60" />
-                <span className="relative inline-flex size-2 rounded-full bg-critical ring-2 ring-page" />
-              </span>
-            ) : null}
-          </Link>
+          <AlertsPanel />
 
           <ThemeToggle />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="ml-1 flex items-center gap-2 rounded-md py-1 pl-1 pr-2 transition-colors hover:bg-surface-2">
-                <Avatar name={CURRENT_USER.name} />
+                <Avatar name={user.name} />
                 <span className="hidden text-left leading-tight md:block">
-                  <span className="block text-xs font-medium">
-                    {CURRENT_USER.name}
-                  </span>
+                  <span className="block text-xs font-medium">{user.name}</span>
                   <span className="block text-[10px] text-subtle-foreground">
-                    {CURRENT_USER.role}
+                    {user.title}
                   </span>
                 </span>
                 <ChevronDown className="hidden size-3.5 text-subtle-foreground md:block" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuLabel>{CURRENT_USER.name}</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>{user.name}</DropdownMenuLabel>
+              {session ? (
+                <p className="px-2 pb-1.5 text-2xs text-subtle-foreground">
+                  {session.email}
+                  <span className="mt-0.5 block font-medium text-muted-foreground">
+                    {ROLE_LABEL[session.role]}
+                  </span>
+                </p>
+              ) : null}
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
                 <Link href="/settings">
@@ -117,7 +116,13 @@ export function Topbar() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem destructive>
+              <DropdownMenuItem
+                destructive
+                onSelect={() => {
+                  signOut();
+                  router.replace("/login");
+                }}
+              >
                 <LogOut />
                 Sign out
               </DropdownMenuItem>

@@ -29,6 +29,8 @@ export function SpendRankingChart({
   highlightFirst = false,
   height = 300,
   className,
+  valueFormat = "currency",
+  axisWidth = 82,
 }: {
   title: string;
   description?: string;
@@ -37,8 +39,20 @@ export function SpendRankingChart({
   highlightFirst?: boolean;
   height?: number;
   className?: string;
+  /** Currency for spend; plain numbers for counts and rates. */
+  valueFormat?: "currency" | "number";
+  axisWidth?: number;
 }) {
   const colors = useChartColors();
+
+  const full = (value: number) =>
+    valueFormat === "currency"
+      ? formatCurrency(value)
+      : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const compact = (value: number) =>
+    valueFormat === "currency"
+      ? formatCurrencyCompact(value)
+      : value.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
   return (
     <ChartFrame
@@ -50,7 +64,7 @@ export function SpendRankingChart({
           head={["Name", unitLabel]}
           rows={data.map((entry) => [
             entry.meta ? `${entry.name} · ${entry.meta}` : entry.name,
-            formatCurrency(entry.value),
+            full(entry.value),
           ])}
         />
       }
@@ -65,13 +79,13 @@ export function SpendRankingChart({
           <XAxis
             type="number"
             {...axisProps(colors)}
-            tickFormatter={(value: number) => formatCurrencyCompact(value)}
+            tickFormatter={(value: number) => compact(value)}
           />
           <YAxis
             type="category"
             dataKey="name"
             {...axisProps(colors)}
-            width={82}
+            width={axisWidth}
           />
           <Tooltip
             cursor={{ fill: colors.grid, fillOpacity: 0.45 }}
@@ -85,7 +99,7 @@ export function SpendRankingChart({
                     {
                       key: "value",
                       label: unitLabel,
-                      value: formatCurrency(entry.value),
+                      value: full(entry.value),
                       color: colors.series1,
                     },
                   ]}
@@ -109,7 +123,7 @@ export function SpendRankingChart({
               offset={8}
               fill={colors.text}
               fontSize={11}
-              formatter={(value: number) => formatCurrencyCompact(value)}
+              formatter={(value: number) => compact(value)}
             />
           </Bar>
         </BarChart>

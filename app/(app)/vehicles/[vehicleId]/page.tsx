@@ -13,6 +13,8 @@ import { PmsSchedule } from "@/components/vehicles/pms-schedule";
 import { OdometerDialog } from "@/components/vehicles/odometer-dialog";
 import { NewWorkOrderDialog } from "@/components/work-orders/new-work-order-dialog";
 import { WorkOrderTable } from "@/components/work-orders/work-order-table";
+import { DocumentList } from "@/components/documents/document-list";
+import { UploadDocumentDialog } from "@/components/documents/upload-document-dialog";
 import { useFleet } from "@/lib/store";
 import { workOrderCost } from "@/lib/pms";
 import {
@@ -28,7 +30,7 @@ export default function VehicleDetailPage({
 }: {
   params: { vehicleId: string };
 }) {
-  const { ready, healthById, workOrders, vehicles } = useFleet();
+  const { ready, healthById, workOrders, vehicles, documents } = useFleet();
 
   if (!ready) {
     return (
@@ -71,6 +73,10 @@ export default function VehicleDetailPage({
     .sort((a, b) =>
       (b.completedOn ?? b.scheduledFor).localeCompare(a.completedOn ?? a.scheduledFor)
     );
+
+  const vehicleDocuments = documents.filter(
+    (doc) => doc.vehicleId === vehicle.id
+  );
 
   const lifetimeSpend = orders
     .filter((order) => order.status === "completed")
@@ -228,6 +234,12 @@ export default function VehicleDetailPage({
               {orders.length}
             </span>
           </TabsTrigger>
+          <TabsTrigger value="documents">
+            Documents
+            <span className="tabular ml-1 rounded bg-surface-3 px-1.5 py-0.5 text-[10px]">
+              {vehicleDocuments.length}
+            </span>
+          </TabsTrigger>
           <TabsTrigger value="details">Vehicle details</TabsTrigger>
         </TabsList>
 
@@ -265,6 +277,30 @@ export default function VehicleDetailPage({
                 showVehicle={false}
                 emptyTitle="No service history yet"
                 emptyDescription="Nothing has been raised against this vehicle."
+              />
+            </div>
+          </section>
+        </TabsContent>
+
+        <TabsContent value="documents">
+          <section className="card-raised">
+            <header className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3 pt-4">
+              <div>
+                <h3 className="text-sm font-semibold tracking-tight">
+                  Documents for {vehicle.plateNumber}
+                </h3>
+                <p className="mt-0.5 text-xs text-subtle-foreground">
+                  Registration, insurance, invoices, and service reports filed
+                  against this unit.
+                </p>
+              </div>
+              <UploadDocumentDialog vehicleId={vehicle.id} size="sm" />
+            </header>
+            <div className="border-t border-border">
+              <DocumentList
+                documents={vehicleDocuments}
+                emptyTitle="No documents on file"
+                emptyDescription="Upload the registration, policy, or a service report to start the record."
               />
             </div>
           </section>

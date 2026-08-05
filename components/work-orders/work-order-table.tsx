@@ -1,9 +1,11 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
   ClipboardList,
+  FileText,
   MoreHorizontal,
   Play,
   XCircle,
@@ -20,7 +22,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PriorityBadge, WorkOrderStatusBadge } from "@/components/status";
+import { CompleteWorkOrderDialog } from "@/components/work-orders/complete-work-order-dialog";
 import { useFleetActions } from "@/lib/store";
+import { useCan } from "@/lib/rbac";
 import { workOrderCost } from "@/lib/pms";
 import type { Vehicle, WorkOrder } from "@/types";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
@@ -38,7 +42,9 @@ export function WorkOrderTable({
   emptyDescription?: string;
   showVehicle?: boolean;
 }) {
-  const { completeWorkOrder, updateWorkOrder } = useFleetActions();
+  const { updateWorkOrder } = useFleetActions();
+  const { can } = useCan();
+  const [closing, setClosing] = React.useState<WorkOrder | null>(null);
 
   if (orders.length === 0) {
     return (
@@ -51,7 +57,8 @@ export function WorkOrderTable({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <>
+      <div className="overflow-x-auto">
       <table className="w-full min-w-[880px] text-sm">
         <thead>
           <tr className="border-b border-border text-left">
@@ -90,12 +97,17 @@ export function WorkOrderTable({
                 className="transition-colors hover:bg-surface-2/50"
               >
                 <td className="whitespace-nowrap px-4 py-3">
-                  <span className="tabular text-xs font-medium">
-                    {order.reference}
-                  </span>
-                  <span className="mt-0.5 block text-2xs text-subtle-foreground">
-                    {titleCase(order.type)}
-                  </span>
+                  <Link
+                    href={`/work-orders/${order.id}`}
+                    className="group/ref inline-flex flex-col rounded"
+                  >
+                    <span className="tabular text-xs font-medium group-hover/ref:text-brand">
+                      {order.reference}
+                    </span>
+                    <span className="mt-0.5 block text-2xs text-subtle-foreground">
+                      {titleCase(order.type)}
+                    </span>
+                  </Link>
                 </td>
 
                 {showVehicle ? (
@@ -153,11 +165,22 @@ export function WorkOrderTable({
                         <MoreHorizontal />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuContent align="end" className="w-60">
                       <DropdownMenuLabel>{order.reference}</DropdownMenuLabel>
                       <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href={`/work-orders/${order.id}`}>
+                          <FileText />
+                          Open service record
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        disabled={closed || order.status === "in_progress"}
+                        disabled={
+                          closed ||
+                          order.status === "in_progress" ||
+                          !can("workorder:update")
+                        }
                         onSelect={() =>
                           updateWorkOrder(order.id, { status: "in_progress" })
                         }
@@ -166,16 +189,16 @@ export function WorkOrderTable({
                         Start job
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        disabled={closed}
-                        onSelect={() => completeWorkOrder(order.id)}
+                        disabled={closed || !can("workorder:complete")}
+                        onSelect={() => setClosing(order)}
                       >
                         <CheckCircle2 />
-                        Mark complete
+                        Close &amp; record service…
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         destructive
-                        disabled={closed}
+                        disabled={closed || !can("workorder:update")}
                         onSelect={() =>
                           updateWorkOrder(order.id, { status: "cancelled" })
                         }
@@ -191,6 +214,18 @@ export function WorkOrderTable({
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+
+      {closing ? (
+        <CompleteWorkOrderDialog
+          order={closing}
+          vehicle={vehiclesById.get(closing.vehicleId)}
+          open={Boolean(closing)}
+          onOpenChange={(next) => {
+            if (!next) setClosing(null);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

@@ -163,6 +163,57 @@ export function urgentItems(health: VehicleHealth[]) {
     .sort((a, b) => a.item.daysRemaining - b.item.daysRemaining);
 }
 
+/**
+ * Maintenance frequency: services per 10,000 km for each vehicle.
+ *
+ * Raw service counts punish the hardest-worked units, which is exactly
+ * backwards — normalising by distance makes a van doing 145 km/day comparable
+ * with a sedan doing 42, and surfaces the units genuinely consuming more
+ * workshop attention than their mileage justifies.
+ */
+export function serviceFrequency(
+  workOrders: WorkOrder[],
+  health: VehicleHealth[],
+  limit = 8
+): NamedTotal[] {
+  const counts = new Map<string, number>();
+
+  for (const order of workOrders) {
+    if (order.status !== "completed") continue;
+    counts.set(order.vehicleId, (counts.get(order.vehicleId) ?? 0) + 1);
+  }
+
+  return health
+    .map((entry) => {
+      const services = counts.get(entry.vehicle.id) ?? 0;
+      const per10k =
+        entry.vehicle.odometer > 0
+          ? (services / entry.vehicle.odometer) * 10_000
+          : 0;
+      return {
+        name: entry.vehicle.plateNumber,
+        value: Math.round(per10k * 100) / 100,
+        meta: `${services} services · ${Math.round(entry.vehicle.odometer / 1000)}k km`,
+      };
+    })
+    .sort((a, b) => b.value - a.value)
+    .slice(0, limit);
+}
+
+/** Mean days between completed services across the whole fleet. */
+export function meanDaysBetweenServices(
+  workOrders: WorkOrder[],
+  vehicleCount: number,
+  months = 12
+) {
+  const completed = workOrders.filter((order) => order.status === "completed");
+  if (!completed.length || !vehicleCount) return 0;
+
+  const windowDays = months * 30.44;
+  const servicesPerVehicle = completed.length / vehicleCount;
+  return Math.round(windowDays / Math.max(servicesPerVehicle, 0.01));
+}
+
 /** Projected cost of clearing everything currently overdue or due soon. */
 export function forecastCost(health: VehicleHealth[]) {
   return urgentItems(health).reduce(

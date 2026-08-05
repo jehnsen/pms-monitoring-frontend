@@ -18,6 +18,8 @@ import {
 import { SERVICE_TASKS, CATEGORY_LABEL } from "@/lib/service-tasks";
 import { DUE_SOON_DAYS, DUE_SOON_KM } from "@/lib/pms";
 import { useFleetActions, useFleet } from "@/lib/store";
+import { useCan } from "@/lib/rbac";
+import { DeniedAction } from "@/components/auth/denied-action";
 import { useTheme } from "@/components/theme-provider";
 import { cn, formatCurrency, formatKm } from "@/lib/utils";
 
@@ -78,7 +80,29 @@ function ThemeCard() {
 
 function ResetCard() {
   const { resetFleet } = useFleetActions();
+  const { can, reason } = useCan();
   const [open, setOpen] = useState(false);
+
+  if (!can("settings:manage")) {
+    return (
+      <section className="card-raised">
+        <header className="px-5 pb-3 pt-4">
+          <h3 className="text-sm font-semibold tracking-tight">Demo data</h3>
+          <p className="mt-0.5 text-xs text-subtle-foreground">
+            The fleet lives in this browser&apos;s local storage.
+          </p>
+        </header>
+        <div className="border-t border-border px-5 py-5">
+          <DeniedAction reason={reason("settings:manage")}>
+            <Button variant="secondary">
+              <RotateCcw />
+              Reset fleet data
+            </Button>
+          </DeniedAction>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="card-raised">

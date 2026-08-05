@@ -15,15 +15,21 @@ const ThemeContext = React.createContext<{
 /**
  * Runs before first paint so the stored theme is already stamped on <html> and
  * the page never flashes the wrong surface.
+ *
+ * Light is the default: the OS preference is deliberately not consulted, so a
+ * first-time visitor on a dark-mode machine still lands on the light theme.
+ * Dark remains one click away and, once chosen, persists.
  */
 export const themeScript = `
 (function () {
   try {
     var stored = localStorage.getItem('${STORAGE_KEY}');
-    var theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    var theme = stored === 'dark' ? 'dark' : 'light';
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
-  } catch (e) {}
+  } catch (e) {
+    document.documentElement.dataset.theme = 'light';
+  }
 })();
 `;
 

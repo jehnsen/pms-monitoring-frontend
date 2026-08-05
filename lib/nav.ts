@@ -1,8 +1,10 @@
 import {
   CalendarRange,
   Car,
+  FolderOpen,
   LayoutDashboard,
   Settings,
+  ShieldCheck,
   TrendingUp,
   Wrench,
   type LucideIcon,
@@ -54,6 +56,12 @@ export const NAV_SECTIONS: NavSection[] = [
         description: "Open, scheduled, and closed jobs",
       },
       {
+        href: "/documents",
+        label: "Documents",
+        icon: FolderOpen,
+        description: "Invoices, reports, and policies",
+      },
+      {
         href: "/reports",
         label: "Reports",
         icon: TrendingUp,
@@ -64,6 +72,12 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Configure",
     items: [
+      {
+        href: "/access",
+        label: "User access",
+        icon: ShieldCheck,
+        description: "Roles and permissions",
+      },
       {
         href: "/settings",
         label: "Settings",

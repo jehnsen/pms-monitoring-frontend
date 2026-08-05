@@ -1,4 +1,4 @@
-# Axle — Fleet PMS & Maintenance
+# MekanikoMoRe — Fleet PMS & Maintenance
 
 A preventive-maintenance monitoring and work-order application for vehicle
 fleets, built with Next.js 14 (App Router), TypeScript, and Tailwind.
@@ -23,12 +23,27 @@ and the app can tell you which one is actually governing.
 | `/vehicles/[id]` | Full interval sheet, service history, and specification for one unit |
 | `/schedule` | Everything falling due, grouped by remaining lead time |
 | `/work-orders` | Preventive, corrective, and inspection jobs across their lifecycle |
-| `/reports` | Cost analysis, planned-vs-unplanned mix, spend rankings |
+| `/work-orders/[id]` | The service record: findings, itemised parts, costs, attachments |
+| `/documents` | Invoices, reports, policies, and certificates for the whole fleet |
+| `/reports` | Cost analysis, planned-vs-unplanned mix, spend and frequency rankings |
+| `/access` | Roles, personnel, and the permission matrix |
 | `/settings` | Interval catalogue, warning thresholds, theme, demo-data reset |
 
 Closing a work order is what resets the PMS clock: the tasks it covers take the
 order's odometer and completion date as their new baseline, and every downstream
-figure recalculates.
+figure recalculates. Closing also captures the service record — technician
+findings and the parts actually fitted — because asked for later, nobody
+remembers.
+
+**Alerts** are derived from fleet state on every read rather than stored, so a
+notification can never outlive the condition behind it. They cover breached and
+approaching intervals (by mileage or time), work orders past their slot, and
+registration or insurance nearing renewal.
+
+**Access control** defines four roles across eight capabilities. Gating lives
+inside the action components, so any screen using them inherits it. Note that
+permissions are applied in the browser: they shape the interface but cannot
+secure it, and a production deployment must mirror the matrix server-side.
 
 ## Architecture
 

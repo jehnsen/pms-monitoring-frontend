@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/select";
 import { SERVICE_TASKS } from "@/lib/service-tasks";
 import { useFleet, useFleetActions } from "@/lib/store";
+import { useCan } from "@/lib/rbac";
+import { DeniedAction } from "@/components/auth/denied-action";
 import { formatCurrency } from "@/lib/utils";
 import type { Priority, WorkOrderType } from "@/types";
 
@@ -59,6 +61,7 @@ export function NewWorkOrderDialog({
 }) {
   const { vehicles } = useFleet();
   const { createWorkOrder } = useFleetActions();
+  const { can, reason } = useCan();
   const [open, setOpen] = React.useState(false);
 
   const [form, setForm] = React.useState({
@@ -113,6 +116,10 @@ export function NewWorkOrderDialog({
       vendor: form.vendor,
       laborCost,
       partsCost,
+      // A new order carries an estimate; the itemised parts and findings are
+      // captured at completion.
+      parts: [],
+      findings: "",
       taskIds: isPreventive && task ? [task.id] : [],
       notes: form.notes,
     });
@@ -121,16 +128,26 @@ export function NewWorkOrderDialog({
     setForm((current) => ({ ...current, title: "", notes: "" }));
   }
 
+  const defaultTrigger = (
+    <Button variant="primary">
+      <Plus />
+      New work order
+    </Button>
+  );
+
+  // Gated here rather than at each call site, so no screen can accidentally
+  // hand a viewer a working button.
+  if (!can("workorder:create")) {
+    return (
+      <DeniedAction reason={reason("workorder:create")}>
+        {trigger ?? defaultTrigger}
+      </DeniedAction>
+    );
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button variant="primary">
-            <Plus />
-            New work order
-          </Button>
-        )}
-      </DialogTrigger>
+      <DialogTrigger asChild>{trigger ?? defaultTrigger}</DialogTrigger>
 
       <DialogContent className="max-w-xl">
         <DialogHeader>

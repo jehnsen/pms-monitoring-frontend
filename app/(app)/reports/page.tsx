@@ -16,7 +16,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useFleet } from "@/lib/store";
-import { monthlyCosts, spendByCategory, spendByVehicle } from "@/lib/analytics";
+import {
+  meanDaysBetweenServices,
+  monthlyCosts,
+  serviceFrequency,
+  spendByCategory,
+  spendByVehicle,
+} from "@/lib/analytics";
 import { workOrderCost } from "@/lib/pms";
 import { formatCurrency, formatCurrencyCompact, sum } from "@/lib/utils";
 
@@ -116,11 +122,11 @@ export default function ReportsPage() {
           icon={Gauge}
         />
         <StatTile
-          label="Avg. cost per vehicle"
-          value={formatCurrency(
-            summary.total ? Math.round(totalSpend / summary.total) : 0
+          label="Mean days between services"
+          value={String(
+            meanDaysBetweenServices(scopedOrders, summary.total, months)
           )}
-          hint={`${summary.total} vehicles in the fleet`}
+          hint={`${summary.total} vehicles · ${scopedOrders.length} services in period`}
           icon={PiggyBank}
         />
       </div>
@@ -143,6 +149,17 @@ export default function ReportsPage() {
           description="What the money was actually spent on, ranked."
           data={spendByCategory(scopedOrders).slice(0, 8)}
           height={296}
+        />
+      </div>
+
+      <div className="mt-5">
+        <SpendRankingChart
+          title="Maintenance frequency"
+          description="Completed services per 10,000 km. Normalising by distance keeps hard-worked units from looking worse simply for covering more ground."
+          data={serviceFrequency(scopedOrders, health, 10)}
+          unitLabel="Services / 10,000 km"
+          valueFormat="number"
+          height={330}
         />
       </div>
     </>

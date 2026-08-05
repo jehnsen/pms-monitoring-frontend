@@ -1,3 +1,13 @@
+/**
+ * Lives here rather than in `lib/rbac.ts` so `lib/auth.ts` can type a session's
+ * role without importing the RBAC module, which imports auth in turn.
+ */
+export type UserRole =
+  | "fleet_manager"
+  | "operations"
+  | "technician"
+  | "viewer";
+
 export type VehicleOperationalStatus = "active" | "in_service" | "down";
 
 /** Health of a preventive-maintenance item, worst-first. */
@@ -70,6 +80,15 @@ export interface ServiceTask {
   critical: boolean;
 }
 
+/** One line on a work order's parts list. */
+export interface PartLine {
+  id: string;
+  partNumber: string;
+  name: string;
+  quantity: number;
+  unitCost: number;
+}
+
 export interface WorkOrder {
   id: string;
   reference: string;
@@ -85,7 +104,16 @@ export interface WorkOrder {
   technician: string;
   vendor: string;
   laborCost: number;
+  /**
+   * Authoritative only while `parts` is empty (estimates, seeded history). Once
+   * parts are itemised, `resolvePartsCost` sums the lines instead — always read
+   * through that helper rather than this field.
+   */
   partsCost: number;
+  /** Itemised parts replaced. Empty until a technician records them. */
+  parts: PartLine[];
+  /** What the technician found — the diagnostic half of the service record. */
+  findings: string;
   /** Task template ids covered by this order. */
   taskIds: string[];
   notes: string;
@@ -120,7 +148,74 @@ export interface VehicleHealth {
   healthScore: number;
 }
 
+/* ---------------------------------------------------------------- documents */
+
+export type DocumentKind =
+  | "invoice"
+  | "service_report"
+  | "inspection"
+  | "insurance"
+  | "registration"
+  | "warranty"
+  | "photo"
+  | "other";
+
+export interface FleetDocument {
+  id: string;
+  name: string;
+  kind: DocumentKind;
+  /** Documents may hang off a vehicle, a work order, both, or neither. */
+  vehicleId: string | null;
+  workOrderId: string | null;
+  uploadedBy: string;
+  uploadedOn: string;
+  sizeBytes: number;
+  mimeType: string;
+  /**
+   * Data URL for files added in-session. Seeded records carry `null` — they
+   * stand for documents already held elsewhere, and cannot be opened.
+   */
+  dataUrl: string | null;
+  /** Renewal date for documents that expire (insurance, registration). */
+  expiresOn: string | null;
+  notes: string;
+}
+
+/* ------------------------------------------------------------------- alerts */
+
+export type AlertKind =
+  | "pms_overdue"
+  | "pms_due_soon"
+  | "document_expiry"
+  | "work_order_overdue";
+
+export type AlertSeverity = "critical" | "warning" | "info";
+
+/**
+ * Alerts are derived from fleet state on every read, never stored — so they can
+ * never contradict the data. Only the user's interaction with them persists,
+ * keyed by the deterministic `id`.
+ */
+export interface Alert {
+  id: string;
+  kind: AlertKind;
+  severity: AlertSeverity;
+  title: string;
+  body: string;
+  vehicleId: string | null;
+  href: string;
+  /** Days until (negative: past) the thing this alert is about. */
+  daysRemaining: number;
+}
+
+export interface AlertInteraction {
+  readIds: string[];
+  dismissedIds: string[];
+}
+
 export interface FleetState {
   vehicles: Vehicle[];
   workOrders: WorkOrder[];
+  documents: FleetDocument[];
+  alerts: AlertInteraction;
 }

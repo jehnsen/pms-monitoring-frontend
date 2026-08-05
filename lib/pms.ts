@@ -170,8 +170,21 @@ export function summariseFleet(health: VehicleHealth[]): FleetSummary {
   };
 }
 
+/**
+ * Parts cost, preferring the itemised list once a technician has recorded one.
+ * Estimates and seeded history carry only the aggregate, so both shapes have to
+ * resolve through here — never read `order.partsCost` directly.
+ */
+export function resolvePartsCost(order: WorkOrder) {
+  if (!order.parts?.length) return order.partsCost;
+  return order.parts.reduce(
+    (total, part) => total + part.quantity * part.unitCost,
+    0
+  );
+}
+
 export function workOrderCost(order: WorkOrder) {
-  return order.laborCost + order.partsCost;
+  return order.laborCost + resolvePartsCost(order);
 }
 
 /** Applies a completed work order to the vehicle's task history and odometer. */

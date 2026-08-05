@@ -12,8 +12,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Axle — Fleet PMS & Maintenance",
-    template: "%s · Axle",
+    default: "MekanikoMoR — Fleet PMS & Maintenance",
+    template: "%s · MekanikoMoR",
   },
   description:
     "Preventive maintenance scheduling, compliance monitoring, and work-order management for vehicle fleets.",

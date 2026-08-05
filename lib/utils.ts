@@ -57,6 +57,12 @@ export function formatDayDelta(days: number) {
   return `in ${days} ${days === 1 ? "day" : "days"}`;
 }
 
+export function formatBytes(bytes: number) {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1_000) return `${Math.round(bytes / 1_000)} KB`;
+  return `${bytes} B`;
+}
+
 export function initials(name: string) {
   return name
     .split(" ")

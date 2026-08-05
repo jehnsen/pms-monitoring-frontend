@@ -16,6 +16,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useFleetActions } from "@/lib/store";
+import { useCan } from "@/lib/rbac";
+import { DeniedAction } from "@/components/auth/denied-action";
 import { formatKm } from "@/lib/utils";
 import type { Vehicle } from "@/types";
 
@@ -25,6 +27,7 @@ import type { Vehicle } from "@/types";
  */
 export function OdometerDialog({ vehicle }: { vehicle: Vehicle }) {
   const { updateVehicle } = useFleetActions();
+  const { can, reason } = useCan();
   const [open, setOpen] = React.useState(false);
   const [value, setValue] = React.useState(String(vehicle.odometer));
 
@@ -35,14 +38,20 @@ export function OdometerDialog({ vehicle }: { vehicle: Vehicle }) {
   const parsed = Number(value);
   const valid = Number.isFinite(parsed) && parsed >= vehicle.odometer;
 
+  const trigger = (
+    <Button variant="secondary">
+      <Gauge />
+      Log odometer
+    </Button>
+  );
+
+  if (!can("vehicle:update")) {
+    return <DeniedAction reason={reason("vehicle:update")}>{trigger}</DeniedAction>;
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="secondary">
-          <Gauge />
-          Log odometer
-        </Button>
-      </DialogTrigger>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Log an odometer reading</DialogTitle>

@@ -7,6 +7,7 @@ import { CalendarCheck } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { UpcomingLoadChart } from "@/components/charts/upcoming-load-chart";
 import { NewWorkOrderDialog } from "@/components/work-orders/new-work-order-dialog";
+import { AutoScheduleDialog } from "@/components/work-orders/auto-schedule-dialog";
 import { Meter } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -226,7 +227,12 @@ export default function SchedulePage() {
       <PageHeader
         title="Service schedule"
         description="Everything falling due across the fleet, grouped by how much lead time is left."
-        actions={<NewWorkOrderDialog />}
+        actions={
+          <>
+            <AutoScheduleDialog />
+            <NewWorkOrderDialog />
+          </>
+        }
       />
       <Suspense fallback={<Skeleton className="h-96" />}>
         <ScheduleView />
