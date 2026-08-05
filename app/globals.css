@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens.
+ *
+ * Surfaces are warm neutrals rather than pure gray — it keeps long sessions on a
+ * dense fleet dashboard from feeling clinical. Chart series slots and the status
+ * palette are separate namespaces on purpose: a status colour must never be able
+ * to impersonate a data series.
+ */
+@layer base {
+  :root {
+    --page: 60 14% 97%;
+    --surface: 0 0% 100%;
+    --surface-2: 60 12% 95%;
+    --surface-3: 48 12% 92%;
+
+    --border: 52 12% 87%;
+    --border-strong: 55 9% 74%;
+    --ring: 213 72% 39%;
+
+    --foreground: 0 0% 4%;
+    --muted-foreground: 45 3% 31%;
+    --subtle-foreground: 45 3% 52%;
+
+    --brand: 213 72% 39%;
+    --brand-foreground: 0 0% 100%;
+    --brand-muted: 213 80% 95%;
+
+    /* Reserved status palette — fixed, never themed, never a series colour. */
+    --ok: 120 86% 34%;
+    --warning: 41 96% 54%;
+    --serious: 17 79% 64%;
+    --critical: 0 61% 52%;
+
+    /* Categorical chart slots, assigned in fixed order. */
+    --series-1: 213 68% 50%;
+    --series-2: 17 82% 56%;
+    --series-3: 159 73% 40%;
+
+    --grid: 52 12% 87%;
+    --axis: 55 9% 74%;
+
+    --shadow-color: 50 15% 15%;
+    --radius: 0.75rem;
+  }
+
+  [data-theme="dark"] {
+    --page: 0 0% 5%;
+    --surface: 60 2% 10%;
+    --surface-2: 60 2% 14%;
+    --surface-3: 60 2% 17%;
+
+    --border: 60 2% 17%;
+    --border-strong: 60 3% 21%;
+    --ring: 213 77% 56%;
+
+    --foreground: 0 0% 100%;
+    --muted-foreground: 55 9% 74%;
+    --subtle-foreground: 45 3% 52%;
+
+    --brand: 213 77% 56%;
+    --brand-foreground: 213 90% 8%;
+    --brand-muted: 213 60% 16%;
+
+    --ok: 120 86% 34%;
+    --warning: 41 96% 54%;
+    --serious: 17 79% 64%;
+    --critical: 0 61% 52%;
+
+    /* Same eight hues re-stepped for the dark surface — not an automatic flip. */
+    --series-1: 213 77% 56%;
+    --series-2: 17 70% 50%;
+    --series-3: 159 73% 36%;
+
+    --grid: 60 2% 17%;
+    --axis: 60 3% 21%;
+
+    --shadow-color: 0 0% 0%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-page text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::selection {
+    @apply bg-brand/20;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-page;
+  }
+
+  /* Slim, recessive scrollbars — the data should be the loudest thing on screen. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full border-[3px] border-solid border-transparent bg-border-strong bg-clip-content;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-subtle-foreground bg-clip-content;
+  }
+}
+
+@layer components {
+  /* Numerals that must line up vertically: table cells, axis ticks, metrics. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .card {
+    @apply rounded-lg border border-border bg-surface shadow-xs;
+  }
+
+  /* A hairline top highlight reads as a lit edge and gives cards real depth. */
+  .card-raised {
+    @apply card shadow-sm;
+    background-image: linear-gradient(
+      to bottom,
+      hsl(var(--foreground) / 0.02),
+      transparent 120px
+    );
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-surface-2;
+  }
+  .skeleton::after {
+    @apply absolute inset-0 animate-shimmer bg-gradient-to-r from-transparent via-surface-3 to-transparent content-[''];
+  }
+}
