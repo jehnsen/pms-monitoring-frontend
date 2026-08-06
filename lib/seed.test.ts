@@ -81,13 +81,13 @@ describe("seed fleet plausibility", () => {
           parseISO(vehicle.acquiredOn).getTime()
         );
       }
-      if (order.status === "completed") expect(order.completedOn).toBeTruthy();
+      if (order.status === "closed") expect(order.completedOn).toBeTruthy();
     }
   });
 
   it("lands maintenance cost per kilometre in the realistic PH band", () => {
     const spend = state.workOrders
-      .filter((order) => order.status === "completed")
+      .filter((order) => order.status === "closed")
       .reduce((total, order) => total + workOrderCost(order), 0);
 
     // Spend over a year, against distance driven in that same year — not
@@ -116,6 +116,36 @@ describe("seed fleet plausibility", () => {
       for (let i = 1; i < order.history.length; i++) {
         expect(parseISO(order.history[i].at).getTime()).toBeGreaterThanOrEqual(
           parseISO(order.history[i - 1].at).getTime()
+        );
+      }
+    }
+  });
+
+  it("sums every work order's lines to its recorded parts and labour cost", () => {
+    for (const order of state.workOrders) {
+      if (order.lines.length === 0) continue;
+      const partTotal = order.lines.reduce((total, line) => total + line.partCost, 0);
+      const labourTotal = order.lines.reduce((total, line) => total + line.labourCost, 0);
+      expect(partTotal).toBe(order.partsCost);
+      expect(labourTotal).toBe(order.laborCost);
+    }
+  });
+
+  it("requires a decline reason on every declined safety-critical line", () => {
+    for (const order of state.workOrders) {
+      for (const line of order.lines) {
+        if (line.urgency === "safety_critical" && line.approvalStatus === "declined") {
+          expect(line.declineReason).toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it("keeps every work order's approval log append-only and chronological", () => {
+    for (const order of state.workOrders) {
+      for (let i = 1; i < order.approvalLog.length; i++) {
+        expect(parseISO(order.approvalLog[i].at).getTime()).toBeGreaterThanOrEqual(
+          parseISO(order.approvalLog[i - 1].at).getTime()
         );
       }
     }

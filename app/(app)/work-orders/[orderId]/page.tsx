@@ -3,11 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  CalendarClock,
   CheckCircle2,
+  CircleDashed,
   ClipboardList,
   FileText,
   Play,
+  ReceiptText,
   Stethoscope,
+  ThumbsDown,
+  ThumbsUp,
   Wrench,
   XCircle,
 } from "lucide-react";
@@ -22,15 +27,35 @@ import {
   WORK_ORDER_STATUS_LABEL,
   WorkOrderStatusBadge,
 } from "@/components/status";
+import { ApprovalPanel } from "@/components/work-orders/approval-panel";
+import { ScheduleDialog } from "@/components/work-orders/schedule-dialog";
 import { CompleteWorkOrderDialog } from "@/components/work-orders/complete-work-order-dialog";
 import { DocumentList } from "@/components/documents/document-list";
 import { UploadDocumentDialog } from "@/components/documents/upload-document-dialog";
 import { DeniedAction } from "@/components/auth/denied-action";
 import { useFleet, useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
+import { approvedValue, declinedValue, pendingValue } from "@/lib/approvals";
 import { resolvePartsCost, workOrderCost } from "@/lib/pms";
 import { TASK_BY_ID } from "@/lib/service-tasks";
 import { formatCurrency, formatDate, formatKm, titleCase } from "@/lib/utils";
+import type { ApprovalAction, WorkOrderEvent, ApprovalLogEntry } from "@/types";
+
+type TimelineRow =
+  | { kind: "status"; at: string; event: WorkOrderEvent }
+  | { kind: "approval"; at: string; entry: ApprovalLogEntry };
+
+const APPROVAL_ACTION_META: Record<
+  ApprovalAction,
+  { label: string; icon: typeof ThumbsUp; tone: "ok" | "critical" | "neutral" | "warning" }
+> = {
+  auto_approved: { label: "Auto-approved", icon: ThumbsUp, tone: "ok" },
+  approved: { label: "Approved", icon: ThumbsUp, tone: "ok" },
+  declined: { label: "Declined", icon: ThumbsDown, tone: "critical" },
+  deferred: { label: "Deferred", icon: CircleDashed, tone: "neutral" },
+  escalated: { label: "Escalated", icon: ThumbsUp, tone: "warning" },
+  variance_approved: { label: "Variance re-approved", icon: ReceiptText, tone: "warning" },
+};
 
 export default function WorkOrderDetailPage({
   params,
@@ -72,8 +97,15 @@ export default function WorkOrderDetailPage({
 
   const vehicle = vehiclesById.get(order.vehicleId);
   const attached = documents.filter((doc) => doc.workOrderId === order.id);
-  const closed = order.status === "completed" || order.status === "cancelled";
+  const closed = order.status === "closed" || order.status === "cancelled";
   const partsCost = resolvePartsCost(order);
+
+  const canSchedule = order.status === "approved" || order.status === "partially_approved";
+
+  const timeline: TimelineRow[] = [
+    ...order.history.map((event): TimelineRow => ({ kind: "status", at: event.at, event })),
+    ...order.approvalLog.map((entry): TimelineRow => ({ kind: "approval", at: entry.at, entry })),
+  ].sort((a, b) => a.at.localeCompare(b.at));
 
   return (
     <>
@@ -91,7 +123,9 @@ export default function WorkOrderDetailPage({
         description={order.title}
         actions={
           <>
-            {!closed && can("workorder:update") && order.status !== "in_progress" ? (
+            {canSchedule && can("workorder:update") ? <ScheduleDialog order={order} /> : null}
+
+            {order.status === "scheduled" && can("workorder:update") ? (
               <Button
                 variant="secondary"
                 onClick={() => updateWorkOrder(order.id, { status: "in_progress" })}
@@ -101,25 +135,29 @@ export default function WorkOrderDetailPage({
               </Button>
             ) : null}
 
-            {closed ? null : can("workorder:complete") ? (
-              <Button variant="primary" onClick={() => setClosing(true)}>
-                <CheckCircle2 />
-                Close &amp; record service
-              </Button>
-            ) : (
-              <DeniedAction reason={reason("workorder:complete")}>
-                <Button variant="primary">
+            {order.status === "in_progress" ? (
+              can("workorder:complete") ? (
+                <Button variant="primary" onClick={() => setClosing(true)}>
                   <CheckCircle2 />
                   Close &amp; record service
                 </Button>
-              </DeniedAction>
-            )}
+              ) : (
+                <DeniedAction reason={reason("workorder:complete")}>
+                  <Button variant="primary">
+                    <CheckCircle2 />
+                    Close &amp; record service
+                  </Button>
+                </DeniedAction>
+              )
+            ) : null}
           </>
         }
       />
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
+          <ApprovalPanel order={order} />
+
           {/* Findings — the diagnostic half of the record. */}
           <section className="card-raised">
             <header className="flex items-center gap-2 px-5 pb-3 pt-4">
@@ -266,6 +304,29 @@ export default function WorkOrderDetailPage({
                 </dd>
               </div>
             </dl>
+
+            {order.lines.length > 0 ? (
+              <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-border pt-3.5 text-2xs">
+                <div>
+                  <dt className="text-subtle-foreground">Approved</dt>
+                  <dd className="tabular mt-0.5 font-medium text-ok">
+                    {formatCurrency(approvedValue(order.lines))}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-subtle-foreground">Pending</dt>
+                  <dd className="tabular mt-0.5 font-medium">
+                    {formatCurrency(pendingValue(order.lines))}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-subtle-foreground">Declined</dt>
+                  <dd className="tabular mt-0.5 font-medium text-critical">
+                    {formatCurrency(declinedValue(order.lines))}
+                  </dd>
+                </div>
+              </dl>
+            ) : null}
           </section>
 
           <section className="card-raised p-5">
@@ -335,37 +396,80 @@ export default function WorkOrderDetailPage({
           <section className="card-raised p-5">
             <h3 className="text-sm font-semibold tracking-tight">Timeline</h3>
             <p className="mt-0.5 text-2xs text-subtle-foreground">
-              Every status change, oldest first.
+              Every status change and approval decision, oldest first.
             </p>
             <ol className="mt-4 space-y-3">
-              {order.history.map((entry, index) => (
-                <li key={entry.id} className="flex gap-3">
-                  <span className="relative flex flex-col items-center">
-                    {entry.status === "cancelled" ? (
-                      <XCircle className="size-3.5 text-critical" />
-                    ) : (
-                      <span className="mt-1 size-2 shrink-0 rounded-full bg-brand" />
-                    )}
-                    {index < order.history.length - 1 ? (
-                      <span className="mt-1 w-px flex-1 bg-border" />
-                    ) : null}
-                  </span>
-                  <span className="pb-1">
-                    <span
-                      className={
-                        entry.status === "cancelled"
-                          ? "block text-xs font-medium text-critical"
-                          : "block text-xs font-medium"
-                      }
-                    >
-                      {WORK_ORDER_STATUS_LABEL[entry.status]}
+              {timeline.map((row, index) => {
+                const isLast = index === timeline.length - 1;
+
+                if (row.kind === "status") {
+                  const { event } = row;
+                  return (
+                    <li key={`status-${event.id}`} className="flex gap-3">
+                      <span className="relative flex flex-col items-center">
+                        {event.status === "cancelled" ? (
+                          <XCircle className="size-3.5 text-critical" />
+                        ) : (
+                          <span className="mt-1 size-2 shrink-0 rounded-full bg-brand" />
+                        )}
+                        {!isLast ? <span className="mt-1 w-px flex-1 bg-border" /> : null}
+                      </span>
+                      <span className="pb-1">
+                        <span
+                          className={
+                            event.status === "cancelled"
+                              ? "block text-xs font-medium text-critical"
+                              : "block text-xs font-medium"
+                          }
+                        >
+                          {WORK_ORDER_STATUS_LABEL[event.status]}
+                        </span>
+                        <span className="tabular block text-2xs text-subtle-foreground">
+                          {formatDate(event.at)} · {event.actor}
+                        </span>
+                      </span>
+                    </li>
+                  );
+                }
+
+                const { entry } = row;
+                const meta = APPROVAL_ACTION_META[entry.action];
+                const Icon = meta.icon;
+                const line = order.lines.find((l) => l.id === entry.lineId);
+
+                return (
+                  <li key={`approval-${entry.id}`} className="flex gap-3">
+                    <span className="relative flex flex-col items-center">
+                      <Icon
+                        className={`size-3.5 ${
+                          meta.tone === "critical"
+                            ? "text-critical"
+                            : meta.tone === "ok"
+                              ? "text-ok"
+                              : meta.tone === "warning"
+                                ? "text-warning"
+                                : "text-subtle-foreground"
+                        }`}
+                      />
+                      {!isLast ? <span className="mt-1 w-px flex-1 bg-border" /> : null}
                     </span>
-                    <span className="tabular block text-2xs text-subtle-foreground">
-                      {formatDate(entry.at)} · {entry.actor}
+                    <span className="pb-1">
+                      <span className="block text-xs font-medium">
+                        {meta.label}
+                        {line ? ` — ${line.description}` : ""}
+                      </span>
+                      <span className="tabular block text-2xs text-subtle-foreground">
+                        {formatDate(entry.at)} · {entry.actorName}
+                      </span>
+                      {entry.note ? (
+                        <span className="mt-0.5 block text-2xs text-subtle-foreground">
+                          {entry.note}
+                        </span>
+                      ) : null}
                     </span>
-                  </span>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ol>
           </section>
         </div>

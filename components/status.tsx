@@ -2,14 +2,19 @@ import {
   AlertTriangle,
   CheckCircle2,
   CircleDashed,
-  CircleDot,
   Clock,
+  FileEdit,
+  Hourglass,
+  ListChecks,
   OctagonAlert,
+  ThumbsDown,
+  ThumbsUp,
   Wrench,
   XCircle,
 } from "lucide-react";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import type {
+  LineApprovalStatus,
   PmsStatus,
   Priority,
   VehicleOperationalStatus,
@@ -53,10 +58,14 @@ const WORK_ORDER_META: Record<
   WorkOrderStatus,
   { label: string; tone: BadgeProps["tone"]; icon: typeof CheckCircle2 }
 > = {
-  open: { label: "Open", tone: "brand", icon: CircleDot },
+  draft: { label: "Draft", tone: "neutral", icon: FileEdit },
+  pending_approval: { label: "Pending approval", tone: "warning", icon: Hourglass },
+  approved: { label: "Approved", tone: "ok", icon: ThumbsUp },
+  partially_approved: { label: "Partially approved", tone: "warning", icon: ListChecks },
+  declined: { label: "Declined", tone: "critical", icon: ThumbsDown },
   scheduled: { label: "Scheduled", tone: "neutral", icon: Clock },
   in_progress: { label: "In progress", tone: "warning", icon: Wrench },
-  completed: { label: "Completed", tone: "ok", icon: CheckCircle2 },
+  closed: { label: "Closed", tone: "ok", icon: CheckCircle2 },
   cancelled: { label: "Cancelled", tone: "outline", icon: XCircle },
 };
 
@@ -121,6 +130,33 @@ export function VehicleStatusBadge({
   );
 }
 
+const LINE_APPROVAL_META: Record<
+  LineApprovalStatus,
+  { label: string; tone: BadgeProps["tone"]; icon: typeof CheckCircle2 }
+> = {
+  pending: { label: "Pending", tone: "warning", icon: Hourglass },
+  approved: { label: "Approved", tone: "ok", icon: ThumbsUp },
+  declined: { label: "Declined", tone: "critical", icon: ThumbsDown },
+  deferred: { label: "Deferred", tone: "neutral", icon: CircleDashed },
+};
+
+export function LineApprovalStatusBadge({
+  status,
+  size = "sm",
+}: {
+  status: LineApprovalStatus;
+  size?: BadgeProps["size"];
+}) {
+  const meta = LINE_APPROVAL_META[status];
+  const Icon = meta.icon;
+  return (
+    <Badge tone={meta.tone} size={size}>
+      <Icon />
+      {meta.label}
+    </Badge>
+  );
+}
+
 export const PMS_STATUS_LABEL: Record<PmsStatus, string> = {
   ok: PMS_META.ok.label,
   due_soon: PMS_META.due_soon.label,
@@ -128,9 +164,13 @@ export const PMS_STATUS_LABEL: Record<PmsStatus, string> = {
 };
 
 export const WORK_ORDER_STATUS_LABEL: Record<WorkOrderStatus, string> = {
-  open: "Open",
+  draft: "Draft",
+  pending_approval: "Pending approval",
+  approved: "Approved",
+  partially_approved: "Partially approved",
+  declined: "Declined",
   scheduled: "Scheduled",
   in_progress: "In progress",
-  completed: "Completed",
+  closed: "Closed",
   cancelled: "Cancelled",
 };

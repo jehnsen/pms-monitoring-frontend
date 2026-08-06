@@ -49,6 +49,13 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     title: "Lead Technician",
   },
   {
+    email: "purchasing@mekanikomore.ph",
+    password: "demo1234",
+    name: "Grace Villanueva",
+    role: "purchasing_officer",
+    title: "Purchasing Officer",
+  },
+  {
     email: "viewer@mekanikomore.ph",
     password: "demo1234",
     name: "Camille Ortega",

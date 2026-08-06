@@ -1,10 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Monitor, Moon, RotateCcw, Sun } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogBody,
@@ -22,6 +31,141 @@ import { useCan } from "@/lib/rbac";
 import { DeniedAction } from "@/components/auth/denied-action";
 import { useTheme } from "@/components/theme-provider";
 import { cn, formatCurrency, formatKm } from "@/lib/utils";
+import type { ApprovalSettings, PartsSource } from "@/types";
+
+const PARTS_SOURCE_LABEL: Record<PartsSource, string> = {
+  own_stock: "Own stock",
+  supplier_provided: "Supplier provided",
+};
+
+function ApprovalThresholdsCard() {
+  const { ready, approvalSettings } = useFleet();
+  const { updateApprovalSettings } = useFleetActions();
+  const { can, reason } = useCan();
+
+  const [draft, setDraft] = useState<ApprovalSettings>(approvalSettings);
+
+  // Keep the draft in sync when the underlying settings change from outside
+  // this card (e.g. a demo-data reset).
+  useEffect(() => {
+    setDraft(approvalSettings);
+  }, [approvalSettings]);
+
+  const dirty = ready && JSON.stringify(draft) !== JSON.stringify(approvalSettings);
+
+  const fields: {
+    key: keyof Pick<
+      ApprovalSettings,
+      "autoApproveUnder" | "opsApprovalUnder" | "slaHours" | "varianceThresholdPct" | "monthlyBudget"
+    >;
+    label: string;
+    suffix?: string;
+  }[] = [
+    { key: "autoApproveUnder", label: "Auto-approve under (₱)" },
+    { key: "opsApprovalUnder", label: "Operations/Purchasing ceiling (₱)" },
+    { key: "slaHours", label: "Approval SLA", suffix: "working hours" },
+    { key: "varianceThresholdPct", label: "Variance re-approval threshold", suffix: "%" },
+    { key: "monthlyBudget", label: "Monthly maintenance budget (₱)" },
+  ];
+
+  const body = (
+    <div className="space-y-4 border-t border-border px-5 py-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        {fields.map((field) => (
+          <div key={field.key} className="space-y-1.5">
+            <Label htmlFor={`approval-${field.key}`}>{field.label}</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id={`approval-${field.key}`}
+                type="number"
+                min={0}
+                className="tabular"
+                value={draft[field.key]}
+                disabled={!can("settings:manage")}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    [field.key]: Math.max(0, Number(event.target.value) || 0),
+                  }))
+                }
+              />
+              {field.suffix ? (
+                <span className="shrink-0 text-2xs text-subtle-foreground">
+                  {field.suffix}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ))}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="approval-parts-source">Default parts source</Label>
+          <Select
+            value={draft.defaultPartsSource}
+            onValueChange={(value) =>
+              setDraft((current) => ({
+                ...current,
+                defaultPartsSource: value as PartsSource,
+              }))
+            }
+            disabled={!can("settings:manage")}
+          >
+            <SelectTrigger id="approval-parts-source">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.entries(PARTS_SOURCE_LABEL) as [PartsSource, string][]).map(
+                ([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                )
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {can("settings:manage") ? (
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+          <p className="text-2xs text-subtle-foreground">
+            Above the operations ceiling, only the Fleet Manager can approve —
+            regardless of role.
+          </p>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!dirty}
+            onClick={() => updateApprovalSettings(draft)}
+          >
+            Save changes
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <section className="card-raised">
+      <header className="px-5 pb-3 pt-4">
+        <h3 className="text-sm font-semibold tracking-tight">
+          Approval thresholds
+        </h3>
+        <p className="mt-0.5 text-xs text-subtle-foreground">
+          What auto-approves, who signs off the rest, and how long a line may
+          wait before it escalates.
+        </p>
+      </header>
+      {can("settings:manage") ? (
+        body
+      ) : (
+        <DeniedAction reason={reason("settings:manage")}>
+          <div className="block w-full">{body}</div>
+        </DeniedAction>
+      )}
+    </section>
+  );
+}
 
 function ThemeCard() {
   const { theme, setTheme } = useTheme();
@@ -203,6 +347,10 @@ export default function SettingsPage() {
             </p>
           ) : null}
         </section>
+      </div>
+
+      <div className="mt-5">
+        <ApprovalThresholdsCard />
       </div>
 
       <section className="card-raised mt-5">

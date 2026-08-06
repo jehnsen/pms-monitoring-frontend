@@ -42,11 +42,11 @@ export default function WorkOrdersPage() {
 
   const counts = useMemo(() => {
     const active = workOrders.filter(
-      (o) => o.status !== "completed" && o.status !== "cancelled"
+      (o) => o.status !== "closed" && o.status !== "cancelled"
     ).length;
     return {
       active,
-      completed: workOrders.filter((o) => o.status === "completed").length,
+      completed: workOrders.filter((o) => o.status === "closed").length,
       cancelled: workOrders.filter((o) => o.status === "cancelled").length,
       all: workOrders.length,
     };
@@ -58,9 +58,9 @@ export default function WorkOrdersPage() {
     return workOrders
       .filter((order) => {
         if (bucket === "active")
-          if (order.status === "completed" || order.status === "cancelled")
+          if (order.status === "closed" || order.status === "cancelled")
             return false;
-        if (bucket === "completed" && order.status !== "completed") return false;
+        if (bucket === "completed" && order.status !== "closed") return false;
         if (bucket === "cancelled" && order.status !== "cancelled") return false;
         if (type !== "all" && order.type !== type) return false;
         if (!q) return true;

@@ -13,7 +13,7 @@ function order(completedOn: string, cost: number): WorkOrder {
     vehicleId: "veh-001",
     title: "Test",
     type: "preventive",
-    status: "completed",
+    status: "closed",
     priority: "medium",
     openedOn: completedOn,
     scheduledFor: completedOn,
@@ -28,6 +28,10 @@ function order(completedOn: string, cost: number): WorkOrder {
     taskIds: [],
     notes: "",
     history: [],
+    lines: [],
+    approvalLog: [],
+    pendingApprovalEnteredAt: null,
+    approvalWaitHours: null,
   };
 }
 

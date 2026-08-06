@@ -9,19 +9,27 @@ import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/layout/logo";
 import { DEMO_ACCOUNTS, useAuthActions, useSession } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import type { UserRole } from "@/types";
 
 const [PRIMARY_ACCOUNT] = DEMO_ACCOUNTS;
 
-const DEFAULT_DESTINATION = "/dashboard";
+/**
+ * Purchasing officers live in the approval queue, not the fleet-manager
+ * dashboard — everyone else still lands there. `/dashboard` stays reachable
+ * for them regardless; this only picks where a bare sign-in drops you.
+ */
+function defaultDestinationFor(role: UserRole | undefined) {
+  return role === "purchasing_officer" ? "/requests" : "/dashboard";
+}
 
 /**
  * `next` arrives from the query string, so it is attacker-controllable. Only
  * same-site absolute paths are honoured — `//evil.com` and `https://evil.com`
  * are both rejected — otherwise the login screen becomes an open redirect.
  */
-function safeDestination(next: string | undefined) {
-  if (!next) return DEFAULT_DESTINATION;
-  if (!next.startsWith("/") || next.startsWith("//")) return DEFAULT_DESTINATION;
+function safeDestination(next: string | undefined, role: UserRole | undefined) {
+  if (!next) return defaultDestinationFor(role);
+  if (!next.startsWith("/") || next.startsWith("//")) return defaultDestinationFor(role);
   return next;
 }
 
@@ -36,12 +44,10 @@ export function LoginForm({ next }: { next?: string }) {
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
 
-  const destination = safeDestination(next);
-
   // Someone with a live session has no business on the login screen.
   React.useEffect(() => {
-    if (ready && session) router.replace(destination);
-  }, [ready, session, router, destination]);
+    if (ready && session) router.replace(safeDestination(next, session.role));
+  }, [ready, session, router, next]);
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -64,7 +70,10 @@ export function LoginForm({ next }: { next?: string }) {
       return;
     }
 
-    router.replace(destination);
+    const account = DEMO_ACCOUNTS.find(
+      (candidate) => candidate.email.toLowerCase() === email.trim().toLowerCase()
+    );
+    router.replace(safeDestination(next, account?.role));
   }
 
   function fillDemo() {

@@ -5,11 +5,31 @@ import { usePathname } from "next/navigation";
 import { OctagonAlert } from "lucide-react";
 import { NAV_SECTIONS } from "@/lib/nav";
 import { useFleet } from "@/lib/store";
+import { useCan } from "@/lib/rbac";
+import { canApprove, pendingValue } from "@/lib/approvals";
 import { Logo } from "@/components/layout/logo";
 import { cn } from "@/lib/utils";
 
+/** Pending lines the signed-in user is actually authorised to approve. */
+function useRequestsForMeCount() {
+  const { ready, workOrders, approvalSettings } = useFleet();
+  const { role } = useCan();
+
+  if (!ready || !role) return 0;
+
+  let count = 0;
+  for (const order of workOrders) {
+    if (order.status !== "pending_approval") continue;
+    const orderPendingValue = pendingValue(order.lines);
+    if (!canApprove(role, orderPendingValue, approvalSettings)) continue;
+    count += order.lines.filter((line) => line.approvalStatus === "pending").length;
+  }
+  return count;
+}
+
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const requestsForMe = useRequestsForMeCount();
 
   return (
     <nav className="flex flex-1 flex-col gap-6 px-3 py-4">
@@ -52,7 +72,12 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                           : "text-subtle-foreground group-hover:text-muted-foreground"
                       )}
                     />
-                    {item.label}
+                    <span className="flex-1">{item.label}</span>
+                    {item.dynamicBadge === "requestsForMe" && requestsForMe > 0 ? (
+                      <span className="tabular flex min-w-4 shrink-0 items-center justify-center rounded-full bg-critical px-1 text-[9px] font-semibold leading-4 text-white">
+                        {requestsForMe > 9 ? "9+" : requestsForMe}
+                      </span>
+                    ) : null}
                   </Link>
                 </li>
               );

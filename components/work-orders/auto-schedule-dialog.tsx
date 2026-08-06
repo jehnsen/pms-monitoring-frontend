@@ -42,7 +42,7 @@ interface Proposal {
  * on tomorrow, which no workshop could absorb.
  */
 export function AutoScheduleDialog() {
-  const { health, workOrders } = useFleet();
+  const { health, workOrders, approvalSettings } = useFleet();
   const { createWorkOrder } = useFleetActions();
   const { can, reason } = useCan();
   const [open, setOpen] = React.useState(false);
@@ -52,7 +52,7 @@ export function AutoScheduleDialog() {
     // An interval is already handled if a live order covers it for that vehicle.
     const covered = new Set(
       workOrders
-        .filter((o) => o.status !== "completed" && o.status !== "cancelled")
+        .filter((o) => o.status !== "closed" && o.status !== "cancelled")
         .flatMap((o) => o.taskIds.map((taskId) => `${o.vehicleId}:${taskId}`))
     );
 
@@ -100,27 +100,40 @@ export function AutoScheduleDialog() {
 
   function commit() {
     for (const proposal of proposals) {
-      createWorkOrder({
-        vehicleId: proposal.vehicle.id,
-        title: proposal.item.task.name,
-        type: "preventive",
-        status: "scheduled",
-        priority: proposal.priority,
-        openedOn: formatISO(new Date(), { representation: "date" }),
-        scheduledFor: proposal.scheduledFor,
-        completedOn: null,
-        odometerAtService: proposal.vehicle.odometer,
-        technician: "Unassigned",
-        vendor: "In-house Fleet Bay 1",
-        laborCost: proposal.item.task.estimatedHours * LABOR_RATE_PER_HOUR,
-        partsCost: proposal.item.task.estimatedCost,
-        parts: [],
-        findings: "",
-        taskIds: [proposal.item.task.id],
-        notes: `Raised automatically from the overdue queue on ${formatDate(
-          formatISO(new Date(), { representation: "date" })
-        )}.`,
-      });
+      createWorkOrder(
+        {
+          vehicleId: proposal.vehicle.id,
+          title: proposal.item.task.name,
+          type: "preventive",
+          priority: proposal.priority,
+          openedOn: formatISO(new Date(), { representation: "date" }),
+          scheduledFor: proposal.scheduledFor,
+          completedOn: null,
+          odometerAtService: proposal.vehicle.odometer,
+          technician: "Unassigned",
+          vendor: "In-house Fleet Bay 1",
+          laborCost: proposal.item.task.estimatedHours * LABOR_RATE_PER_HOUR,
+          partsCost: proposal.item.task.estimatedCost,
+          parts: [],
+          findings: "",
+          taskIds: [proposal.item.task.id],
+          notes: `Raised automatically from the overdue queue on ${formatDate(
+            formatISO(new Date(), { representation: "date" })
+          )}.`,
+        },
+        [
+          {
+            description: proposal.item.task.name,
+            category: proposal.item.task.category,
+            partCost: proposal.item.task.estimatedCost,
+            labourCost: proposal.item.task.estimatedHours * LABOR_RATE_PER_HOUR,
+            urgency: proposal.item.task.critical ? "safety_critical" : "recommended",
+            partsSource: approvalSettings.defaultPartsSource,
+            photoUrls: [],
+          },
+        ],
+        approvalSettings
+      );
     }
     setDone(proposals.length);
   }
@@ -140,7 +153,8 @@ export function AutoScheduleDialog() {
           <DialogTitle>Auto-schedule overdue maintenance</DialogTitle>
           <DialogDescription>
             Raises a preventive work order for every breached interval that
-            isn&apos;t already booked, spread across the coming days.
+            isn&apos;t already booked. Cheap ones auto-approve on the spot;
+            the rest enter the approval queue.
           </DialogDescription>
         </DialogHeader>
 
@@ -149,7 +163,7 @@ export function AutoScheduleDialog() {
             <EmptyState
               icon={CheckCircle2}
               title={`${done} work ${done === 1 ? "order" : "orders"} raised`}
-              description="They're on the board as scheduled jobs, awaiting a technician and a bay slot."
+              description="Auto-approved ones are ready to schedule now; the rest are waiting on purchasing approval."
             />
           ) : proposals.length === 0 ? (
             <EmptyState

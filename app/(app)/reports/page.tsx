@@ -50,7 +50,7 @@ export default function ReportsPage() {
     const keys = new Set(costs.map((point) => point.key));
     return workOrders.filter(
       (order) =>
-        order.status === "completed" &&
+        order.status === "closed" &&
         order.completedOn &&
         keys.has(order.completedOn.slice(0, 7))
     );

@@ -1,21 +1,37 @@
 "use client";
 
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { formatISO } from "date-fns";
+import { formatISO, parseISO } from "date-fns";
 import type {
+  ApprovalLogEntry,
+  ApprovalSettings,
   FleetDocument,
   FleetState,
+  LineApprovalStatus,
   PartLine,
   Vehicle,
   WorkOrder,
   WorkOrderEvent,
+  WorkOrderLine,
 } from "@/types";
 import { createSeedState } from "@/lib/seed";
 import { applyCompletion, evaluateFleet, summariseFleet } from "@/lib/pms";
 import { buildAlerts, viewAlerts } from "@/lib/alerts";
 import { useSession } from "@/lib/auth";
+import {
+  DEFAULT_APPROVAL_SETTINGS,
+  approvedValue,
+  businessHoursBetween,
+  deriveOrderStatus,
+  lineCost,
+  requiredApprover,
+  varianceExceeds,
+} from "@/lib/approvals";
 
-const STORAGE_KEY = "pms.fleet.v1";
+// Bumped when the shape of a required field changes in a way that has no
+// sane default (the WorkOrderStatus rewrite for the approval workflow) —
+// old payloads are discarded rather than half-migrated. See lib/approvals.ts.
+const STORAGE_KEY = "pms.fleet.v2";
 
 /**
  * Server snapshot. Rendering a real fleet on the server would fight hydration —
@@ -27,6 +43,7 @@ const EMPTY: FleetState = {
   workOrders: [],
   documents: [],
   alerts: { readIds: [], dismissedIds: [] },
+  approvalSettings: DEFAULT_APPROVAL_SETTINGS,
 };
 
 let state: FleetState = EMPTY;
@@ -51,6 +68,10 @@ function normalise(raw: Partial<FleetState> | null | undefined): FleetState {
       ...order,
       parts: order.parts ?? [],
       findings: order.findings ?? "",
+      lines: order.lines ?? [],
+      approvalLog: order.approvalLog ?? [],
+      pendingApprovalEnteredAt: order.pendingApprovalEnteredAt ?? null,
+      approvalWaitHours: order.approvalWaitHours ?? null,
       // Records written before the timeline existed still carry their status;
       // give them a single synthesized entry rather than an empty history.
       history:
@@ -63,6 +84,7 @@ function normalise(raw: Partial<FleetState> | null | undefined): FleetState {
       readIds: raw?.alerts?.readIds ?? [],
       dismissedIds: raw?.alerts?.dismissedIds ?? [],
     },
+    approvalSettings: { ...DEFAULT_APPROVAL_SETTINGS, ...raw?.approvalSettings },
   };
 }
 
@@ -177,6 +199,7 @@ export function useFleet() {
       workOrders: snapshot.workOrders,
       documents: snapshot.documents,
       alertState: snapshot.alerts,
+      approvalSettings: snapshot.approvalSettings,
       health,
       healthById: new Map(health.map((h) => [h.vehicle.id, h])),
       vehiclesById: new Map(snapshot.vehicles.map((v) => [v.id, v])),
@@ -190,12 +213,13 @@ export function useFleet() {
  * read/dismiss decisions.
  */
 export function useAlerts() {
-  const { ready, health, workOrders, documents, alertState } = useFleet();
+  const { ready, health, workOrders, documents, alertState, approvalSettings } =
+    useFleet();
 
   return useMemo(() => {
-    const alerts = buildAlerts(health, workOrders, documents);
+    const alerts = buildAlerts(health, workOrders, documents, approvalSettings);
     return { ready, ...viewAlerts(alerts, alertState) };
-  }, [ready, health, workOrders, documents, alertState]);
+  }, [ready, health, workOrders, documents, alertState, approvalSettings]);
 }
 
 /** Largest single upload accepted, in bytes. Keeps one file from filling the quota. */
@@ -210,20 +234,82 @@ function workOrderEvent(status: WorkOrder["status"], actor: string): WorkOrderEv
   };
 }
 
+function approvalLogId() {
+  return `log-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/** What a caller supplies for a new line — the approval fields are the store's to set. */
+export type NewWorkOrderLine = Pick<
+  WorkOrderLine,
+  "description" | "category" | "partCost" | "labourCost" | "urgency" | "partsSource" | "photoUrls"
+>;
+
+type NewWorkOrderDraft = Omit<
+  WorkOrder,
+  | "id"
+  | "reference"
+  | "history"
+  | "status"
+  | "lines"
+  | "approvalLog"
+  | "pendingApprovalEnteredAt"
+  | "approvalWaitHours"
+>;
+
 export function useFleetActions() {
   const { session } = useSession();
   const actor = session?.name ?? "System";
 
+  /**
+   * Every job is a purchase before it's a repair: the lines supplied here run
+   * through the approval thresholds immediately. Under the auto-approve
+   * ceiling, every line is approved on the spot (system actor, logged) and
+   * the order opens already `approved`; otherwise it opens `pending_approval`
+   * and the wait-time clock (`pendingApprovalEnteredAt`) starts now.
+   */
   const createWorkOrder = useCallback(
-    (draft: Omit<WorkOrder, "id" | "reference" | "history">) => {
+    (draft: NewWorkOrderDraft, lineDrafts: NewWorkOrderLine[], settings: ApprovalSettings) => {
       let created: WorkOrder | null = null;
       setState((current) => {
         const seq = current.workOrders.length + 1;
+        const now = new Date();
+        const total = lineDrafts.reduce((sum, l) => sum + l.partCost + l.labourCost, 0);
+        const autoApprove = requiredApprover(total, settings) === "auto";
+
+        const lines: WorkOrderLine[] = lineDrafts.map((l, index) => ({
+          ...l,
+          id: `line-${Date.now().toString(36)}-${index}`,
+          approvalStatus: autoApprove ? "approved" : "pending",
+          approvedBy: autoApprove ? "System (auto-approval)" : null,
+          approvedAt: autoApprove ? now.toISOString() : null,
+          declineReason: null,
+        }));
+
+        const approvalLog: ApprovalLogEntry[] = autoApprove
+          ? lines.map((l) => ({
+              id: approvalLogId(),
+              lineId: l.id,
+              action: "auto_approved",
+              actorId: "system",
+              actorName: "System (auto-approval)",
+              at: now.toISOString(),
+              note: null,
+              amountAtTime: lineCost(l),
+            }))
+          : [];
+
+        const status = deriveOrderStatus(lines);
+
         created = {
           ...draft,
           id: `wo-${Date.now().toString(36)}`,
           reference: `WO-${new Date().getFullYear()}-${String(seq).padStart(4, "0")}`,
-          history: [workOrderEvent(draft.status, actor)],
+          status,
+          lines,
+          approvalLog,
+          pendingApprovalEnteredAt: status === "pending_approval" ? now.toISOString() : null,
+          approvalWaitHours: null,
+          history: [workOrderEvent(status, actor)],
         };
         return { ...current, workOrders: [created, ...current.workOrders] };
       });
@@ -254,10 +340,109 @@ export function useFleetActions() {
   );
 
   /**
+   * Approves, declines, or defers one line. The order's status is never set
+   * directly — it's always re-derived from the full line set — and exiting
+   * `pending_approval` stamps how long the line actually waited.
+   */
+  const decideLine = useCallback(
+    (
+      orderId: string,
+      lineId: string,
+      decision: Exclude<LineApprovalStatus, "pending">,
+      note?: string
+    ) => {
+      setState((current) => {
+        const order = current.workOrders.find((o) => o.id === orderId);
+        if (!order) return current;
+
+        const now = new Date();
+        const lines = order.lines.map((line) =>
+          line.id === lineId
+            ? {
+                ...line,
+                approvalStatus: decision,
+                approvedBy: actor,
+                approvedAt: now.toISOString(),
+                declineReason: decision === "declined" ? note ?? "" : null,
+              }
+            : line
+        );
+        const decidedLine = lines.find((l) => l.id === lineId);
+        if (!decidedLine) return current;
+
+        const logEntry: ApprovalLogEntry = {
+          id: approvalLogId(),
+          lineId,
+          action: decision,
+          actorId: actor,
+          actorName: actor,
+          at: now.toISOString(),
+          note: note ?? null,
+          amountAtTime: lineCost(decidedLine),
+        };
+
+        const newStatus = deriveOrderStatus(lines);
+        const leavingPending =
+          order.status === "pending_approval" &&
+          newStatus !== "pending_approval" &&
+          order.pendingApprovalEnteredAt;
+
+        const updated: WorkOrder = {
+          ...order,
+          lines,
+          approvalLog: [...order.approvalLog, logEntry],
+          status: newStatus,
+          pendingApprovalEnteredAt:
+            newStatus === "pending_approval" ? order.pendingApprovalEnteredAt : null,
+          approvalWaitHours: leavingPending
+            ? businessHoursBetween(parseISO(order.pendingApprovalEnteredAt as string), now)
+            : order.approvalWaitHours,
+          history:
+            newStatus !== order.status
+              ? [...order.history, workOrderEvent(newStatus, actor)]
+              : order.history,
+        };
+
+        return {
+          ...current,
+          workOrders: current.workOrders.map((o) => (o.id === orderId ? updated : o)),
+        };
+      });
+    },
+    [actor]
+  );
+
+  /** Approved or partially-approved work moves to the bay's calendar. */
+  const scheduleWorkOrder = useCallback(
+    (orderId: string, scheduledFor: string) => {
+      setState((current) => ({
+        ...current,
+        workOrders: current.workOrders.map((order) =>
+          order.id === orderId &&
+          (order.status === "approved" || order.status === "partially_approved")
+            ? {
+                ...order,
+                scheduledFor,
+                status: "scheduled",
+                history: [...order.history, workOrderEvent("scheduled", actor)],
+              }
+            : order
+        ),
+      }));
+    },
+    [actor]
+  );
+
+  /**
    * Closing a work order is what resets the PMS clock: every task the
    * technician ticked takes the order's odometer and completion date as its
    * new baseline. The findings and parts list are recorded at the same
    * moment — that is what turns a work order into a service record.
+   *
+   * If the actual cost has drifted past the approved amount by more than the
+   * variance threshold, closing is refused unless `varianceApproved` is set —
+   * the caller is expected to have walked the user through that confirmation
+   * first (see `CompleteWorkOrderDialog`).
    */
   const completeWorkOrder = useCallback(
     (
@@ -267,21 +452,63 @@ export function useFleetActions() {
         findings?: string;
         parts?: PartLine[];
         taskIds?: string[];
+        varianceApproved?: boolean;
       }
-    ) => {
+    ): { ok: true } | { ok: false; error: string } => {
+      let result: { ok: true } | { ok: false; error: string } = { ok: true };
+
       setState((current) => {
         const order = current.workOrders.find((o) => o.id === id);
         if (!order) return current;
 
+        const parts = detail?.parts ?? order.parts;
+        const partsTotal = parts.reduce((t, p) => t + p.quantity * p.unitCost, 0);
+        const actualTotal = order.laborCost + partsTotal;
+        const approvedTotal = approvedValue(order.lines);
+        const breachesVariance = varianceExceeds(
+          approvedTotal,
+          actualTotal,
+          current.approvalSettings.varianceThresholdPct
+        );
+
+        if (breachesVariance && !detail?.varianceApproved) {
+          result = {
+            ok: false,
+            error: `Actual cost (₱${actualTotal.toLocaleString()}) exceeds the approved ₱${approvedTotal.toLocaleString()} by more than ${
+              current.approvalSettings.varianceThresholdPct
+            }% — re-approve the variance before closing.`,
+          };
+          return current;
+        }
+
+        const now = new Date();
+        const approvalLog =
+          breachesVariance && detail?.varianceApproved
+            ? [
+                ...order.approvalLog,
+                {
+                  id: approvalLogId(),
+                  lineId: null,
+                  action: "variance_approved" as const,
+                  actorId: actor,
+                  actorName: actor,
+                  at: now.toISOString(),
+                  note: `Actual ₱${actualTotal.toLocaleString()} vs approved ₱${approvedTotal.toLocaleString()}.`,
+                  amountAtTime: actualTotal,
+                },
+              ]
+            : order.approvalLog;
+
         const completed: WorkOrder = {
           ...order,
-          status: "completed",
-          completedOn: formatISO(new Date(), { representation: "date" }),
+          status: "closed",
+          completedOn: formatISO(now, { representation: "date" }),
           odometerAtService: detail?.odometer ?? order.odometerAtService,
           findings: detail?.findings ?? order.findings,
-          parts: detail?.parts ?? order.parts,
+          parts,
           taskIds: detail?.taskIds ?? order.taskIds,
-          history: [...order.history, workOrderEvent("completed", actor)],
+          approvalLog,
+          history: [...order.history, workOrderEvent("closed", actor)],
         };
 
         return {
@@ -294,6 +521,8 @@ export function useFleetActions() {
           workOrders: current.workOrders.map((o) => (o.id === id ? completed : o)),
         };
       });
+
+      return result;
     },
     [actor]
   );
@@ -367,6 +596,13 @@ export function useFleetActions() {
     }));
   }, []);
 
+  const updateApprovalSettings = useCallback((patch: Partial<ApprovalSettings>) => {
+    setState((current) => ({
+      ...current,
+      approvalSettings: { ...current.approvalSettings, ...patch },
+    }));
+  }, []);
+
   const resetFleet = useCallback(() => {
     setState(() => createSeedState());
   }, []);
@@ -374,6 +610,8 @@ export function useFleetActions() {
   return {
     createWorkOrder,
     updateWorkOrder,
+    decideLine,
+    scheduleWorkOrder,
     completeWorkOrder,
     updateVehicle,
     addDocument,
@@ -381,6 +619,7 @@ export function useFleetActions() {
     markAlertsRead,
     dismissAlert,
     restoreAlerts,
+    updateApprovalSettings,
     resetFleet,
   };
 }

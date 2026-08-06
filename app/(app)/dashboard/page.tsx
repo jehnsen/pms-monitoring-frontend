@@ -51,7 +51,7 @@ export default function DashboardPage() {
   const demand = serviceDemand(health);
 
   const activeOrders = workOrders
-    .filter((order) => order.status !== "completed" && order.status !== "cancelled")
+    .filter((order) => order.status !== "closed" && order.status !== "cancelled")
     .sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
 
   const staleCount = vehicles.filter((vehicle) => isOdometerStale(vehicle)).length;

@@ -1,16 +1,22 @@
 import { addDays, formatISO, subDays } from "date-fns";
 import type {
+  ApprovalLogEntry,
   FleetDocument,
   FleetState,
+  LineUrgency,
   PartLine,
+  PartsSource,
   Priority,
   TaskState,
   Vehicle,
   WorkOrder,
   WorkOrderEvent,
+  WorkOrderLine,
+  WorkOrderStatus,
 } from "@/types";
 import { SERVICE_TASKS } from "@/lib/service-tasks";
 import { evaluateVehicle } from "@/lib/pms";
+import { DEFAULT_APPROVAL_SETTINGS, requiredApprover } from "@/lib/approvals";
 
 /**
  * Deterministic PRNG. The demo fleet has to look lived-in — uneven odometers,
@@ -659,36 +665,44 @@ function buildVehicles(today: Date): BuiltVehicle[] {
 
 const TASK_BY_ID = new Map(SERVICE_TASKS.map((task) => [task.id, task]));
 
+const FLEET_MANAGER_NAME = "Mike Manabat";
+const OPS_SUPERVISOR_NAME = "Marisol Bautista";
+
 function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
   const orders: WorkOrder[] = [];
   const random = mulberry32(90210);
   let counter = 1;
   let historySeq = 1;
+  let logSeq = 1;
 
-  /**
-   * Synthesizes a plausible status history from data the order already
-   * carries — every job starts `open`, then optionally moves through
-   * `in_progress` before landing on its current status.
-   */
-  const buildHistory = (
-    openedOn: Date,
-    status: WorkOrder["status"],
-    actor: string,
-    endsOn?: Date
-  ): WorkOrderEvent[] => {
-    const events: WorkOrderEvent[] = [
-      { id: `hist-${historySeq++}`, status: "open", at: openedOn.toISOString(), actor },
-    ];
-    if (status !== "open") {
-      events.push({
-        id: `hist-${historySeq++}`,
-        status,
-        at: (endsOn ?? openedOn).toISOString(),
-        actor,
-      });
-    }
-    return events;
-  };
+  const evt = (status: WorkOrderStatus, at: Date, actor: string): WorkOrderEvent => ({
+    id: `hist-${historySeq++}`,
+    status,
+    at: at.toISOString(),
+    actor,
+  });
+
+  const log = (
+    lineId: string,
+    action: ApprovalLogEntry["action"],
+    at: Date,
+    actorName: string,
+    amount: number,
+    note: string | null = null
+  ): ApprovalLogEntry => ({
+    id: `alog-${logSeq++}`,
+    lineId,
+    action,
+    actorId: actorName,
+    actorName,
+    at: at.toISOString(),
+    note,
+    amountAtTime: amount,
+  });
+
+  /** Who would plausibly have approved this, given the band it falls in. */
+  const approverFor = (band: ReturnType<typeof requiredApprover>) =>
+    band === "fleet_manager" ? FLEET_MANAGER_NAME : OPS_SUPERVISOR_NAME;
 
   const push = (draft: Omit<WorkOrder, "id" | "reference">) => {
     orders.push({
@@ -698,6 +712,80 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
     });
     counter += 1;
   };
+
+  /**
+   * A closed historical job: already fully approved (nothing else could have
+   * gone ahead), auto-approved on the spot if it was cheap enough, otherwise
+   * signed off by whoever the amount routes to. The full lifecycle — approval,
+   * scheduling, the bay, close-out — is spread across the job's own window so
+   * a real timeline shows up on every record, not just the newest ones.
+   */
+  function closedLine(params: {
+    description: string;
+    category: WorkOrderLine["category"];
+    partCost: number;
+    labourCost: number;
+    urgency: LineUrgency;
+    partsSource: PartsSource;
+    openedOn: Date;
+  }): { line: WorkOrderLine; approvedAt: Date; approverName: string; logEntry: ApprovalLogEntry } {
+    const total = params.partCost + params.labourCost;
+    const band = requiredApprover(total, DEFAULT_APPROVAL_SETTINGS);
+    const auto = band === "auto";
+    const approverName = auto ? "System (auto-approval)" : approverFor(band);
+    // A human sits on it briefly; the system doesn't.
+    const approvedAt = auto ? params.openedOn : addDays(params.openedOn, 0);
+
+    const lineId = `line-${counter}-${historySeq}`;
+    const line: WorkOrderLine = {
+      id: lineId,
+      description: params.description,
+      category: params.category,
+      partCost: params.partCost,
+      labourCost: params.labourCost,
+      urgency: params.urgency,
+      partsSource: params.partsSource,
+      approvalStatus: "approved",
+      approvedBy: approverName,
+      approvedAt: approvedAt.toISOString(),
+      declineReason: null,
+      photoUrls: [],
+    };
+
+    return {
+      line,
+      approvedAt,
+      approverName,
+      logEntry: log(
+        lineId,
+        auto ? "auto_approved" : "approved",
+        approvedAt,
+        approverName,
+        total
+      ),
+    };
+  }
+
+  function closedHistory(params: {
+    openedOn: Date;
+    completedOn: Date;
+    approvedAt: Date;
+    auto: boolean;
+    approverName: string;
+    technician: string;
+  }): WorkOrderEvent[] {
+    const { openedOn, completedOn, approvedAt, auto, approverName, technician } = params;
+    const span = Math.max(completedOn.getTime() - openedOn.getTime(), 0);
+    const at = (fraction: number) => new Date(openedOn.getTime() + span * fraction);
+
+    const events: WorkOrderEvent[] = [];
+    if (!auto) events.push(evt("pending_approval", openedOn, technician));
+    events.push(evt("approved", approvedAt, approverName));
+    events.push(evt("scheduled", at(0.35), technician));
+    events.push(evt("in_progress", at(0.7), technician));
+    events.push(evt("closed", completedOn, technician));
+    return events;
+  }
 
   const historyWindowStart = subDays(today, 365);
 
@@ -720,12 +808,23 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
         ) * 50;
       const technician = TECHNICIANS[Math.floor(random() * TECHNICIANS.length)];
       const openedOnDate = subDays(event.on, 1 + Math.floor(random() * 3));
+      const partsCost = partsTotal(parts);
+
+      const { line, approvedAt, approverName, logEntry } = closedLine({
+        description: task.name,
+        category: task.category,
+        partCost: partsCost,
+        labourCost: laborCost,
+        urgency: task.critical ? "safety_critical" : "recommended",
+        partsSource: random() < 0.65 ? "supplier_provided" : "own_stock",
+        openedOn: openedOnDate,
+      });
 
       push({
         vehicleId: vehicle.id,
         title: task.name,
         type: task.id === "safety-inspection" ? "inspection" : "preventive",
-        status: "completed",
+        status: "closed",
         priority: task.critical ? "high" : "medium",
         openedOn: iso(openedOnDate),
         scheduledFor: iso(event.on),
@@ -734,13 +833,24 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
         technician,
         vendor: VENDORS[Math.floor(random() * VENDORS.length)],
         laborCost,
-        partsCost: partsTotal(parts),
+        partsCost,
         parts,
         findings:
           PREVENTIVE_FINDINGS[Math.floor(random() * PREVENTIVE_FINDINGS.length)],
         taskIds: [task.id],
         notes: "Completed per PMS schedule. Next interval logged.",
-        history: buildHistory(openedOnDate, "completed", technician, event.on),
+        lines: [line],
+        approvalLog: [logEntry],
+        pendingApprovalEnteredAt: null,
+        approvalWaitHours: line.approvedBy === "System (auto-approval)" ? null : 0.5,
+        history: closedHistory({
+          openedOn: openedOnDate,
+          completedOn: event.on,
+          approvedAt,
+          auto: approverName === "System (auto-approval)",
+          approverName,
+          technician,
+        }),
       });
     }
   }
@@ -760,12 +870,28 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
       const laborCost = Math.round((900 + random() * 4_200) / 50) * 50;
       const technician = TECHNICIANS[Math.floor(random() * TECHNICIANS.length)];
       const openedOnDate = subDays(completedOn, 1 + Math.floor(random() * 4));
+      const partsCost = partsTotal(parts);
+
+      const { line, approvedAt, approverName, logEntry } = closedLine({
+        description: job.title,
+        category: "other",
+        partCost: partsCost,
+        labourCost: laborCost,
+        urgency:
+          job.priority === "critical"
+            ? "safety_critical"
+            : job.priority === "low"
+              ? "optional"
+              : "recommended",
+        partsSource: "supplier_provided",
+        openedOn: openedOnDate,
+      });
 
       push({
         vehicleId: vehicle.id,
         title: job.title,
         type: "corrective",
-        status: "completed",
+        status: "closed",
         priority: job.priority,
         openedOn: iso(openedOnDate),
         scheduledFor: iso(completedOn),
@@ -777,19 +903,34 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
         technician,
         vendor: VENDORS[Math.floor(random() * VENDORS.length)],
         laborCost,
-        partsCost: partsTotal(parts),
+        partsCost,
         parts,
         findings:
           CORRECTIVE_FINDINGS[Math.floor(random() * CORRECTIVE_FINDINGS.length)],
         taskIds: [],
         notes: "Diagnosed and repaired. Road tested before release.",
-        history: buildHistory(openedOnDate, "completed", technician, completedOn),
+        lines: [line],
+        approvalLog: [logEntry],
+        pendingApprovalEnteredAt: null,
+        approvalWaitHours: line.approvedBy === "System (auto-approval)" ? null : 0.5,
+        history: closedHistory({
+          openedOn: openedOnDate,
+          completedOn,
+          approvedAt,
+          auto: approverName === "System (auto-approval)",
+          approverName,
+          technician,
+        }),
       });
     }
   }
 
-  // The live board. Derived from what is genuinely due right now, so the open
-  // jobs correspond to real breaches rather than an arbitrary hand-written list.
+  // The live board: work still moving through the approval and bay pipeline.
+  // Derived from what is genuinely due right now, so the jobs correspond to
+  // real breaches rather than an arbitrary hand-written list. The eight slots
+  // are deliberately spread across every stage of the new lifecycle, so the
+  // Requests queue, the SLA-breach alert, and the vehicle-detail
+  // safety-critical-decline banner all have something real to show.
   const pending = built
     .flatMap(({ vehicle }) => {
       const health = evaluateVehicle(vehicle, today);
@@ -800,17 +941,187 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
     .sort((a, b) => a.item.daysRemaining - b.item.daysRemaining)
     .slice(0, 8);
 
+  const LIVE_BOARD_PLAN: {
+    status: WorkOrderStatus;
+    /** Multiplier on the task's own estimate, so the amount lands in the band this row demonstrates. */
+    costMultiplier: number;
+    urgency: LineUrgency;
+    slaBreached?: boolean;
+    declineReason?: string;
+    extraLine?: boolean;
+  }[] = [
+    // Stuck well past the SLA, and big enough to need the Fleet Manager —
+    // exactly the case the escalation alert exists for.
+    { status: "pending_approval", costMultiplier: 6, urgency: "safety_critical", slaBreached: true },
+    // Freshly raised, still comfortably inside the SLA window.
+    { status: "pending_approval", costMultiplier: 2.2, urgency: "recommended" },
+    // Purchasing said no — and it was safety-critical, so it feeds the
+    // vehicle-detail liability banner.
+    {
+      status: "declined",
+      costMultiplier: 1.6,
+      urgency: "safety_critical",
+      declineReason: "Vendor quote well above catalogue rate; requested a second quote before authorising.",
+    },
+    // A genuine mix: one line approved, one declined.
+    { status: "partially_approved", costMultiplier: 1.8, urgency: "recommended", extraLine: true },
+    { status: "approved", costMultiplier: 1.3, urgency: "recommended" },
+    { status: "approved", costMultiplier: 0.6, urgency: "optional" },
+    { status: "scheduled", costMultiplier: 1, urgency: "recommended" },
+    { status: "in_progress", costMultiplier: 1, urgency: "safety_critical" },
+  ];
+
   pending.forEach(({ vehicle, item }, index) => {
-    const status =
-      index < 2 ? "in_progress" : index < 4 ? ("open" as const) : ("scheduled" as const);
+    const plan = LIVE_BOARD_PLAN[index] ?? LIVE_BOARD_PLAN[LIVE_BOARD_PLAN.length - 1];
     const technician = TECHNICIANS[Math.floor(random() * TECHNICIANS.length)];
     const openedOnDate = subDays(today, 1 + Math.floor(random() * 5));
+
+    const partCost = Math.round(item.task.estimatedCost * plan.costMultiplier);
+    const labourCost = Math.round(
+      item.task.estimatedHours * LABOR_RATE_PER_HOUR * plan.costMultiplier
+    );
+    const lineId = `line-${counter}-a`;
+    const total = partCost + labourCost;
+    const band = requiredApprover(total, DEFAULT_APPROVAL_SETTINGS);
+
+    const lines: WorkOrderLine[] = [];
+    const approvalLog: ApprovalLogEntry[] = [];
+    let pendingApprovalEnteredAt: string | null = null;
+    let approvalWaitHours: number | null = null;
+
+    if (plan.status === "pending_approval") {
+      const enteredAt = plan.slaBreached
+        ? new Date(today.getTime() - 3 * 24 * 3_600_000) // several business days back — always breaches
+        : new Date(today.getTime() - 60 * 60_000); // one hour ago — comfortably inside the default 4h SLA
+      pendingApprovalEnteredAt = enteredAt.toISOString();
+      lines.push({
+        id: lineId,
+        description: item.task.name,
+        category: item.task.category,
+        partCost,
+        labourCost,
+        urgency: plan.urgency,
+        partsSource: DEFAULT_APPROVAL_SETTINGS.defaultPartsSource,
+        approvalStatus: "pending",
+        approvedBy: null,
+        approvedAt: null,
+        declineReason: null,
+        photoUrls: [],
+      });
+    } else if (plan.status === "declined") {
+      lines.push({
+        id: lineId,
+        description: item.task.name,
+        category: item.task.category,
+        partCost,
+        labourCost,
+        urgency: plan.urgency,
+        partsSource: DEFAULT_APPROVAL_SETTINGS.defaultPartsSource,
+        approvalStatus: "declined",
+        approvedBy: approverFor(band),
+        approvedAt: today.toISOString(),
+        declineReason: plan.declineReason ?? "Declined.",
+        photoUrls: [],
+      });
+      approvalLog.push(
+        log(lineId, "declined", today, approverFor(band), total, plan.declineReason ?? null)
+      );
+      approvalWaitHours = 3.5;
+    } else {
+      // approved / partially_approved / scheduled / in_progress all start
+      // from at least one approved line.
+      const approver = band === "auto" ? "System (auto-approval)" : approverFor(band);
+      lines.push({
+        id: lineId,
+        description: item.task.name,
+        category: item.task.category,
+        partCost,
+        labourCost,
+        urgency: plan.urgency,
+        partsSource: DEFAULT_APPROVAL_SETTINGS.defaultPartsSource,
+        approvalStatus: "approved",
+        approvedBy: approver,
+        approvedAt: openedOnDate.toISOString(),
+        declineReason: null,
+        photoUrls: [],
+      });
+      approvalLog.push(
+        log(
+          lineId,
+          band === "auto" ? "auto_approved" : "approved",
+          openedOnDate,
+          approver,
+          total
+        )
+      );
+      approvalWaitHours = band === "auto" ? null : 2;
+
+      if (plan.extraLine) {
+        const extraId = `line-${counter}-b`;
+        const extraApprover = OPS_SUPERVISOR_NAME;
+        lines.push({
+          id: extraId,
+          description: "Supplementary inspection line",
+          category: "other",
+          partCost: 800,
+          labourCost: 400,
+          urgency: "optional",
+          partsSource: "own_stock",
+          approvalStatus: "declined",
+          approvedBy: extraApprover,
+          approvedAt: openedOnDate.toISOString(),
+          declineReason: "Not required this visit — defer to next scheduled service.",
+          photoUrls: [],
+        });
+        approvalLog.push(
+          log(
+            extraId,
+            "declined",
+            openedOnDate,
+            extraApprover,
+            1_200,
+            "Not required this visit — defer to next scheduled service."
+          )
+        );
+      }
+    }
+
+    // The decided-on-the-spot (auto) case never visibly sits in
+    // pending_approval, matching the store's real runtime behaviour; every
+    // other case starts there before resolving to whatever this row
+    // demonstrates.
+    const resolvedAt = new Date(openedOnDate.getTime() + 2 * 3_600_000);
+    const history: WorkOrderEvent[] = [];
+
+    if (plan.status === "pending_approval") {
+      history.push(evt("pending_approval", parseISOOrDate(pendingApprovalEnteredAt), technician));
+    } else if (plan.status === "declined") {
+      history.push(evt("pending_approval", openedOnDate, technician));
+      history.push(evt("declined", resolvedAt, approverFor(band)));
+    } else if (plan.status === "partially_approved") {
+      history.push(evt("pending_approval", openedOnDate, technician));
+      history.push(evt("partially_approved", resolvedAt, OPS_SUPERVISOR_NAME));
+    } else {
+      // approved / scheduled / in_progress.
+      const approver = band === "auto" ? "System (auto-approval)" : approverFor(band);
+      if (band !== "auto") history.push(evt("pending_approval", openedOnDate, technician));
+      history.push(evt("approved", resolvedAt, approver));
+      if (plan.status === "scheduled" || plan.status === "in_progress") {
+        history.push(evt("scheduled", addDays(openedOnDate, 1), technician));
+      }
+      if (plan.status === "in_progress") {
+        history.push(evt("in_progress", today, technician));
+      }
+    }
+
+    const linesLabourTotal = lines.reduce((total, line) => total + line.labourCost, 0);
+    const linesPartTotal = lines.reduce((total, line) => total + line.partCost, 0);
 
     push({
       vehicleId: vehicle.id,
       title: item.task.name,
       type: item.task.id === "safety-inspection" ? "inspection" : "preventive",
-      status,
+      status: plan.status,
       priority: item.status === "overdue" ? "critical" : "high",
       openedOn: iso(openedOnDate),
       scheduledFor: iso(addDays(today, Math.floor(index / 2))),
@@ -818,29 +1129,34 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
       odometerAtService: vehicle.odometer,
       technician,
       vendor: VENDORS[Math.floor(random() * VENDORS.length)],
-      laborCost: Math.round(item.task.estimatedHours * LABOR_RATE_PER_HOUR),
-      partsCost: item.task.estimatedCost,
+      laborCost: linesLabourTotal,
+      partsCost: linesPartTotal,
       // Open work carries an estimate, not a record: parts and findings are
       // filled in at completion.
       parts: [],
       findings: "",
       taskIds: [item.task.id],
-      history: buildHistory(
-        openedOnDate,
-        status,
-        technician,
-        status === "in_progress" ? today : undefined
-      ),
+      lines,
+      approvalLog,
+      pendingApprovalEnteredAt,
+      approvalWaitHours,
+      history,
       notes:
-        status === "in_progress"
+        plan.status === "in_progress"
           ? "Vehicle on the lift. Parts drawn from stock."
-          : "Awaiting bay slot confirmation.",
+          : plan.status === "pending_approval"
+            ? "Awaiting purchasing approval."
+            : "Awaiting bay slot confirmation.",
     });
   });
 
   return orders.sort((a, b) =>
     (b.completedOn ?? b.scheduledFor).localeCompare(a.completedOn ?? a.scheduledFor)
   );
+}
+
+function parseISOOrDate(value: string | null): Date {
+  return value ? new Date(value) : new Date();
 }
 
 /* ------------------------------------------------------------- documents */
@@ -898,7 +1214,7 @@ function buildDocuments(
     });
   }
 
-  const completed = orders.filter((order) => order.status === "completed");
+  const completed = orders.filter((order) => order.status === "closed");
   for (const order of completed) {
     if (random() > 0.4) continue;
     const vehicle = vehicles.find((v) => v.id === order.vehicleId);
@@ -948,5 +1264,6 @@ export function createSeedState(today = new Date()): FleetState {
     workOrders,
     documents: buildDocuments(vehicles, workOrders, today),
     alerts: { readIds: [], dismissedIds: [] },
+    approvalSettings: DEFAULT_APPROVAL_SETTINGS,
   };
 }

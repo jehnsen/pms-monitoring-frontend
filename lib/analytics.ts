@@ -44,7 +44,7 @@ export function monthlyCosts(
   }
 
   for (const order of workOrders) {
-    if (order.status !== "completed" || !order.completedOn) continue;
+    if (order.status !== "closed" || !order.completedOn) continue;
     const key = format(parseISO(order.completedOn), "yyyy-MM");
     const bucket = buckets.get(key);
     if (!bucket) continue;
@@ -74,7 +74,7 @@ export function spendByVehicle(
   const byVehicle = new Map<string, number>();
 
   for (const order of workOrders) {
-    if (order.status !== "completed") continue;
+    if (order.status !== "closed") continue;
     byVehicle.set(
       order.vehicleId,
       (byVehicle.get(order.vehicleId) ?? 0) + workOrderCost(order)
@@ -96,7 +96,7 @@ export function spendByCategory(workOrders: WorkOrder[]): NamedTotal[] {
   const totals = new Map<string, number>();
 
   for (const order of workOrders) {
-    if (order.status !== "completed") continue;
+    if (order.status !== "closed") continue;
     const task = SERVICE_TASKS.find((t) => order.taskIds.includes(t.id));
     const label = task ? task.name : "Unscheduled repairs";
     totals.set(label, (totals.get(label) ?? 0) + workOrderCost(order));
@@ -240,7 +240,7 @@ export function rollingSpend(
   let previous = 0;
 
   for (const order of workOrders) {
-    if (order.status !== "completed" || !order.completedOn) continue;
+    if (order.status !== "closed" || !order.completedOn) continue;
     const completedOn = parseISO(order.completedOn);
     const cost = workOrderCost(order);
 
@@ -286,7 +286,7 @@ export function serviceFrequency(
   const counts = new Map<string, number>();
 
   for (const order of workOrders) {
-    if (order.status !== "completed") continue;
+    if (order.status !== "closed") continue;
     counts.set(order.vehicleId, (counts.get(order.vehicleId) ?? 0) + 1);
   }
 
@@ -313,7 +313,7 @@ export function meanDaysBetweenServices(
   vehicleCount: number,
   months = 12
 ) {
-  const completed = workOrders.filter((order) => order.status === "completed");
+  const completed = workOrders.filter((order) => order.status === "closed");
   if (!completed.length || !vehicleCount) return 0;
 
   const windowDays = months * 30.44;

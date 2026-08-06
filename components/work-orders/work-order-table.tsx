@@ -89,7 +89,7 @@ export function WorkOrderTable({
           {orders.map((order) => {
             const vehicle = vehiclesById.get(order.vehicleId);
             const closed =
-              order.status === "completed" || order.status === "cancelled";
+              order.status === "closed" || order.status === "cancelled";
 
             return (
               <tr
@@ -177,9 +177,7 @@ export function WorkOrderTable({
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         disabled={
-                          closed ||
-                          order.status === "in_progress" ||
-                          !can("workorder:update")
+                          order.status !== "scheduled" || !can("workorder:update")
                         }
                         onSelect={() =>
                           updateWorkOrder(order.id, { status: "in_progress" })
@@ -189,7 +187,9 @@ export function WorkOrderTable({
                         Start job
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        disabled={closed || !can("workorder:complete")}
+                        disabled={
+                          order.status !== "in_progress" || !can("workorder:complete")
+                        }
                         onSelect={() => setClosing(order)}
                       >
                         <CheckCircle2 />

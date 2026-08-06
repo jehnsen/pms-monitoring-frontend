@@ -17,6 +17,7 @@ import {
 import { PmsStatusBadge } from "@/components/status";
 import { useFleet, useFleetActions } from "@/lib/store";
 import { validateOdometerReading } from "@/lib/odometer-validation";
+import { approvedValue, varianceExceeds } from "@/lib/approvals";
 import { formatCurrency, formatKm, formatRelative } from "@/lib/utils";
 import type { PartLine, Vehicle, WorkOrder } from "@/types";
 
@@ -47,7 +48,7 @@ export function CompleteWorkOrderDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { healthById } = useFleet();
+  const { healthById, approvalSettings } = useFleet();
   const { completeWorkOrder } = useFleetActions();
 
   const [odometer, setOdometer] = React.useState("");
@@ -55,6 +56,8 @@ export function CompleteWorkOrderDialog({
   const [parts, setParts] = React.useState<PartLine[]>([]);
   const [confirmed, setConfirmed] = React.useState(false);
   const [taskIds, setTaskIds] = React.useState<string[]>([]);
+  const [varianceConfirmed, setVarianceConfirmed] = React.useState(false);
+  const [closeError, setCloseError] = React.useState<string | null>(null);
 
   const items = vehicle ? healthById.get(vehicle.id)?.items ?? [] : [];
 
@@ -67,6 +70,8 @@ export function CompleteWorkOrderDialog({
     setParts(order.parts.length ? order.parts : []);
     setConfirmed(false);
     setTaskIds(order.taskIds);
+    setVarianceConfirmed(false);
+    setCloseError(null);
   }, [open, order, vehicle]);
 
   const reading = Number(odometer);
@@ -82,6 +87,13 @@ export function CompleteWorkOrderDialog({
     (total, part) => total + part.quantity * part.unitCost,
     0
   );
+  const actualTotal = order.laborCost + (parts.length ? partsTotal : order.partsCost);
+  const approvedTotal = approvedValue(order.lines);
+  const breachesVariance = varianceExceeds(
+    approvedTotal,
+    actualTotal,
+    approvalSettings.varianceThresholdPct
+  );
   // An incomplete line would silently drop out of the record; block instead.
   const partsValid = parts.every((part) => part.name.trim().length > 0);
 
@@ -95,6 +107,7 @@ export function CompleteWorkOrderDialog({
     setParts((current) =>
       current.map((part) => (part.id === id ? { ...part, ...patch } : part))
     );
+    setVarianceConfirmed(false);
   }
 
   return (
@@ -219,7 +232,10 @@ export function CompleteWorkOrderDialog({
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setParts((current) => [...current, blankPart()])}
+                onClick={() => {
+                  setParts((current) => [...current, blankPart()]);
+                  setVarianceConfirmed(false);
+                }}
               >
                 <Plus />
                 Add part
@@ -282,11 +298,12 @@ export function CompleteWorkOrderDialog({
                       variant="ghost"
                       size="icon"
                       aria-label={`Remove ${part.name || "part"}`}
-                      onClick={() =>
+                      onClick={() => {
                         setParts((current) =>
                           current.filter((entry) => entry.id !== part.id)
-                        )
-                      }
+                        );
+                        setVarianceConfirmed(false);
+                      }}
                     >
                       <Trash2 />
                     </Button>
@@ -318,13 +335,34 @@ export function CompleteWorkOrderDialog({
             <div>
               <dt className="text-subtle-foreground">Total</dt>
               <dd className="tabular mt-0.5 font-semibold">
-                {formatCurrency(
-                  order.laborCost +
-                    (parts.length ? partsTotal : order.partsCost)
-                )}
+                {formatCurrency(actualTotal)}
               </dd>
             </div>
           </dl>
+
+          {breachesVariance ? (
+            <div className="space-y-2 rounded-md border border-critical/25 bg-critical/[0.07] px-3 py-2.5">
+              <p className="text-xs text-critical">
+                Actual cost ({formatCurrency(actualTotal)}) exceeds the approved{" "}
+                {formatCurrency(approvedTotal)} by more than{" "}
+                {approvalSettings.varianceThresholdPct}% — re-approval is required
+                before this can close.
+              </p>
+              <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-3.5 accent-brand"
+                  checked={varianceConfirmed}
+                  onChange={(event) => setVarianceConfirmed(event.target.checked)}
+                />
+                I approve the {formatCurrency(actualTotal - approvedTotal)} variance.
+              </label>
+            </div>
+          ) : null}
+
+          {closeError ? (
+            <p className="text-xs text-critical">{closeError}</p>
+          ) : null}
         </DialogBody>
 
         <DialogFooter>
@@ -333,14 +371,21 @@ export function CompleteWorkOrderDialog({
           </Button>
           <Button
             variant="primary"
-            disabled={!readingValid || !partsValid}
+            disabled={
+              !readingValid || !partsValid || (breachesVariance && !varianceConfirmed)
+            }
             onClick={() => {
-              completeWorkOrder(order.id, {
+              const result = completeWorkOrder(order.id, {
                 odometer: Math.round(reading),
                 findings: findings.trim(),
                 parts,
                 taskIds,
+                varianceApproved: varianceConfirmed,
               });
+              if (!result.ok) {
+                setCloseError(result.error);
+                return;
+              }
               onOpenChange(false);
             }}
           >

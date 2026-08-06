@@ -2,10 +2,12 @@ import { differenceInCalendarDays, parseISO } from "date-fns";
 import type {
   Alert,
   AlertInteraction,
+  ApprovalSettings,
   FleetDocument,
   VehicleHealth,
   WorkOrder,
 } from "@/types";
+import { businessHoursBetween } from "@/lib/approvals";
 import { formatDayDelta, formatKm } from "@/lib/utils";
 
 /** A document inside this window of its renewal date raises an alert. */
@@ -22,6 +24,7 @@ export function buildAlerts(
   health: VehicleHealth[],
   workOrders: WorkOrder[],
   documents: FleetDocument[],
+  approvalSettings: ApprovalSettings,
   today = new Date()
 ): Alert[] {
   const alerts: Alert[] = [];
@@ -53,8 +56,11 @@ export function buildAlerts(
   }
 
   // 2. Scheduled work that has slipped past its booking date without closing.
+  // Only meaningful once an order is actually on the calendar — one still
+  // waiting on approval hasn't been "booked" yet, whatever its default
+  // scheduledFor holds.
   for (const order of workOrders) {
-    if (order.status === "completed" || order.status === "cancelled") continue;
+    if (order.status !== "scheduled" && order.status !== "in_progress") continue;
     const days = differenceInCalendarDays(parseISO(order.scheduledFor), today);
     if (days >= 0) continue;
 
@@ -73,7 +79,34 @@ export function buildAlerts(
     });
   }
 
-  // 3. Registration and insurance approaching renewal.
+  // 3. Lines still waiting past the approval SLA — the fleet's own
+  // contribution to vehicle downtime, so it gets the same treatment as an
+  // overdue interval rather than staying invisible.
+  for (const order of workOrders) {
+    if (order.status !== "pending_approval" || !order.pendingApprovalEnteredAt) continue;
+    const waited = businessHoursBetween(parseISO(order.pendingApprovalEnteredAt), today);
+    if (waited <= approvalSettings.slaHours) continue;
+
+    const pendingLines = order.lines.filter((line) => line.approvalStatus === "pending");
+    const overBy = Math.round((waited - approvalSettings.slaHours) * 10) / 10;
+
+    alerts.push({
+      id: `approval-sla:${order.id}`,
+      kind: "approval_sla_breach",
+      severity: "warning",
+      title: `${order.reference} is waiting on approval`,
+      body: `${pendingLines.length} ${
+        pendingLines.length === 1 ? "line has" : "lines have"
+      } sat in pending_approval for ${waited}h — ${overBy}h past the ${
+        approvalSettings.slaHours
+      }h SLA. Escalate to the next approval band.`,
+      vehicleId: order.vehicleId,
+      href: `/work-orders/${order.id}`,
+      daysRemaining: -1,
+    });
+  }
+
+  // 4. Registration and insurance approaching renewal.
   for (const doc of documents) {
     if (!doc.expiresOn) continue;
     const days = differenceInCalendarDays(parseISO(doc.expiresOn), today);

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Car, Clock, Gauge, HeartPulse, Wallet } from "lucide-react";
+import { Car, Clock, Gauge, HeartPulse, ShieldAlert, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Meter } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -87,11 +87,20 @@ export default function VehicleDetailPage({
   );
 
   const lifetimeSpend = orders
-    .filter((order) => order.status === "completed")
+    .filter((order) => order.status === "closed")
     .reduce((total, order) => total + workOrderCost(order), 0);
 
   const openOrders = orders.filter(
-    (order) => order.status !== "completed" && order.status !== "cancelled"
+    (order) => order.status !== "closed" && order.status !== "cancelled"
+  );
+
+  // The shop's liability record: every safety-critical line purchasing has
+  // declined for this vehicle, permanent and always visible — never tucked
+  // away in a tab.
+  const declinedSafetyCritical = orders.flatMap((order) =>
+    order.lines
+      .filter((line) => line.urgency === "safety_critical" && line.approvalStatus === "declined")
+      .map((line) => ({ order, line }))
   );
 
   const specs: { label: string; value: string }[] = [
@@ -130,6 +139,30 @@ export default function VehicleDetailPage({
           </>
         }
       />
+
+      {declinedSafetyCritical.length > 0 ? (
+        <div className="mb-5 rounded-lg border border-critical/25 bg-critical/[0.06] px-4 py-3.5">
+          <p className="flex items-center gap-2 text-xs font-semibold text-critical">
+            <ShieldAlert className="size-4 shrink-0" />
+            Safety-critical work declined — {declinedSafetyCritical.length}{" "}
+            {declinedSafetyCritical.length === 1 ? "line" : "lines"}
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {declinedSafetyCritical.map(({ order, line }) => (
+              <li key={line.id} className="text-xs leading-relaxed text-muted-foreground">
+                <Link
+                  href={`/work-orders/${order.id}`}
+                  className="font-medium text-foreground transition-colors hover:text-brand"
+                >
+                  {line.description}
+                </Link>
+                {line.approvedAt ? ` · declined ${formatDate(line.approvedAt)}` : ""}
+                {line.declineReason ? ` — ${line.declineReason}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="card-raised p-5">
@@ -246,7 +279,7 @@ export default function VehicleDetailPage({
             {formatCurrency(lifetimeSpend)}
           </p>
           <p className="mt-4 text-2xs text-subtle-foreground">
-            {orders.filter((o) => o.status === "completed").length} closed orders ·{" "}
+            {orders.filter((o) => o.status === "closed").length} closed orders ·{" "}
             {openOrders.length} open
           </p>
         </div>

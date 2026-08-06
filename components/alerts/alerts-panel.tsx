@@ -8,6 +8,7 @@ import {
   CheckCheck,
   Clock,
   FileWarning,
+  Hourglass,
   OctagonAlert,
   RotateCcw,
   Wrench,
@@ -29,6 +30,7 @@ const KIND_ICON: Record<AlertKind, typeof Bell> = {
   pms_due_soon: Clock,
   work_order_overdue: Wrench,
   document_expiry: FileWarning,
+  approval_sla_breach: Hourglass,
 };
 
 const SEVERITY_STYLE = {

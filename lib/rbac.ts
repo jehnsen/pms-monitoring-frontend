@@ -22,6 +22,8 @@ export type Capability =
   | "workorder:create"
   | "workorder:update"
   | "workorder:complete"
+  | "workorder:approve"
+  | "po:issue"
   | "document:upload"
   | "document:delete"
   | "settings:manage"
@@ -31,16 +33,19 @@ export const ROLE_LABEL: Record<UserRole, string> = {
   fleet_manager: "Fleet Manager",
   operations: "Operations Staff",
   technician: "Technician",
+  purchasing_officer: "Purchasing Officer",
   viewer: "Authorised Viewer",
 };
 
 export const ROLE_DESCRIPTION: Record<UserRole, string> = {
   fleet_manager:
-    "Full control: schedules, work orders, documents, settings, and access.",
+    "Full control: schedules, work orders, documents, settings, and access. The only role with unlimited approval authority.",
   operations:
-    "Raises and schedules work, logs readings, and files documents. Cannot change settings or access.",
+    "Raises and schedules work, logs readings, files documents, and approves purchases within threshold. Cannot change settings or access.",
   technician:
     "Works the bay: updates and closes jobs, records parts and findings, attaches reports.",
+  purchasing_officer:
+    "Views everything and approves purchases within threshold, and issues purchase orders. Cannot edit PMS intervals or close work orders.",
   viewer:
     "Read-only. Sees every screen and can export nothing that changes state.",
 };
@@ -54,11 +59,13 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "workorder:complete",
     "document:upload",
   ],
+  purchasing_officer: ["workorder:approve", "po:issue", "document:upload"],
   operations: [
     "vehicle:update",
     "workorder:create",
     "workorder:update",
     "workorder:complete",
+    "workorder:approve",
     "document:upload",
   ],
   fleet_manager: [
@@ -66,6 +73,8 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "workorder:create",
     "workorder:update",
     "workorder:complete",
+    "workorder:approve",
+    "po:issue",
     "document:upload",
     "document:delete",
     "settings:manage",
@@ -78,6 +87,8 @@ export const ALL_CAPABILITIES: Capability[] = [
   "workorder:create",
   "workorder:update",
   "workorder:complete",
+  "workorder:approve",
+  "po:issue",
   "document:upload",
   "document:delete",
   "settings:manage",
@@ -89,6 +100,8 @@ export const CAPABILITY_LABEL: Record<Capability, string> = {
   "workorder:create": "Raise work orders",
   "workorder:update": "Update job status",
   "workorder:complete": "Close work orders",
+  "workorder:approve": "Approve purchases within threshold",
+  "po:issue": "Issue purchase orders",
   "document:upload": "Upload documents",
   "document:delete": "Delete documents",
   "settings:manage": "Change settings & reset data",

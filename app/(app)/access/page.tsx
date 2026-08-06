@@ -21,6 +21,7 @@ import { cn, formatDate } from "@/lib/utils";
 const ROLE_ORDER: UserRole[] = [
   "fleet_manager",
   "operations",
+  "purchasing_officer",
   "technician",
   "viewer",
 ];

@@ -1,8 +1,11 @@
 import {
+  Building2,
   CalendarRange,
   Car,
+  ClipboardCheck,
   FolderOpen,
   LayoutDashboard,
+  Receipt,
   Settings,
   ShieldCheck,
   TrendingUp,
@@ -15,6 +18,8 @@ export interface NavItem {
   label: string;
   icon: LucideIcon;
   description: string;
+  /** Resolved to a live count by `SidebarNav` — currently only "requestsForMe". */
+  dynamicBadge?: "requestsForMe";
 }
 
 export interface NavSection {
@@ -66,6 +71,30 @@ export const NAV_SECTIONS: NavSection[] = [
         label: "Reports",
         icon: TrendingUp,
         description: "Cost and compliance analysis",
+      },
+    ],
+  },
+  {
+    label: "Procure",
+    items: [
+      {
+        href: "/requests",
+        label: "Requests",
+        icon: ClipboardCheck,
+        description: "Purchases awaiting approval",
+        dynamicBadge: "requestsForMe",
+      },
+      {
+        href: "/purchase-orders",
+        label: "Purchase orders",
+        icon: Receipt,
+        description: "Issued and pending POs",
+      },
+      {
+        href: "/vendors",
+        label: "Vendors",
+        icon: Building2,
+        description: "Approved service providers",
       },
     ],
   },
