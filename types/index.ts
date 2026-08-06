@@ -55,6 +55,8 @@ export interface Vehicle {
   vehicleClass: VehicleClass;
   fuelType: FuelType;
   color: string;
+  /** Licence expiry of whoever is in `assignedTo`. Null when nobody's assigned. */
+  driverLicenceExpiry: string | null;
   /** Current odometer reading, in kilometres. */
   odometer: number;
   /**
@@ -195,6 +197,68 @@ export interface ApprovalSettings {
   monthlyBudget: number;
 }
 
+/* --------------------------------------------------------- parts & demand */
+
+/**
+ * A stocked part. The catalogue attributes (sku, category, cost, reorder
+ * point, vendor, lead time) come from `lib/parts.ts`'s static
+ * `PART_DEFINITIONS` at seed time — `currentStock` is the only field that
+ * actually changes afterward (consumed by jobs, replenished by receiving a
+ * purchase order), which is why the record as a whole lives here in
+ * `FleetState` rather than as static catalogue data.
+ */
+export interface Part {
+  id: string;
+  sku: string;
+  name: string;
+  category: TaskCategory | "other";
+  unit: string;
+  unitCost: number;
+  currentStock: number;
+  reorderPoint: number;
+  preferredVendor: string;
+  leadTimeDays: number;
+}
+
+export type PurchaseOrderStatus = "draft" | "sent" | "received" | "cancelled";
+
+/**
+ * One line on a purchase order. `serviceTaskIds`/`vehicleIds` record which
+ * projected due-items this line was raised to cover, so a later demand-forecast
+ * run can exclude them rather than double-counting.
+ */
+export interface PurchaseOrderLine {
+  id: string;
+  partId: string;
+  description: string;
+  quantity: number;
+  unitCost: number;
+  serviceTaskIds: string[];
+  vehicleIds: string[];
+}
+
+export interface PurchaseOrder {
+  id: string;
+  reference: string;
+  vendor: string;
+  status: PurchaseOrderStatus;
+  createdOn: string;
+  createdBy: string;
+  lines: PurchaseOrderLine[];
+  notes: string;
+}
+
+/* --------------------------------------------------------------- tenant */
+
+/** Branding for the fleet client this instance is deployed to. */
+export interface TenantSettings {
+  displayName: string;
+  logoUrl: string | null;
+  /** Hex, e.g. "#1d5ba6" — drives the `--brand`/`--brand-foreground` CSS vars. */
+  brandColor: string;
+  supportEmail: string;
+}
+
 export interface WorkOrder {
   id: string;
   reference: string;
@@ -270,8 +334,11 @@ export type DocumentKind =
   | "invoice"
   | "service_report"
   | "inspection"
-  | "insurance"
-  | "registration"
+  | "lto_registration"
+  | "ctpl"
+  | "comprehensive_insurance"
+  | "emission_test"
+  | "ltfrb_franchise"
   | "warranty"
   | "photo"
   | "other";
@@ -292,8 +359,12 @@ export interface FleetDocument {
    * stand for documents already held elsewhere, and cannot be opened.
    */
   dataUrl: string | null;
-  /** Renewal date for documents that expire (insurance, registration). */
+  /** Renewal date for documents that expire — the compliance kinds, plus warranty. */
   expiresOn: string | null;
+  /** OR/CR number, policy number, certificate number — whatever the issuer prints. */
+  referenceNumber: string | null;
+  issuedOn: string | null;
+  issuingBody: string | null;
   notes: string;
 }
 
@@ -304,7 +375,8 @@ export type AlertKind =
   | "pms_due_soon"
   | "document_expiry"
   | "work_order_overdue"
-  | "approval_sla_breach";
+  | "approval_sla_breach"
+  | "driver_licence_expiry";
 
 export type AlertSeverity = "critical" | "warning" | "info";
 
@@ -336,4 +408,7 @@ export interface FleetState {
   documents: FleetDocument[];
   alerts: AlertInteraction;
   approvalSettings: ApprovalSettings;
+  parts: Part[];
+  purchaseOrders: PurchaseOrder[];
+  tenant: TenantSettings;
 }

@@ -31,6 +31,7 @@ import {
 import { useAuthActions, useSession } from "@/lib/auth";
 import { AlertsPanel } from "@/components/alerts/alerts-panel";
 import { ROLE_LABEL } from "@/lib/rbac";
+import { useFleet } from "@/lib/store";
 
 export function Topbar() {
   const router = useRouter();
@@ -38,6 +39,7 @@ export function Topbar() {
   const [mobileNav, setMobileNav] = React.useState(false);
   const { session } = useSession();
   const { signOut } = useAuthActions();
+  const { tenant } = useFleet();
   const [today, setToday] = React.useState<string | null>(null);
 
   // The shell only renders behind AuthGuard, so a session is always present by
@@ -61,7 +63,7 @@ export function Topbar() {
         </Button>
 
         <Link href="/dashboard" className="lg:hidden">
-          <Logo />
+          <Logo name={tenant.displayName} logoUrl={tenant.logoUrl} />
         </Link>
 
         <button
@@ -140,7 +142,7 @@ export function Topbar() {
             Move between the monitoring, maintenance, and configuration areas.
           </DialogDescription>
           <div className="flex h-14 items-center border-b border-border px-5">
-            <Logo />
+            <Logo name={tenant.displayName} logoUrl={tenant.logoUrl} />
           </div>
           <div className="overflow-y-auto">
             <SidebarNav onNavigate={() => setMobileNav(false)} />

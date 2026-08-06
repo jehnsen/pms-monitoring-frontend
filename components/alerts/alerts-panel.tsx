@@ -7,6 +7,7 @@ import {
   BellOff,
   CheckCheck,
   Clock,
+  Contact,
   FileWarning,
   Hourglass,
   OctagonAlert,
@@ -31,6 +32,7 @@ const KIND_ICON: Record<AlertKind, typeof Bell> = {
   work_order_overdue: Wrench,
   document_expiry: FileWarning,
   approval_sla_breach: Hourglass,
+  driver_licence_expiry: Contact,
 };
 
 const SEVERITY_STYLE = {

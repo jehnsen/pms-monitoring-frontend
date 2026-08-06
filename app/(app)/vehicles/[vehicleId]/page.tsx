@@ -23,6 +23,7 @@ import { DocumentList } from "@/components/documents/document-list";
 import { UploadDocumentDialog } from "@/components/documents/upload-document-dialog";
 import { useFleet } from "@/lib/store";
 import { isOdometerStale, odometerAgeDays, workOrderCost } from "@/lib/pms";
+import { plateEndingRenewalMonth, vehicleComplianceStatus } from "@/lib/compliance";
 import {
   formatCurrency,
   formatDate,
@@ -75,6 +76,8 @@ export default function VehicleDetailPage({
   const { vehicle, items, nextItem } = entry;
   const vehiclesById = new Map(vehicles.map((v) => [v.id, v]));
   const staleReading = isOdometerStale(vehicle);
+  const compliance = vehicleComplianceStatus(vehicle, documents);
+  const renewalMonth = plateEndingRenewalMonth(vehicle.plateNumber);
 
   const orders = workOrders
     .filter((order) => order.vehicleId === vehicle.id)
@@ -114,8 +117,17 @@ export default function VehicleDetailPage({
     { label: "Department", value: vehicle.department },
     { label: "Home site", value: vehicle.location },
     { label: "Average use", value: `${vehicle.avgDailyKm} km / day` },
-    { label: "Registration expires", value: formatDate(vehicle.registrationExpiry) },
+    {
+      label: "Registration expires",
+      value: `${formatDate(vehicle.registrationExpiry)}${
+        renewalMonth ? ` · renews every ${renewalMonth} (plate-ending schedule)` : ""
+      }`,
+    },
     { label: "Insurance expires", value: formatDate(vehicle.insuranceExpiry) },
+    {
+      label: "Driver licence expires",
+      value: vehicle.driverLicenceExpiry ? formatDate(vehicle.driverLicenceExpiry) : "Not on file",
+    },
   ];
 
   return (
@@ -129,6 +141,12 @@ export default function VehicleDetailPage({
           <span className="flex flex-wrap items-center gap-3">
             <span className="tabular">{vehicle.plateNumber}</span>
             <PmsStatusBadge status={entry.status} size="md" />
+            {compliance !== "ok" ? (
+              <Badge tone={compliance === "expired" ? "critical" : "warning"} size="md">
+                <ShieldAlert />
+                {compliance === "expired" ? "Compliance expired" : "Compliance expiring"}
+              </Badge>
+            ) : null}
           </span>
         }
         description={`${vehicle.year} ${vehicle.make} ${vehicle.model} · ${vehicle.department} · ${vehicle.location}`}

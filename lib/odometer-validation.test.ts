@@ -14,6 +14,7 @@ function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
     vehicleClass: "pickup",
     fuelType: "diesel",
     color: "White",
+    driverLicenceExpiry: null,
     odometer: 50_000,
     odometerReadAt: "2026-01-01",
     avgDailyKm: 50,

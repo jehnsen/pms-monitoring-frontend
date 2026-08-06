@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Car, Clock, OctagonAlert, Timer, Wallet } from "lucide-react";
+import { ArrowRight, Car, Clock, FileWarning, OctagonAlert, Timer, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatTile } from "@/components/dashboard/stat-tile";
 import { ComplianceBar } from "@/components/dashboard/compliance-bar";
@@ -19,10 +19,11 @@ import {
   upcomingLoad,
 } from "@/lib/analytics";
 import { DUE_SOON_DAYS, isOdometerStale } from "@/lib/pms";
+import { DASHBOARD_EXPIRY_WINDOW_DAYS, expiringDocumentSummary } from "@/lib/compliance";
 import { formatCurrency, formatCurrencyCompact } from "@/lib/utils";
 
 export default function DashboardPage() {
-  const { ready, health, workOrders, vehicles, summary } = useFleet();
+  const { ready, health, workOrders, vehicles, documents, summary } = useFleet();
 
   if (!ready) {
     return (
@@ -55,6 +56,7 @@ export default function DashboardPage() {
     .sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
 
   const staleCount = vehicles.filter((vehicle) => isOdometerStale(vehicle)).length;
+  const expiring = expiringDocumentSummary(vehicles, documents, DASHBOARD_EXPIRY_WINDOW_DAYS);
 
   return (
     <>
@@ -109,6 +111,19 @@ export default function DashboardPage() {
             hint="No reading in over 14 days — projections may be off."
             icon={Clock}
             tone={staleCount > 0 ? "warning" : "ok"}
+          />
+        </Link>
+        <Link href="/documents" className="block">
+          <StatTile
+            label={`Documents expiring within ${DASHBOARD_EXPIRY_WINDOW_DAYS} days`}
+            value={`${expiring.total}`}
+            hint={
+              expiring.byKind.length
+                ? expiring.byKind.map((entry) => `${entry.count} ${entry.label}`).join(" · ")
+                : "Nothing due for renewal"
+            }
+            icon={FileWarning}
+            tone={expiring.total > 0 ? "warning" : "ok"}
           />
         </Link>
       </div>

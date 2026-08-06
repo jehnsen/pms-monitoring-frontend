@@ -8,7 +8,12 @@ import type {
   FleetDocument,
   FleetState,
   LineApprovalStatus,
+  Part,
   PartLine,
+  PurchaseOrder,
+  PurchaseOrderLine,
+  PurchaseOrderStatus,
+  TenantSettings,
   Vehicle,
   WorkOrder,
   WorkOrderEvent,
@@ -18,6 +23,7 @@ import { createSeedState } from "@/lib/seed";
 import { applyCompletion, evaluateFleet, summariseFleet } from "@/lib/pms";
 import { buildAlerts, viewAlerts } from "@/lib/alerts";
 import { useSession } from "@/lib/auth";
+import { DEFAULT_TENANT_SETTINGS } from "@/lib/tenant";
 import {
   DEFAULT_APPROVAL_SETTINGS,
   approvedValue,
@@ -29,9 +35,10 @@ import {
 } from "@/lib/approvals";
 
 // Bumped when the shape of a required field changes in a way that has no
-// sane default (the WorkOrderStatus rewrite for the approval workflow) —
-// old payloads are discarded rather than half-migrated. See lib/approvals.ts.
-const STORAGE_KEY = "pms.fleet.v2";
+// sane default (the WorkOrderStatus rewrite, then the DocumentKind rewrite
+// for PH-specific compliance kinds) — old payloads are discarded rather than
+// half-migrated. See lib/approvals.ts / lib/compliance.ts.
+const STORAGE_KEY = "pms.fleet.v3";
 
 /**
  * Server snapshot. Rendering a real fleet on the server would fight hydration —
@@ -44,6 +51,9 @@ const EMPTY: FleetState = {
   documents: [],
   alerts: { readIds: [], dismissedIds: [] },
   approvalSettings: DEFAULT_APPROVAL_SETTINGS,
+  parts: [],
+  purchaseOrders: [],
+  tenant: DEFAULT_TENANT_SETTINGS,
 };
 
 let state: FleetState = EMPTY;
@@ -85,6 +95,9 @@ function normalise(raw: Partial<FleetState> | null | undefined): FleetState {
       dismissedIds: raw?.alerts?.dismissedIds ?? [],
     },
     approvalSettings: { ...DEFAULT_APPROVAL_SETTINGS, ...raw?.approvalSettings },
+    parts: raw?.parts ?? [],
+    purchaseOrders: raw?.purchaseOrders ?? [],
+    tenant: { ...DEFAULT_TENANT_SETTINGS, ...raw?.tenant },
   };
 }
 
@@ -200,6 +213,9 @@ export function useFleet() {
       documents: snapshot.documents,
       alertState: snapshot.alerts,
       approvalSettings: snapshot.approvalSettings,
+      parts: snapshot.parts,
+      purchaseOrders: snapshot.purchaseOrders,
+      tenant: snapshot.tenant,
       health,
       healthById: new Map(health.map((h) => [h.vehicle.id, h])),
       vehiclesById: new Map(snapshot.vehicles.map((v) => [v.id, v])),
@@ -603,6 +619,105 @@ export function useFleetActions() {
     }));
   }, []);
 
+  /**
+   * Turns selected demand-forecast rows into draft purchase orders, one per
+   * distinct preferred vendor — the "generate purchase request" action. Rows
+   * with no shortfall are skipped (nothing to buy); `serviceTaskIds`/
+   * `vehicleIds` on each line are what let the next forecast run recognise
+   * this demand as already covered instead of counting it twice.
+   */
+  const generatePurchaseOrders = useCallback(
+    (
+      rows: {
+        part: Part;
+        shortfall: number;
+        contributingItems: { vehicleId: string; taskId: string }[];
+      }[]
+    ) => {
+      setState((current) => {
+        const linesByVendor = new Map<string, PurchaseOrderLine[]>();
+
+        for (const row of rows) {
+          if (row.shortfall <= 0) continue;
+          const line: PurchaseOrderLine = {
+            id: `poline-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            partId: row.part.id,
+            description: row.part.name,
+            quantity: row.shortfall,
+            unitCost: row.part.unitCost,
+            serviceTaskIds: [...new Set(row.contributingItems.map((i) => i.taskId))],
+            vehicleIds: [...new Set(row.contributingItems.map((i) => i.vehicleId))],
+          };
+          const list = linesByVendor.get(row.part.preferredVendor) ?? [];
+          list.push(line);
+          linesByVendor.set(row.part.preferredVendor, list);
+        }
+
+        const startSeq = current.purchaseOrders.length;
+        const created: PurchaseOrder[] = [...linesByVendor.entries()].map(
+          ([vendor, lines], index) => ({
+            id: `po-${Date.now().toString(36)}-${index}`,
+            reference: `PO-${new Date().getFullYear()}-${String(
+              startSeq + index + 1
+            ).padStart(4, "0")}`,
+            vendor,
+            status: "draft",
+            createdOn: formatISO(new Date(), { representation: "date" }),
+            createdBy: actor,
+            lines,
+            notes: "",
+          })
+        );
+
+        if (created.length === 0) return current;
+        return { ...current, purchaseOrders: [...created, ...current.purchaseOrders] };
+      });
+    },
+    [actor]
+  );
+
+  /**
+   * Receiving a PO is what makes the forecast self-correcting: the parts it
+   * covers go back into stock, so the next forecast run sees the shortfall
+   * close without anyone editing inventory by hand.
+   */
+  const updatePurchaseOrderStatus = useCallback(
+    (id: string, status: PurchaseOrderStatus) => {
+      setState((current) => {
+        const order = current.purchaseOrders.find((o) => o.id === id);
+        if (!order) return current;
+
+        const parts =
+          status === "received"
+            ? current.parts.map((part) => {
+                const received = order.lines
+                  .filter((line) => line.partId === part.id)
+                  .reduce((total, line) => total + line.quantity, 0);
+                return received > 0
+                  ? { ...part, currentStock: part.currentStock + received }
+                  : part;
+              })
+            : current.parts;
+
+        return {
+          ...current,
+          parts,
+          purchaseOrders: current.purchaseOrders.map((o) =>
+            o.id === id ? { ...o, status } : o
+          ),
+        };
+      });
+    },
+    []
+  );
+
+  const updateTenantSettings = useCallback((patch: Partial<TenantSettings>) => {
+    setState((current) => ({
+      ...current,
+      tenant: { ...current.tenant, ...patch },
+    }));
+  }, []);
+
   const resetFleet = useCallback(() => {
     setState(() => createSeedState());
   }, []);
@@ -620,6 +735,9 @@ export function useFleetActions() {
     dismissAlert,
     restoreAlerts,
     updateApprovalSettings,
+    generatePurchaseOrders,
+    updatePurchaseOrderStatus,
+    updateTenantSettings,
     resetFleet,
   };
 }

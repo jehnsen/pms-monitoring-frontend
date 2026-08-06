@@ -4,10 +4,12 @@ import type {
   AlertInteraction,
   ApprovalSettings,
   FleetDocument,
+  Vehicle,
   VehicleHealth,
   WorkOrder,
 } from "@/types";
 import { businessHoursBetween } from "@/lib/approvals";
+import { DOCUMENT_KIND_LABEL } from "@/lib/documents";
 import { formatDayDelta, formatKm } from "@/lib/utils";
 
 /** A document inside this window of its renewal date raises an alert. */
@@ -106,7 +108,8 @@ export function buildAlerts(
     });
   }
 
-  // 4. Registration and insurance approaching renewal.
+  // 4. Compliance documents (registration, CTPL, insurance, emission,
+  // franchise) and warranties approaching renewal.
   for (const doc of documents) {
     if (!doc.expiresOn) continue;
     const days = differenceInCalendarDays(parseISO(doc.expiresOn), today);
@@ -117,15 +120,32 @@ export function buildAlerts(
       kind: "document_expiry",
       severity: days < 0 ? "critical" : "warning",
       title: days < 0 ? `${doc.name} has expired` : `${doc.name} expires soon`,
-      body: `${
-        doc.kind === "insurance"
-          ? "Insurance policy"
-          : doc.kind === "registration"
-            ? "Registration"
-            : "Document"
-      } ${formatDayDelta(days)}.`,
+      body: `${DOCUMENT_KIND_LABEL[doc.kind]} ${formatDayDelta(days)}.`,
       vehicleId: doc.vehicleId,
       href: doc.vehicleId ? `/vehicles/${doc.vehicleId}` : "/documents",
+      daysRemaining: days,
+    });
+  }
+
+  // 5. Driver licences approaching renewal — the vehicle can be perfectly
+  // compliant and still get pulled over for this one.
+  for (const entry of health) {
+    const vehicle: Vehicle = entry.vehicle;
+    if (!vehicle.driverLicenceExpiry) continue;
+    const days = differenceInCalendarDays(parseISO(vehicle.driverLicenceExpiry), today);
+    if (days > DOCUMENT_EXPIRY_WARNING_DAYS) continue;
+
+    alerts.push({
+      id: `licence:${vehicle.id}`,
+      kind: "driver_licence_expiry",
+      severity: days < 0 ? "critical" : "warning",
+      title:
+        days < 0
+          ? `${vehicle.assignedTo}'s licence has expired`
+          : `${vehicle.assignedTo}'s licence expires soon`,
+      body: `Driver of ${vehicle.plateNumber} ${formatDayDelta(days)}.`,
+      vehicleId: vehicle.id,
+      href: `/vehicles/${vehicle.id}`,
       daysRemaining: days,
     });
   }

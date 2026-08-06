@@ -43,12 +43,11 @@ export default function AccessPage() {
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-foreground" />
         <p className="text-xs leading-relaxed text-muted-foreground">
           <span className="font-medium text-foreground">
-            Demonstration build.
+            Prototype build.
           </span>{" "}
-          Permissions are applied in the browser, so they shape the interface but
-          cannot secure it — anyone with developer tools can bypass them. A
-          production deployment must mirror this matrix on the server and treat
-          the client copy as a hint.
+          Permissions are enforced in the browser here and server-side in
+          production — this matrix is what gets mirrored on the server when
+          this build goes live.
         </p>
       </div>
 

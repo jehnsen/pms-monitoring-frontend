@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { differenceInCalendarDays, parseISO } from "date-fns";
-import { FileWarning, FolderOpen, HardDrive, Search } from "lucide-react";
+import { ArrowDownWideNarrow, FileWarning, FolderOpen, HardDrive, Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { DocumentList } from "@/components/documents/document-list";
 import { UploadDocumentDialog } from "@/components/documents/upload-document-dialog";
 import { StatTile } from "@/components/dashboard/stat-tile";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -19,14 +20,23 @@ import {
 import { useFleet } from "@/lib/store";
 import { DOCUMENT_KINDS, DOCUMENT_KIND_LABEL } from "@/lib/documents";
 import { DOCUMENT_EXPIRY_WARNING_DAYS } from "@/lib/alerts";
+import { documentExpiryStatus, type ComplianceStatus } from "@/lib/compliance";
 import { formatBytes } from "@/lib/utils";
 import type { DocumentKind } from "@/types";
+
+const STATUS_LABEL: Record<ComplianceStatus, string> = {
+  expired: "Expired",
+  expiring: "Expiring soon",
+  ok: "Valid",
+};
 
 export default function DocumentsPage() {
   const { ready, documents, vehicles, vehiclesById } = useFleet();
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<DocumentKind | "all">("all");
   const [vehicleId, setVehicleId] = useState("all");
+  const [status, setStatus] = useState<ComplianceStatus | "all">("all");
+  const [sortByExpiry, setSortByExpiry] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -35,6 +45,7 @@ export default function DocumentsPage() {
       .filter((doc) => {
         if (kind !== "all" && doc.kind !== kind) return false;
         if (vehicleId !== "all" && doc.vehicleId !== vehicleId) return false;
+        if (status !== "all" && documentExpiryStatus(doc) !== status) return false;
         if (!q) return true;
         const plate = doc.vehicleId
           ? (vehiclesById.get(doc.vehicleId)?.plateNumber ?? "")
@@ -43,8 +54,12 @@ export default function DocumentsPage() {
           .toLowerCase()
           .includes(q);
       })
-      .sort((a, b) => b.uploadedOn.localeCompare(a.uploadedOn));
-  }, [documents, query, kind, vehicleId, vehiclesById]);
+      .sort((a, b) =>
+        sortByExpiry
+          ? (a.expiresOn ?? "9999-99-99").localeCompare(b.expiresOn ?? "9999-99-99")
+          : b.uploadedOn.localeCompare(a.uploadedOn)
+      );
+  }, [documents, query, kind, vehicleId, status, sortByExpiry, vehiclesById]);
 
   if (!ready) {
     return (
@@ -139,6 +154,30 @@ export default function DocumentsPage() {
             ))}
           </SelectContent>
         </Select>
+
+        <Select
+          value={status}
+          onValueChange={(value) => setStatus(value as ComplianceStatus | "all")}
+        >
+          <SelectTrigger className="w-[160px]" aria-label="Filter by status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="expired">{STATUS_LABEL.expired}</SelectItem>
+            <SelectItem value="expiring">{STATUS_LABEL.expiring}</SelectItem>
+            <SelectItem value="ok">{STATUS_LABEL.ok}</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Button
+          variant="secondary"
+          aria-pressed={sortByExpiry}
+          onClick={() => setSortByExpiry((current) => !current)}
+        >
+          <ArrowDownWideNarrow />
+          {sortByExpiry ? "Sorted by expiry" : "Sort by expiry"}
+        </Button>
       </div>
 
       <p className="mb-4 text-xs text-subtle-foreground">

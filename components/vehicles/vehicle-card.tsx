@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Clock, Gauge, MapPin, User } from "lucide-react";
+import { Clock, Gauge, MapPin, ShieldAlert, User } from "lucide-react";
 import { Meter } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,12 +11,16 @@ import {
 } from "@/components/ui/tooltip";
 import { PmsStatusBadge, VehicleStatusBadge } from "@/components/status";
 import { isOdometerStale, odometerAgeDays } from "@/lib/pms";
+import { vehicleComplianceStatus } from "@/lib/compliance";
+import { useFleet } from "@/lib/store";
 import type { VehicleHealth } from "@/types";
 import { formatDayDelta, formatKm, formatRelative } from "@/lib/utils";
 
 export function VehicleCard({ entry }: { entry: VehicleHealth }) {
   const { vehicle, nextItem, status } = entry;
+  const { documents } = useFleet();
   const stale = isOdometerStale(vehicle);
+  const compliance = vehicleComplianceStatus(vehicle, documents);
 
   return (
     <Link
@@ -34,6 +38,12 @@ export function VehicleCard({ entry }: { entry: VehicleHealth }) {
         </div>
         <div className="flex flex-col items-end gap-1.5">
           <PmsStatusBadge status={status} />
+          {compliance !== "ok" ? (
+            <Badge tone={compliance === "expired" ? "critical" : "warning"}>
+              <ShieldAlert />
+              {compliance === "expired" ? "Compliance expired" : "Compliance expiring"}
+            </Badge>
+          ) : null}
           {stale ? (
             <Badge tone="warning">
               <Clock />

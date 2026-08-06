@@ -7,6 +7,8 @@ import {
   Hourglass,
   ListChecks,
   OctagonAlert,
+  PackageCheck,
+  Send,
   ThumbsDown,
   ThumbsUp,
   Wrench,
@@ -17,6 +19,7 @@ import type {
   LineApprovalStatus,
   PmsStatus,
   Priority,
+  PurchaseOrderStatus,
   VehicleOperationalStatus,
   WorkOrderStatus,
 } from "@/types";
@@ -148,6 +151,33 @@ export function LineApprovalStatusBadge({
   size?: BadgeProps["size"];
 }) {
   const meta = LINE_APPROVAL_META[status];
+  const Icon = meta.icon;
+  return (
+    <Badge tone={meta.tone} size={size}>
+      <Icon />
+      {meta.label}
+    </Badge>
+  );
+}
+
+const PURCHASE_ORDER_META: Record<
+  PurchaseOrderStatus,
+  { label: string; tone: BadgeProps["tone"]; icon: typeof CheckCircle2 }
+> = {
+  draft: { label: "Draft", tone: "neutral", icon: FileEdit },
+  sent: { label: "Sent", tone: "warning", icon: Send },
+  received: { label: "Received", tone: "ok", icon: PackageCheck },
+  cancelled: { label: "Cancelled", tone: "outline", icon: XCircle },
+};
+
+export function PurchaseOrderStatusBadge({
+  status,
+  size = "sm",
+}: {
+  status: PurchaseOrderStatus;
+  size?: BadgeProps["size"];
+}) {
+  const meta = PURCHASE_ORDER_META[status];
   const Icon = meta.icon;
   return (
     <Badge tone={meta.tone} size={size}>

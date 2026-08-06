@@ -1,12 +1,14 @@
-import { addDays, formatISO, subDays } from "date-fns";
+import { addDays, formatISO, parseISO, subDays } from "date-fns";
 import type {
   ApprovalLogEntry,
   FleetDocument,
   FleetState,
   LineUrgency,
+  Part,
   PartLine,
   PartsSource,
   Priority,
+  PurchaseOrder,
   TaskState,
   Vehicle,
   WorkOrder,
@@ -17,6 +19,8 @@ import type {
 import { SERVICE_TASKS } from "@/lib/service-tasks";
 import { evaluateVehicle } from "@/lib/pms";
 import { DEFAULT_APPROVAL_SETTINGS, requiredApprover } from "@/lib/approvals";
+import { PART_BY_ID, PART_DEFINITIONS, SERVICE_ITEM_PARTS } from "@/lib/parts";
+import { DEFAULT_TENANT_SETTINGS } from "@/lib/tenant";
 
 /**
  * Deterministic PRNG. The demo fleet has to look lived-in — uneven odometers,
@@ -368,66 +372,22 @@ interface CatalogueEntry {
 }
 
 /**
- * Parts consumed by each preventive task. Itemising these is what turns a work
- * order into a service record you can audit — "₱3,200 of parts" tells a fleet
- * manager nothing about what was actually fitted.
+ * Parts consumed by each preventive task, read from the same catalogue the
+ * demand forecast uses (`lib/parts.ts`) — one definition of "what does this
+ * job need" for both itemising history and projecting the future.
  */
-const PART_CATALOGUE: Record<string, CatalogueEntry[]> = {
-  "oil-filter": [
-    { partNumber: "90915-YZZD4", name: "Engine oil filter", unitCost: 380 },
-    {
-      partNumber: "HX7-5W30-1L",
-      name: "Fully synthetic 5W-30 engine oil (litre)",
-      unitCost: 520,
-      quantity: 5,
-    },
-    { partNumber: "90430-12031", name: "Drain plug gasket", unitCost: 65 },
-  ],
-  "tire-rotation": [
-    { partNumber: "SVC-BAL-W", name: "Wheel balance weights (set)", unitCost: 220 },
-    { partNumber: "TVS-STD", name: "Tyre valve stem", unitCost: 85, quantity: 4 },
-  ],
-  "brake-inspection": [
-    { partNumber: "04465-0K340", name: "Front brake pad set", unitCost: 2_450 },
-    { partNumber: "CER-GRS-40", name: "Ceramic caliper grease", unitCost: 180 },
-  ],
-  "air-filter": [
-    { partNumber: "17801-0L040", name: "Engine air filter element", unitCost: 890 },
-  ],
-  "cabin-filter": [
-    { partNumber: "87139-0N010", name: "Cabin air filter", unitCost: 720 },
-  ],
-  "battery-check": [
-    { partNumber: "TRM-CLN-01", name: "Battery terminal cleaner", unitCost: 140 },
-    { partNumber: "TRM-PRT-02", name: "Terminal protector spray", unitCost: 195 },
-  ],
-  "wheel-alignment": [
-    { partNumber: "SVC-ALG-4W", name: "Four-wheel alignment service", unitCost: 1_800 },
-    { partNumber: "CAM-BLT-A", name: "Camber adjustment bolt", unitCost: 340, quantity: 2 },
-  ],
-  "brake-fluid": [
-    { partNumber: "DOT4-1L", name: "DOT 4 brake fluid (litre)", unitCost: 640, quantity: 2 },
-    { partNumber: "BLD-NPL-K", name: "Bleeder nipple kit", unitCost: 210 },
-  ],
-  "transmission-fluid": [
-    { partNumber: "08886-02305", name: "ATF WS transmission fluid (litre)", unitCost: 980, quantity: 5 },
-    { partNumber: "35168-0K010", name: "Transmission pan gasket", unitCost: 1_150 },
-    { partNumber: "35330-0K030", name: "Transmission filter", unitCost: 1_480 },
-  ],
-  "coolant-flush": [
-    { partNumber: "08889-80015", name: "Super long-life coolant (litre)", unitCost: 540, quantity: 6 },
-    { partNumber: "90916-03100", name: "Thermostat assembly", unitCost: 1_620 },
-  ],
-  "timing-belt": [
-    { partNumber: "13568-39016", name: "Timing belt", unitCost: 4_200 },
-    { partNumber: "13503-67010", name: "Timing belt tensioner", unitCost: 3_850 },
-    { partNumber: "16100-39466", name: "Water pump", unitCost: 4_100 },
-  ],
-  "safety-inspection": [
-    { partNumber: "SVC-RWI-01", name: "Roadworthiness inspection fee", unitCost: 1_200 },
-    { partNumber: "WPR-BLD-22", name: "Wiper blade (pair)", unitCost: 620 },
-  ],
-};
+function catalogueEntriesForTask(taskId: string): CatalogueEntry[] {
+  return SERVICE_ITEM_PARTS.filter((link) => link.serviceTaskId === taskId).map((link) => {
+    const part = PART_BY_ID.get(link.partId);
+    if (!part) throw new Error(`Unknown part id in SERVICE_ITEM_PARTS: ${link.partId}`);
+    return {
+      partNumber: part.sku,
+      name: part.name,
+      unitCost: part.unitCost,
+      quantity: link.quantityPerService,
+    };
+  });
+}
 
 /** Parts drawn on for unplanned repairs, where the job isn't in the catalogue. */
 const GENERIC_PARTS: CatalogueEntry[] = [
@@ -634,6 +594,17 @@ function buildVehicles(today: Date): BuiltVehicle[] {
       random
     );
 
+    // Mostly comfortably valid; two indices are pinned so the compliance
+    // badge/dashboard tile have something real to show without hoping
+    // random draws land inside the window — same reasoning as the
+    // stale-odometer and safety-critical-decline seed tweaks.
+    const driverLicenceExpiry =
+      index === 5
+        ? iso(subDays(today, 8)) // expired
+        : index === 7
+          ? iso(addDays(today, 18)) // inside the 30-day badge window
+          : iso(addDays(today, 200 + Math.floor(random() * 500)));
+
     const vehicle: Vehicle = {
       id: `veh-${String(index + 1).padStart(3, "0")}`,
       plateNumber: spec.plateNumber,
@@ -644,6 +615,7 @@ function buildVehicles(today: Date): BuiltVehicle[] {
       vehicleClass: spec.vehicleClass,
       fuelType: spec.fuelType,
       color: spec.color,
+      driverLicenceExpiry,
       odometer: readingOdometer,
       odometerReadAt: iso(odometerReadAt),
       avgDailyKm: spec.avgDailyKm,
@@ -798,7 +770,7 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
       if (!task) continue;
 
       const parts = buildParts(
-        PART_CATALOGUE[task.id] ?? [],
+        catalogueEntriesForTask(task.id),
         random,
         `h${counter}`
       );
@@ -1182,12 +1154,19 @@ function buildDocuments(
     counter += 1;
   };
 
-  // Statutory paperwork: every vehicle carries a registration and a policy, and
-  // both expire — which is what makes them alertable.
-  for (const vehicle of vehicles) {
+  const INSURERS = ["Malayan Insurance", "Standard Insurance", "Charter Ping An", "Prudential Guarantee"];
+
+  // Statutory paperwork: every vehicle carries the PH compliance set, and
+  // every one of these expires — which is what makes them alertable. Two
+  // indices are pinned to a guaranteed-expired and a guaranteed-inside-the-
+  // dashboard-window date, same reasoning as the driver-licence pins above.
+  vehicles.forEach((vehicle, index) => {
+    const ltoOffice = `LTO ${vehicle.location.replace(/ (Hub|Depot|Yard|Site)$/, "")}`;
+    const insurer = INSURERS[Math.floor(random() * INSURERS.length)];
+
     push({
       name: `OR-CR ${vehicle.plateNumber}.pdf`,
-      kind: "registration",
+      kind: "lto_registration",
       vehicleId: vehicle.id,
       workOrderId: null,
       uploadedBy: "Marisol Bautista",
@@ -1196,12 +1175,35 @@ function buildDocuments(
       mimeType: "application/pdf",
       dataUrl: null,
       expiresOn: vehicle.registrationExpiry,
+      referenceNumber: `OR-${1_000_000 + Math.floor(random() * 8_999_999)}`,
+      issuedOn: iso(subDays(parseISO(vehicle.registrationExpiry), 365)),
+      issuingBody: ltoOffice,
       notes: "LTO certificate of registration and official receipt.",
+    });
+
+    const ctplExpiry =
+      index === 0 ? iso(subDays(today, 12)) : iso(addDays(today, Math.floor(random() * 300) + 20));
+
+    push({
+      name: `CTPL policy ${vehicle.plateNumber}.pdf`,
+      kind: "ctpl",
+      vehicleId: vehicle.id,
+      workOrderId: null,
+      uploadedBy: "Marisol Bautista",
+      uploadedOn: iso(subDays(today, 90 + Math.floor(random() * 240))),
+      sizeBytes: 150_000 + Math.floor(random() * 300_000),
+      mimeType: "application/pdf",
+      dataUrl: null,
+      expiresOn: ctplExpiry,
+      referenceNumber: `CTPL-${100_000 + Math.floor(random() * 899_999)}`,
+      issuedOn: iso(subDays(parseISO(ctplExpiry), 365)),
+      issuingBody: insurer,
+      notes: "Compulsory third-party liability cover.",
     });
 
     push({
       name: `Insurance policy ${vehicle.plateNumber}.pdf`,
-      kind: "insurance",
+      kind: "comprehensive_insurance",
       vehicleId: vehicle.id,
       workOrderId: null,
       uploadedBy: "Marisol Bautista",
@@ -1210,9 +1212,32 @@ function buildDocuments(
       mimeType: "application/pdf",
       dataUrl: null,
       expiresOn: vehicle.insuranceExpiry,
+      referenceNumber: `POL-${200_000 + Math.floor(random() * 799_999)}`,
+      issuedOn: iso(subDays(parseISO(vehicle.insuranceExpiry), 365)),
+      issuingBody: insurer,
       notes: "Comprehensive motor policy including third-party liability.",
     });
-  }
+
+    const emissionExpiry =
+      index === 2 ? iso(addDays(today, 25)) : iso(addDays(today, Math.floor(random() * 365) - 60));
+
+    push({
+      name: `Emission test ${vehicle.plateNumber}.pdf`,
+      kind: "emission_test",
+      vehicleId: vehicle.id,
+      workOrderId: null,
+      uploadedBy: "Marisol Bautista",
+      uploadedOn: iso(subDays(parseISO(emissionExpiry), 365)),
+      sizeBytes: 80_000 + Math.floor(random() * 150_000),
+      mimeType: "application/pdf",
+      dataUrl: null,
+      expiresOn: emissionExpiry,
+      referenceNumber: `EMS-${10_000 + Math.floor(random() * 89_999)}`,
+      issuedOn: iso(subDays(parseISO(emissionExpiry), 365)),
+      issuingBody: "LTO-Accredited Private Emission Testing Center",
+      notes: "Vehicle emission test result certificate.",
+    });
+  });
 
   const completed = orders.filter((order) => order.status === "closed");
   for (const order of completed) {
@@ -1231,6 +1256,9 @@ function buildDocuments(
       mimeType: "application/pdf",
       dataUrl: null,
       expiresOn: null,
+      referenceNumber: null,
+      issuedOn: null,
+      issuingBody: null,
       notes: `${order.vendor} — ${vehicle?.plateNumber ?? ""}`.trim(),
     });
 
@@ -1246,12 +1274,103 @@ function buildDocuments(
         mimeType: "application/pdf",
         dataUrl: null,
         expiresOn: null,
+        referenceNumber: null,
+        issuedOn: null,
+        issuingBody: null,
         notes: "Technician findings, parts fitted, and road-test result.",
       });
     }
   }
 
   return documents.sort((a, b) => b.uploadedOn.localeCompare(a.uploadedOn));
+}
+
+/* ------------------------------------------------------------------ parts */
+
+/**
+ * Stock levels for the demand-forecast catalogue. Roughly a third start
+ * below their reorder point — deliberately, so the forecast has real
+ * shortfalls to show rather than a table full of zeros.
+ */
+function buildPartsInventory(): Part[] {
+  const random = mulberry32(7777);
+  return PART_DEFINITIONS.map((def, index) => {
+    const stockFactor = index % 3 === 0 ? 0.3 + random() * 0.5 : 1 + random() * 1.5;
+    return {
+      id: def.id,
+      sku: def.sku,
+      name: def.name,
+      category: def.category,
+      unit: def.unit,
+      unitCost: def.unitCost,
+      currentStock: Math.max(0, Math.round(def.reorderPoint * stockFactor)),
+      reorderPoint: def.reorderPoint,
+      preferredVendor: def.preferredVendor,
+      leadTimeDays: def.leadTimeDays,
+    };
+  });
+}
+
+/** A couple of seeded purchase orders so `/purchase-orders` isn't empty before anyone runs the forecast. */
+function buildPurchaseOrders(vehicles: Vehicle[], today: Date): PurchaseOrder[] {
+  const timingBelt = PART_BY_ID.get("p-timing-belt")!;
+  const tensioner = PART_BY_ID.get("p-timing-tensioner")!;
+  const brakePads = PART_BY_ID.get("p-brake-pads")!;
+  const sentVehicle = vehicles[0];
+  const draftVehicle = vehicles[1] ?? sentVehicle;
+
+  const sent: PurchaseOrder = {
+    id: "po-seed-0001",
+    reference: `PO-${today.getFullYear()}-0001`,
+    vendor: timingBelt.preferredVendor,
+    status: "sent",
+    createdOn: iso(subDays(today, 5)),
+    createdBy: "Mike Manabat",
+    notes: "",
+    lines: [
+      {
+        id: "poline-seed-1",
+        partId: timingBelt.id,
+        description: timingBelt.name,
+        quantity: 2,
+        unitCost: timingBelt.unitCost,
+        serviceTaskIds: ["timing-belt"],
+        vehicleIds: [sentVehicle.id],
+      },
+      {
+        id: "poline-seed-2",
+        partId: tensioner.id,
+        description: tensioner.name,
+        quantity: 2,
+        unitCost: tensioner.unitCost,
+        serviceTaskIds: ["timing-belt"],
+        vehicleIds: [sentVehicle.id],
+      },
+    ],
+  };
+
+  const draft: PurchaseOrder = {
+    id: "po-seed-0002",
+    reference: `PO-${today.getFullYear()}-0002`,
+    vendor: brakePads.preferredVendor,
+    status: "draft",
+    createdOn: iso(today),
+    createdBy: "Grace Villanueva",
+    notes: "",
+    lines: [
+      {
+        id: "poline-seed-3",
+        partId: brakePads.id,
+        description: brakePads.name,
+        quantity: 4,
+        unitCost: brakePads.unitCost,
+        serviceTaskIds: ["brake-inspection"],
+        vehicleIds: [draftVehicle.id],
+      },
+    ],
+  };
+
+  return [draft, sent];
 }
 
 export function createSeedState(today = new Date()): FleetState {
@@ -1265,5 +1384,8 @@ export function createSeedState(today = new Date()): FleetState {
     documents: buildDocuments(vehicles, workOrders, today),
     alerts: { readIds: [], dismissedIds: [] },
     approvalSettings: DEFAULT_APPROVAL_SETTINGS,
+    parts: buildPartsInventory(),
+    purchaseOrders: buildPurchaseOrders(vehicles, today),
+    tenant: DEFAULT_TENANT_SETTINGS,
   };
 }

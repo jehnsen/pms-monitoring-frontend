@@ -31,7 +31,8 @@ import { useCan } from "@/lib/rbac";
 import { DeniedAction } from "@/components/auth/denied-action";
 import { useTheme } from "@/components/theme-provider";
 import { cn, formatCurrency, formatKm } from "@/lib/utils";
-import type { ApprovalSettings, PartsSource } from "@/types";
+import { hexToHslTriplet } from "@/lib/tenant";
+import type { ApprovalSettings, PartsSource, TenantSettings } from "@/types";
 
 const PARTS_SOURCE_LABEL: Record<PartsSource, string> = {
   own_stock: "Own stock",
@@ -154,6 +155,133 @@ function ApprovalThresholdsCard() {
         <p className="mt-0.5 text-xs text-subtle-foreground">
           What auto-approves, who signs off the rest, and how long a line may
           wait before it escalates.
+        </p>
+      </header>
+      {can("settings:manage") ? (
+        body
+      ) : (
+        <DeniedAction reason={reason("settings:manage")}>
+          <div className="block w-full">{body}</div>
+        </DeniedAction>
+      )}
+    </section>
+  );
+}
+
+function BrandingCard() {
+  const { ready, tenant } = useFleet();
+  const { updateTenantSettings } = useFleetActions();
+  const { can, reason } = useCan();
+
+  const [draft, setDraft] = useState<TenantSettings>(tenant);
+
+  useEffect(() => {
+    setDraft(tenant);
+  }, [tenant]);
+
+  const dirty = ready && JSON.stringify(draft) !== JSON.stringify(tenant);
+  const validColor = hexToHslTriplet(draft.brandColor) !== null;
+
+  const body = (
+    <div className="space-y-4 border-t border-border px-5 py-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="tenant-name">Display name</Label>
+          <Input
+            id="tenant-name"
+            value={draft.displayName}
+            disabled={!can("settings:manage")}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, displayName: event.target.value }))
+            }
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="tenant-support-email">Support email</Label>
+          <Input
+            id="tenant-support-email"
+            type="email"
+            value={draft.supportEmail}
+            disabled={!can("settings:manage")}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, supportEmail: event.target.value }))
+            }
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="tenant-logo-url">Logo URL</Label>
+          <Input
+            id="tenant-logo-url"
+            value={draft.logoUrl ?? ""}
+            placeholder="https://…  (leave blank for the built-in mark)"
+            disabled={!can("settings:manage")}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                logoUrl: event.target.value.trim() ? event.target.value : null,
+              }))
+            }
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="tenant-brand-color">Brand colour</Label>
+          <div className="flex items-center gap-2">
+            <input
+              id="tenant-brand-color"
+              type="color"
+              value={validColor ? draft.brandColor : "#000000"}
+              disabled={!can("settings:manage")}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, brandColor: event.target.value }))
+              }
+              className="h-9 w-11 shrink-0 cursor-pointer rounded-md border border-border bg-surface p-1 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <Input
+              value={draft.brandColor}
+              disabled={!can("settings:manage")}
+              placeholder="#1d5ba6"
+              className="tabular"
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, brandColor: event.target.value }))
+              }
+            />
+          </div>
+          {!validColor ? (
+            <p className="text-xs text-critical">
+              Enter a hex colour, e.g. #1d5ba6.
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      {can("settings:manage") ? (
+        <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+          <p className="text-2xs text-subtle-foreground">
+            Drives the sidebar header, page title, and primary button colour.
+          </p>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!dirty || !validColor}
+            onClick={() => updateTenantSettings(draft)}
+          >
+            Save changes
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <section className="card-raised">
+      <header className="px-5 pb-3 pt-4">
+        <h3 className="text-sm font-semibold tracking-tight">Branding</h3>
+        <p className="mt-0.5 text-xs text-subtle-foreground">
+          This build is offered to fleet clients as their own application —
+          make it read like one.
         </p>
       </header>
       {can("settings:manage") ? (
@@ -349,7 +477,8 @@ export default function SettingsPage() {
         </section>
       </div>
 
-      <div className="mt-5">
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <BrandingCard />
         <ApprovalThresholdsCard />
       </div>
 

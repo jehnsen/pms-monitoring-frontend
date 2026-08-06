@@ -31,6 +31,7 @@ import {
   DOCUMENT_KIND_LABEL,
   EXPIRING_KINDS,
 } from "@/lib/documents";
+import { COMPLIANCE_DOC_KINDS } from "@/lib/compliance";
 import { formatBytes } from "@/lib/utils";
 import type { DocumentKind } from "@/types";
 
@@ -59,9 +60,14 @@ export function UploadDocumentDialog({
   const [kind, setKind] = React.useState<DocumentKind>("invoice");
   const [linkedVehicle, setLinkedVehicle] = React.useState(vehicleId ?? "none");
   const [expiresOn, setExpiresOn] = React.useState("");
+  const [referenceNumber, setReferenceNumber] = React.useState("");
+  const [issuedOn, setIssuedOn] = React.useState("");
+  const [issuingBody, setIssuingBody] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+
+  const isCompliance = COMPLIANCE_DOC_KINDS.includes(kind);
 
   React.useEffect(() => {
     if (!open) return;
@@ -69,6 +75,9 @@ export function UploadDocumentDialog({
     setError(null);
     setNotes("");
     setExpiresOn("");
+    setReferenceNumber("");
+    setIssuedOn("");
+    setIssuingBody("");
     setLinkedVehicle(vehicleId ?? "none");
   }, [open, vehicleId]);
 
@@ -112,6 +121,9 @@ export function UploadDocumentDialog({
         mimeType: file.type || "application/octet-stream",
         dataUrl,
         expiresOn: EXPIRING_KINDS.includes(kind) && expiresOn ? expiresOn : null,
+        referenceNumber: isCompliance && referenceNumber.trim() ? referenceNumber.trim() : null,
+        issuedOn: isCompliance && issuedOn ? issuedOn : null,
+        issuingBody: isCompliance && issuingBody.trim() ? issuingBody.trim() : null,
         notes: notes.trim(),
       });
 
@@ -219,6 +231,40 @@ export function UploadDocumentDialog({
               <p className="text-xs text-subtle-foreground">
                 An alert is raised inside 45 days of this date.
               </p>
+            </div>
+          ) : null}
+
+          {/* Reference/issuer detail only matters for the compliance kinds —
+              an invoice or photo has no OR/CR number to record. */}
+          {isCompliance ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="doc-reference">Reference number</Label>
+                <Input
+                  id="doc-reference"
+                  value={referenceNumber}
+                  placeholder="OR/CR, policy, or certificate no."
+                  onChange={(event) => setReferenceNumber(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="doc-issued">Issued on</Label>
+                <Input
+                  id="doc-issued"
+                  type="date"
+                  value={issuedOn}
+                  onChange={(event) => setIssuedOn(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="doc-issuer">Issuing body</Label>
+                <Input
+                  id="doc-issuer"
+                  value={issuingBody}
+                  placeholder="e.g. LTO Quezon City, or the insurer's name"
+                  onChange={(event) => setIssuingBody(event.target.value)}
+                />
+              </div>
             </div>
           ) : null}
 

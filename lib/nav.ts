@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   FolderOpen,
   LayoutDashboard,
+  LineChart,
   Receipt,
   Settings,
   ShieldCheck,
@@ -83,6 +84,12 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: ClipboardCheck,
         description: "Purchases awaiting approval",
         dynamicBadge: "requestsForMe",
+      },
+      {
+        href: "/demand-forecast",
+        label: "Demand forecast",
+        icon: LineChart,
+        description: "Parts the schedule says you'll need",
       },
       {
         href: "/purchase-orders",
