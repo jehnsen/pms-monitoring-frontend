@@ -4,9 +4,10 @@ import {
   format,
   parseISO,
   startOfMonth,
+  subDays,
   subMonths,
 } from "date-fns";
-import type { VehicleHealth, WorkOrder } from "@/types";
+import type { PmsItem, Vehicle, VehicleHealth, WorkOrder } from "@/types";
 import { SERVICE_TASKS } from "@/lib/service-tasks";
 import { workOrderCost } from "@/lib/pms";
 
@@ -163,6 +164,112 @@ export function urgentItems(health: VehicleHealth[]) {
     .sort((a, b) => a.item.daysRemaining - b.item.daysRemaining);
 }
 
+export interface DemandBand {
+  items: { vehicle: Vehicle; item: PmsItem }[];
+  /** Number of service items in this band. */
+  count: number;
+  /** Number of distinct vehicles those items belong to. */
+  vehicleCount: number;
+  /** Catalogue cost of clearing the band. */
+  estimatedCost: number;
+}
+
+export interface ServiceDemand {
+  /** Past a limit. */
+  overdue: DemandBand;
+  /** Inside the warning threshold, not yet past a limit. */
+  dueSoon: DemandBand;
+}
+
+function band(entries: { vehicle: Vehicle; item: PmsItem }[]): DemandBand {
+  return {
+    items: entries,
+    count: entries.length,
+    vehicleCount: new Set(entries.map((entry) => entry.vehicle.id)).size,
+    estimatedCost: entries.reduce(
+      (total, entry) => total + entry.item.task.estimatedCost,
+      0
+    ),
+  };
+}
+
+/**
+ * The single source for "how much work is outstanding".
+ *
+ * Both the dashboard and the schedule read counts and costs from here so the
+ * two screens cannot report different numbers for the same thing. Two terms,
+ * used consistently everywhere: **overdue** is past a limit, **due soon** is
+ * inside the warning threshold. Neither is a "backlog".
+ */
+export function serviceDemand(health: VehicleHealth[]): ServiceDemand {
+  const urgent = urgentItems(health);
+
+  return {
+    overdue: band(urgent.filter((entry) => entry.item.status === "overdue")),
+    dueSoon: band(urgent.filter((entry) => entry.item.status === "due_soon")),
+  };
+}
+
+export interface RollingSpend {
+  /** Closed spend over the trailing window. */
+  current: number;
+  /** Closed spend over the window immediately before it. */
+  previous: number;
+  /** Percentage change, rounded; 0 when there is no prior spend to compare. */
+  deltaPct: number;
+  windowDays: number;
+}
+
+/**
+ * Trailing-window spend.
+ *
+ * Calendar months are not comparable mid-month: on the 5th, "this month" holds
+ * five days of spend and "last month" holds thirty, so the delta reads as a
+ * collapse every time the month turns over. Two equal trailing windows compare
+ * like with like.
+ */
+export function rollingSpend(
+  workOrders: WorkOrder[],
+  windowDays = 30,
+  today = new Date()
+): RollingSpend {
+  const currentStart = subDays(today, windowDays);
+  const previousStart = subDays(today, windowDays * 2);
+
+  let current = 0;
+  let previous = 0;
+
+  for (const order of workOrders) {
+    if (order.status !== "completed" || !order.completedOn) continue;
+    const completedOn = parseISO(order.completedOn);
+    const cost = workOrderCost(order);
+
+    if (completedOn > currentStart && completedOn <= today) current += cost;
+    else if (completedOn > previousStart && completedOn <= currentStart)
+      previous += cost;
+  }
+
+  return {
+    current,
+    previous,
+    deltaPct: previous ? Math.round(((current - previous) / previous) * 100) : 0,
+    windowDays,
+  };
+}
+
+/**
+ * Distance the fleet covers in a period, from each vehicle's daily average.
+ *
+ * Cost per kilometre needs the distance driven *during* the costing period.
+ * Dividing a year of spend by lifetime odometer mixes a flow with a stock and
+ * understates the rate by however many years of history the fleet carries.
+ */
+export function fleetKmInPeriod(vehicles: Vehicle[], days: number) {
+  return Math.round(
+    vehicles.reduce((total, vehicle) => total + vehicle.avgDailyKm * days, 0)
+  );
+}
+
 /**
  * Maintenance frequency: services per 10,000 km for each vehicle.
  *
@@ -214,10 +321,3 @@ export function meanDaysBetweenServices(
   return Math.round(windowDays / Math.max(servicesPerVehicle, 0.01));
 }
 
-/** Projected cost of clearing everything currently overdue or due soon. */
-export function forecastCost(health: VehicleHealth[]) {
-  return urgentItems(health).reduce(
-    (total, { item }) => total + item.task.estimatedCost,
-    0
-  );
-}

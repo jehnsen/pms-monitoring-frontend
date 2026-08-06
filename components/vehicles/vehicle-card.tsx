@@ -1,14 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { Gauge, MapPin, User } from "lucide-react";
+import { Clock, Gauge, MapPin, User } from "lucide-react";
 import { Meter } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { PmsStatusBadge, VehicleStatusBadge } from "@/components/status";
+import { isOdometerStale, odometerAgeDays } from "@/lib/pms";
 import type { VehicleHealth } from "@/types";
-import { formatDayDelta, formatKm } from "@/lib/utils";
+import { formatDayDelta, formatKm, formatRelative } from "@/lib/utils";
 
 export function VehicleCard({ entry }: { entry: VehicleHealth }) {
   const { vehicle, nextItem, status } = entry;
+  const stale = isOdometerStale(vehicle);
 
   return (
     <Link
@@ -24,14 +32,27 @@ export function VehicleCard({ entry }: { entry: VehicleHealth }) {
             {vehicle.year} {vehicle.make} {vehicle.model}
           </p>
         </div>
-        <PmsStatusBadge status={status} />
+        <div className="flex flex-col items-end gap-1.5">
+          <PmsStatusBadge status={status} />
+          {stale ? (
+            <Badge tone="warning">
+              <Clock />
+              Stale reading
+            </Badge>
+          ) : null}
+        </div>
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-2xs">
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <Gauge className="size-3.5 shrink-0 text-subtle-foreground" />
           <dt className="sr-only">Odometer</dt>
-          <dd className="tabular truncate">{formatKm(vehicle.odometer)}</dd>
+          <dd className="tabular truncate">
+            {formatKm(vehicle.odometer)}
+            <span className="ml-1 text-subtle-foreground">
+              · {formatRelative(vehicle.odometerReadAt)}
+            </span>
+          </dd>
         </div>
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <MapPin className="size-3.5 shrink-0 text-subtle-foreground" />
@@ -50,9 +71,23 @@ export function VehicleCard({ entry }: { entry: VehicleHealth }) {
           <>
             <div className="flex items-baseline justify-between gap-2">
               <p className="truncate text-xs font-medium">{nextItem.task.name}</p>
-              <p className="tabular shrink-0 text-2xs text-muted-foreground">
-                {formatDayDelta(nextItem.daysRemaining)}
-              </p>
+              {stale ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="tabular shrink-0 text-2xs text-subtle-foreground">
+                      {formatDayDelta(nextItem.daysRemaining)}
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Projection based on a reading {odometerAgeDays(vehicle)} days
+                    old.
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <p className="tabular shrink-0 text-2xs text-muted-foreground">
+                  {formatDayDelta(nextItem.daysRemaining)}
+                </p>
+              )}
             </div>
             <Meter
               className="mt-2"

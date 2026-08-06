@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { useFleet } from "@/lib/store";
 import {
+  fleetKmInPeriod,
   meanDaysBetweenServices,
   monthlyCosts,
   serviceFrequency,
@@ -76,8 +77,11 @@ export default function ReportsPage() {
     ? Math.round((preventiveSpend / totalSpend) * 100)
     : 0;
 
-  const totalKm = sum(vehicles.map((v) => v.odometer));
-  const costPerKm = totalKm ? totalSpend / totalKm : 0;
+  // Distance driven *during* the period, not lifetime odometer. Dividing a
+  // period's spend by a stock of accumulated mileage understates the rate by
+  // however many years of history the fleet carries.
+  const periodKm = fleetKmInPeriod(vehicles, Math.round(months * 30.44));
+  const costPerKm = periodKm ? totalSpend / periodKm : 0;
 
   return (
     <>
@@ -118,7 +122,7 @@ export default function ReportsPage() {
         <StatTile
           label="Cost per fleet kilometre"
           value={`₱${costPerKm.toFixed(2)}`}
-          hint={`Across ${formatCurrencyCompact(totalKm).replace("₱", "")} km logged`}
+          hint={`Across ${Math.round(periodKm / 1000)}k km driven in period`}
           icon={Gauge}
         />
         <StatTile

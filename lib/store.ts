@@ -8,10 +8,12 @@ import type {
   PartLine,
   Vehicle,
   WorkOrder,
+  WorkOrderEvent,
 } from "@/types";
 import { createSeedState } from "@/lib/seed";
 import { applyCompletion, evaluateFleet, summariseFleet } from "@/lib/pms";
 import { buildAlerts, viewAlerts } from "@/lib/alerts";
+import { useSession } from "@/lib/auth";
 
 const STORAGE_KEY = "pms.fleet.v1";
 
@@ -38,11 +40,23 @@ const listeners = new Set<() => void>();
  */
 function normalise(raw: Partial<FleetState> | null | undefined): FleetState {
   return {
-    vehicles: raw?.vehicles ?? [],
+    vehicles: (raw?.vehicles ?? []).map((vehicle) => ({
+      ...vehicle,
+      // Older records predate the reading date; treat the odometer as current.
+      odometerReadAt:
+        vehicle.odometerReadAt ??
+        formatISO(new Date(), { representation: "date" }),
+    })),
     workOrders: (raw?.workOrders ?? []).map((order) => ({
       ...order,
       parts: order.parts ?? [],
       findings: order.findings ?? "",
+      // Records written before the timeline existed still carry their status;
+      // give them a single synthesized entry rather than an empty history.
+      history:
+        order.history ?? [
+          { id: `${order.id}-legacy`, status: order.status, at: order.openedOn, actor: "—" },
+        ],
     })),
     documents: raw?.documents ?? [],
     alerts: {
@@ -187,9 +201,21 @@ export function useAlerts() {
 /** Largest single upload accepted, in bytes. Keeps one file from filling the quota. */
 export const MAX_DOCUMENT_BYTES = 1_500_000;
 
+function workOrderEvent(status: WorkOrder["status"], actor: string): WorkOrderEvent {
+  return {
+    id: `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    status,
+    at: new Date().toISOString(),
+    actor,
+  };
+}
+
 export function useFleetActions() {
+  const { session } = useSession();
+  const actor = session?.name ?? "System";
+
   const createWorkOrder = useCallback(
-    (draft: Omit<WorkOrder, "id" | "reference">) => {
+    (draft: Omit<WorkOrder, "id" | "reference" | "history">) => {
       let created: WorkOrder | null = null;
       setState((current) => {
         const seq = current.workOrders.length + 1;
@@ -197,12 +223,13 @@ export function useFleetActions() {
           ...draft,
           id: `wo-${Date.now().toString(36)}`,
           reference: `WO-${new Date().getFullYear()}-${String(seq).padStart(4, "0")}`,
+          history: [workOrderEvent(draft.status, actor)],
         };
         return { ...current, workOrders: [created, ...current.workOrders] };
       });
       return created;
     },
-    []
+    [actor]
   );
 
   const updateWorkOrder = useCallback(
@@ -210,23 +237,37 @@ export function useFleetActions() {
       setState((current) => ({
         ...current,
         workOrders: current.workOrders.map((order) =>
-          order.id === id ? { ...order, ...patch } : order
+          order.id === id
+            ? {
+                ...order,
+                ...patch,
+                history:
+                  patch.status && patch.status !== order.status
+                    ? [...order.history, workOrderEvent(patch.status, actor)]
+                    : order.history,
+              }
+            : order
         ),
       }));
     },
-    []
+    [actor]
   );
 
   /**
-   * Closing a work order is what resets the PMS clock: the covered tasks take
-   * the order's odometer and completion date as their new baseline. The
-   * technician's findings and parts list are recorded at the same moment —
-   * that is what turns a work order into a service record.
+   * Closing a work order is what resets the PMS clock: every task the
+   * technician ticked takes the order's odometer and completion date as its
+   * new baseline. The findings and parts list are recorded at the same
+   * moment — that is what turns a work order into a service record.
    */
   const completeWorkOrder = useCallback(
     (
       id: string,
-      detail?: { odometer?: number; findings?: string; parts?: PartLine[] }
+      detail?: {
+        odometer?: number;
+        findings?: string;
+        parts?: PartLine[];
+        taskIds?: string[];
+      }
     ) => {
       setState((current) => {
         const order = current.workOrders.find((o) => o.id === id);
@@ -239,6 +280,8 @@ export function useFleetActions() {
           odometerAtService: detail?.odometer ?? order.odometerAtService,
           findings: detail?.findings ?? order.findings,
           parts: detail?.parts ?? order.parts,
+          taskIds: detail?.taskIds ?? order.taskIds,
+          history: [...order.history, workOrderEvent("completed", actor)],
         };
 
         return {
@@ -252,7 +295,7 @@ export function useFleetActions() {
         };
       });
     },
-    []
+    [actor]
   );
 
   const updateVehicle = useCallback((id: string, patch: Partial<Vehicle>) => {

@@ -14,8 +14,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useFleetActions } from "@/lib/store";
-import { formatCurrency, formatKm } from "@/lib/utils";
+import { PmsStatusBadge } from "@/components/status";
+import { useFleet, useFleetActions } from "@/lib/store";
+import { validateOdometerReading } from "@/lib/odometer-validation";
+import { formatCurrency, formatKm, formatRelative } from "@/lib/utils";
 import type { PartLine, Vehicle, WorkOrder } from "@/types";
 
 function blankPart(): PartLine {
@@ -45,22 +47,36 @@ export function CompleteWorkOrderDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { healthById } = useFleet();
   const { completeWorkOrder } = useFleetActions();
 
   const [odometer, setOdometer] = React.useState("");
   const [findings, setFindings] = React.useState("");
   const [parts, setParts] = React.useState<PartLine[]>([]);
+  const [confirmed, setConfirmed] = React.useState(false);
+  const [taskIds, setTaskIds] = React.useState<string[]>([]);
+
+  const items = vehicle ? healthById.get(vehicle.id)?.items ?? [] : [];
 
   React.useEffect(() => {
     if (!open) return;
-    setOdometer(String(vehicle?.odometer ?? order.odometerAtService));
+    // Empty on purpose — a technician has to actively choose the reading
+    // rather than inherit whatever the vehicle last carried.
+    setOdometer("");
     setFindings(order.findings);
     setParts(order.parts.length ? order.parts : []);
+    setConfirmed(false);
+    setTaskIds(order.taskIds);
   }, [open, order, vehicle]);
 
   const reading = Number(odometer);
-  const minimum = vehicle?.odometer ?? 0;
-  const readingValid = Number.isFinite(reading) && reading >= minimum;
+  const validation =
+    vehicle && odometer.trim() && Number.isFinite(reading)
+      ? validateOdometerReading({ vehicle, reading })
+      : null;
+  const readingValid =
+    validation?.status === "ok" ||
+    (validation?.status === "warning" && confirmed);
 
   const partsTotal = parts.reduce(
     (total, part) => total + part.quantity * part.unitCost,
@@ -68,6 +84,12 @@ export function CompleteWorkOrderDialog({
   );
   // An incomplete line would silently drop out of the record; block instead.
   const partsValid = parts.every((part) => part.name.trim().length > 0);
+
+  function toggleTask(taskId: string, checked: boolean) {
+    setTaskIds((current) =>
+      checked ? [...current, taskId] : current.filter((id) => id !== taskId)
+    );
+  }
 
   function patchPart(id: string, patch: Partial<PartLine>) {
     setParts((current) =>
@@ -90,24 +112,94 @@ export function CompleteWorkOrderDialog({
         <DialogBody className="space-y-5">
           <div className="space-y-1.5">
             <Label htmlFor="complete-odometer">Odometer at service (km)</Label>
-            <Input
-              id="complete-odometer"
-              type="number"
-              inputMode="numeric"
-              value={odometer}
-              min={minimum}
-              onChange={(event) => setOdometer(event.target.value)}
-              className="tabular"
-            />
-            {!readingValid ? (
-              <p className="text-xs text-critical">
-                Cannot be below the vehicle&apos;s current reading (
-                {formatKm(minimum)}).
+            <div className="flex gap-2">
+              <Input
+                id="complete-odometer"
+                type="number"
+                inputMode="numeric"
+                value={odometer}
+                placeholder="Enter the reading taken at close-out"
+                onChange={(event) => {
+                  setOdometer(event.target.value);
+                  setConfirmed(false);
+                }}
+                className="tabular"
+              />
+              {vehicle ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setOdometer(String(vehicle.odometer));
+                    setConfirmed(false);
+                  }}
+                >
+                  Use last recorded
+                </Button>
+              ) : null}
+            </div>
+            {vehicle ? (
+              <p className="text-xs text-subtle-foreground">
+                Last recorded: {formatKm(vehicle.odometer)} ·{" "}
+                {formatRelative(vehicle.odometerReadAt)}
+              </p>
+            ) : null}
+            {validation?.status === "invalid" ? (
+              <p className="text-xs text-critical">{validation.error}</p>
+            ) : validation?.status === "warning" ? (
+              <div className="space-y-2 rounded-md border border-warning/35 bg-warning/15 px-3 py-2.5">
+                <p className="text-xs text-foreground">{validation.warning}</p>
+                <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-3.5 accent-brand"
+                    checked={confirmed}
+                    onChange={(event) => setConfirmed(event.target.checked)}
+                  />
+                  This reading is correct.
+                </label>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>PMS intervals to reset</Label>
+            <p className="text-xs text-subtle-foreground">
+              Every distance-based interval ticked below restarts from this
+              reading and today&apos;s date.
+            </p>
+            {items.length === 0 ? (
+              <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-subtle-foreground">
+                No tracked intervals for this vehicle.
               </p>
             ) : (
-              <p className="text-xs text-subtle-foreground">
-                Every distance-based interval it covers restarts from here.
-              </p>
+              <div className="divide-y divide-border rounded-md border border-border">
+                {items.map((item) => (
+                  <label
+                    key={item.task.id}
+                    className="flex cursor-pointer items-center gap-3 px-3 py-2.5"
+                  >
+                    <input
+                      type="checkbox"
+                      className="size-3.5 shrink-0 accent-brand"
+                      checked={taskIds.includes(item.task.id)}
+                      onChange={(event) =>
+                        toggleTask(item.task.id, event.target.checked)
+                      }
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium">
+                        {item.task.name}
+                      </span>
+                      <span className="block text-2xs text-subtle-foreground">
+                        every {formatKm(item.task.intervalKm)} or{" "}
+                        {item.task.intervalMonths} months
+                      </span>
+                    </span>
+                    <PmsStatusBadge status={item.status} />
+                  </label>
+                ))}
+              </div>
             )}
           </div>
 
@@ -247,6 +339,7 @@ export function CompleteWorkOrderDialog({
                 odometer: Math.round(reading),
                 findings: findings.trim(),
                 parts,
+                taskIds,
               });
               onOpenChange(false);
             }}

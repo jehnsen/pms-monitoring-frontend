@@ -19,16 +19,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useFleet } from "@/lib/store";
+import { isOdometerStale } from "@/lib/pms";
 import { cn } from "@/lib/utils";
 import type { PmsStatus } from "@/types";
+
+type PmsFilter = PmsStatus | "all" | "stale";
 
 function VehiclesView() {
   const { ready, health } = useFleet();
   const searchParams = useSearchParams();
 
   const [query, setQuery] = useState("");
-  const [pms, setPms] = useState<PmsStatus | "all">(
-    (searchParams.get("pms") as PmsStatus | null) ?? "all"
+  const [pms, setPms] = useState<PmsFilter>(
+    (searchParams.get("pms") as PmsFilter | null) ?? "all"
   );
   const [department, setDepartment] = useState("all");
   const [layout, setLayout] = useState<"grid" | "table">("grid");
@@ -43,7 +46,8 @@ function VehiclesView() {
 
     return health
       .filter((entry) => {
-        if (pms !== "all" && entry.status !== pms) return false;
+        if (pms === "stale" && !isOdometerStale(entry.vehicle)) return false;
+        if (pms !== "all" && pms !== "stale" && entry.status !== pms) return false;
         if (department !== "all" && entry.vehicle.department !== department)
           return false;
         if (!q) return true;
@@ -83,7 +87,7 @@ function VehiclesView() {
 
         <Select
           value={pms}
-          onValueChange={(value) => setPms(value as PmsStatus | "all")}
+          onValueChange={(value) => setPms(value as PmsFilter)}
         >
           <SelectTrigger className="w-[168px]" aria-label="Filter by PMS status">
             <SelectValue />
@@ -93,6 +97,7 @@ function VehiclesView() {
             <SelectItem value="overdue">Overdue</SelectItem>
             <SelectItem value="due_soon">Due soon</SelectItem>
             <SelectItem value="ok">On schedule</SelectItem>
+            <SelectItem value="stale">Stale odometer</SelectItem>
           </SelectContent>
         </Select>
 

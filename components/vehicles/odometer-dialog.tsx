@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { formatISO } from "date-fns";
 import { Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ import {
 import { useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
 import { DeniedAction } from "@/components/auth/denied-action";
+import { validateOdometerReading } from "@/lib/odometer-validation";
 import { formatKm } from "@/lib/utils";
 import type { Vehicle } from "@/types";
 
@@ -30,13 +32,23 @@ export function OdometerDialog({ vehicle }: { vehicle: Vehicle }) {
   const { can, reason } = useCan();
   const [open, setOpen] = React.useState(false);
   const [value, setValue] = React.useState(String(vehicle.odometer));
+  const [confirmed, setConfirmed] = React.useState(false);
 
   React.useEffect(() => {
-    if (open) setValue(String(vehicle.odometer));
+    if (open) {
+      setValue(String(vehicle.odometer));
+      setConfirmed(false);
+    }
   }, [open, vehicle.odometer]);
 
   const parsed = Number(value);
-  const valid = Number.isFinite(parsed) && parsed >= vehicle.odometer;
+  const validation =
+    value.trim() && Number.isFinite(parsed)
+      ? validateOdometerReading({ vehicle, reading: parsed })
+      : null;
+  const canSave =
+    validation?.status === "ok" ||
+    (validation?.status === "warning" && confirmed);
 
   const trigger = (
     <Button variant="secondary">
@@ -68,14 +80,27 @@ export function OdometerDialog({ vehicle }: { vehicle: Vehicle }) {
             inputMode="numeric"
             value={value}
             min={vehicle.odometer}
-            onChange={(event) => setValue(event.target.value)}
+            onChange={(event) => {
+              setValue(event.target.value);
+              setConfirmed(false);
+            }}
             className="tabular"
           />
-          {!valid ? (
-            <p className="text-xs text-critical">
-              A reading cannot be lower than the last one on record (
-              {formatKm(vehicle.odometer)}).
-            </p>
+          {validation?.status === "invalid" ? (
+            <p className="text-xs text-critical">{validation.error}</p>
+          ) : validation?.status === "warning" ? (
+            <div className="space-y-2 rounded-md border border-warning/35 bg-warning/15 px-3 py-2.5">
+              <p className="text-xs text-foreground">{validation.warning}</p>
+              <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-3.5 accent-brand"
+                  checked={confirmed}
+                  onChange={(event) => setConfirmed(event.target.checked)}
+                />
+                This reading is correct.
+              </label>
+            </div>
           ) : (
             <p className="text-xs text-subtle-foreground">
               Every distance-based interval will be recalculated against this value.
@@ -89,9 +114,12 @@ export function OdometerDialog({ vehicle }: { vehicle: Vehicle }) {
           </Button>
           <Button
             variant="primary"
-            disabled={!valid}
+            disabled={!canSave}
             onClick={() => {
-              updateVehicle(vehicle.id, { odometer: Math.round(parsed) });
+              updateVehicle(vehicle.id, {
+                odometer: Math.round(parsed),
+                odometerReadAt: formatISO(new Date(), { representation: "date" }),
+              });
               setOpen(false);
             }}
           >

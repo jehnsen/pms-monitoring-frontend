@@ -4,8 +4,14 @@ import { ShieldAlert } from "lucide-react";
 import { Meter } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { PmsStatusBadge } from "@/components/status";
 import { NewWorkOrderDialog } from "@/components/work-orders/new-work-order-dialog";
+import { odometerAgeDays } from "@/lib/pms";
 import { CATEGORY_LABEL } from "@/lib/service-tasks";
 import type { PmsItem, Vehicle } from "@/types";
 import { formatCurrency, formatDate, formatDayDelta, formatKm } from "@/lib/utils";
@@ -18,9 +24,12 @@ import { formatCurrency, formatDate, formatDayDelta, formatKm } from "@/lib/util
 export function PmsSchedule({
   vehicle,
   items,
+  isStale = false,
 }: {
   vehicle: Vehicle;
   items: PmsItem[];
+  /** When the vehicle's odometer reading is old, mute the projection and say so. */
+  isStale?: boolean;
 }) {
   return (
     <ul className="divide-y divide-border">
@@ -90,12 +99,29 @@ export function PmsSchedule({
               </div>
               <div>
                 <dt className="text-subtle-foreground">Projected due</dt>
-                <dd className="tabular mt-0.5 font-medium">
-                  {formatDate(item.dueDate)}
-                  <span className="ml-1.5 font-normal text-subtle-foreground">
-                    {formatDayDelta(item.daysRemaining)}
-                  </span>
-                </dd>
+                {isStale ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <dd className="tabular mt-0.5 font-medium text-subtle-foreground">
+                        {formatDate(item.dueDate)}
+                        <span className="ml-1.5 font-normal">
+                          {formatDayDelta(item.daysRemaining)}
+                        </span>
+                      </dd>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Projection based on a reading {odometerAgeDays(vehicle)} days
+                      old.
+                    </TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <dd className="tabular mt-0.5 font-medium">
+                    {formatDate(item.dueDate)}
+                    <span className="ml-1.5 font-normal text-subtle-foreground">
+                      {formatDayDelta(item.daysRemaining)}
+                    </span>
+                  </dd>
+                )}
               </div>
               <div>
                 <dt className="text-subtle-foreground">Governed by</dt>

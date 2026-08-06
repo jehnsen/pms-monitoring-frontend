@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Car, OctagonAlert, Timer, Wallet } from "lucide-react";
+import { ArrowRight, Car, Clock, OctagonAlert, Timer, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatTile } from "@/components/dashboard/stat-tile";
 import { ComplianceBar } from "@/components/dashboard/compliance-bar";
@@ -12,7 +12,13 @@ import { WorkOrderTable } from "@/components/work-orders/work-order-table";
 import { NewWorkOrderDialog } from "@/components/work-orders/new-work-order-dialog";
 import { StatSkeletonRow, Skeleton } from "@/components/ui/skeleton";
 import { useFleet } from "@/lib/store";
-import { monthlyCosts, upcomingLoad, urgentItems, forecastCost } from "@/lib/analytics";
+import {
+  monthlyCosts,
+  rollingSpend,
+  serviceDemand,
+  upcomingLoad,
+} from "@/lib/analytics";
+import { DUE_SOON_DAYS, isOdometerStale } from "@/lib/pms";
 import { formatCurrency, formatCurrencyCompact } from "@/lib/utils";
 
 export default function DashboardPage() {
@@ -36,21 +42,19 @@ export default function DashboardPage() {
 
   const costs = monthlyCosts(workOrders);
   const load = upcomingLoad(health);
-  const urgent = urgentItems(health);
   const vehiclesById = new Map(vehicles.map((v) => [v.id, v]));
 
-  const thisMonth = costs[costs.length - 1]?.total ?? 0;
-  const lastMonth = costs[costs.length - 2]?.total ?? 0;
-  const spendDelta = lastMonth
-    ? Math.round(((thisMonth - lastMonth) / lastMonth) * 100)
-    : 0;
+  // Equal trailing windows, so the comparison holds mid-month.
+  const spend = rollingSpend(workOrders, 30);
 
-  const overdueItems = urgent.filter((entry) => entry.item.status === "overdue");
-  const dueSoonItems = urgent.filter((entry) => entry.item.status === "due_soon");
+  // Same selector the schedule page reads, so the two cannot disagree.
+  const demand = serviceDemand(health);
 
   const activeOrders = workOrders
     .filter((order) => order.status !== "completed" && order.status !== "cancelled")
     .sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
+
+  const staleCount = vehicles.filter((vehicle) => isOdometerStale(vehicle)).length;
 
   return (
     <>
@@ -70,30 +74,43 @@ export default function DashboardPage() {
         />
         <StatTile
           label="Overdue service items"
-          value={`${overdueItems.length}`}
-          hint={`Across ${summary.overdue} ${summary.overdue === 1 ? "vehicle" : "vehicles"}`}
+          value={`${demand.overdue.count}`}
+          hint={`${demand.overdue.vehicleCount} ${
+            demand.overdue.vehicleCount === 1 ? "vehicle" : "vehicles"
+          } · est. ${formatCurrencyCompact(demand.overdue.estimatedCost)} to clear`}
           icon={OctagonAlert}
-          tone={overdueItems.length > 0 ? "critical" : "ok"}
+          tone={demand.overdue.count > 0 ? "critical" : "ok"}
         />
         <StatTile
-          label="Due within 21 days"
-          value={`${dueSoonItems.length}`}
-          hint={`Est. ${formatCurrencyCompact(forecastCost(health))} to clear the backlog`}
+          label={`Due soon (${DUE_SOON_DAYS} days)`}
+          value={`${demand.dueSoon.count}`}
+          hint={`${demand.dueSoon.vehicleCount} ${
+            demand.dueSoon.vehicleCount === 1 ? "vehicle" : "vehicles"
+          } · est. ${formatCurrencyCompact(demand.dueSoon.estimatedCost)} to clear`}
           icon={Timer}
           tone="warning"
         />
         <StatTile
-          label="Spend this month"
-          value={formatCurrency(thisMonth)}
+          label="Spend, last 30 days"
+          value={formatCurrency(spend.current)}
           icon={Wallet}
           tone="brand"
           delta={{
-            value: spendDelta,
-            period: "vs last month",
+            value: spend.deltaPct,
+            period: "vs previous 30 days",
             goodDirection: "down",
           }}
           trend={costs.map((point) => point.total)}
         />
+        <Link href="/vehicles?pms=stale" className="block">
+          <StatTile
+            label="Vehicles with stale odometer"
+            value={`${staleCount} of ${summary.total}`}
+            hint="No reading in over 14 days — projections may be off."
+            icon={Clock}
+            tone={staleCount > 0 ? "warning" : "ok"}
+          />
+        </Link>
       </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-3">

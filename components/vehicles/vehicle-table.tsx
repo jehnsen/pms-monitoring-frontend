@@ -3,7 +3,13 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { Meter } from "@/components/ui/progress";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { PmsStatusBadge, VehicleStatusBadge } from "@/components/status";
+import { isOdometerStale, odometerAgeDays } from "@/lib/pms";
 import type { VehicleHealth } from "@/types";
 import { formatDayDelta, formatKm } from "@/lib/utils";
 
@@ -37,6 +43,7 @@ export function VehicleTable({ entries }: { entries: VehicleHealth[] }) {
         <tbody className="divide-y divide-border">
           {entries.map((entry) => {
             const { vehicle, nextItem } = entry;
+            const stale = isOdometerStale(vehicle);
             return (
               <tr
                 key={vehicle.id}
@@ -70,9 +77,23 @@ export function VehicleTable({ entries }: { entries: VehicleHealth[] }) {
                     <>
                       <div className="flex items-baseline justify-between gap-3">
                         <span className="truncate text-xs">{nextItem.task.name}</span>
-                        <span className="tabular shrink-0 text-2xs text-subtle-foreground">
-                          {formatDayDelta(nextItem.daysRemaining)}
-                        </span>
+                        {stale ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="tabular shrink-0 text-2xs text-subtle-foreground">
+                                {formatDayDelta(nextItem.daysRemaining)}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Projection based on a reading{" "}
+                              {odometerAgeDays(vehicle)} days old.
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="tabular shrink-0 text-2xs text-subtle-foreground">
+                            {formatDayDelta(nextItem.daysRemaining)}
+                          </span>
+                        )}
                       </div>
                       <Meter
                         className="mt-1.5"

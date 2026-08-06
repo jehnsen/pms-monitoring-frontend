@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { PmsStatusBadge } from "@/components/status";
 import { useFleet } from "@/lib/store";
-import { upcomingLoad } from "@/lib/analytics";
+import { serviceDemand, upcomingLoad } from "@/lib/analytics";
 import { compareUrgency } from "@/lib/pms";
 import { formatCurrency, formatDate, formatDayDelta, formatKm } from "@/lib/utils";
 import type { PmsItem, PmsStatus, Vehicle } from "@/types";
@@ -87,6 +87,13 @@ function ScheduleView() {
     rows: rows.filter(group.test),
   })).filter((group) => group.rows.length > 0);
 
+  // Count what is actually listed. `rows` holds every tracked interval for
+  // every vehicle — the whole catalogue — most of which falls outside the
+  // 90-day horizon these groups cover.
+  const listed = groups.reduce((total, group) => total + group.rows.length, 0);
+  const beyondHorizon = rows.length - listed;
+  const demand = serviceDemand(health);
+
   return (
     <>
       <UpcomingLoadChart data={upcomingLoad(health)} className="mb-5" />
@@ -106,8 +113,19 @@ function ScheduleView() {
             <SelectItem value="ok">On schedule only</SelectItem>
           </SelectContent>
         </Select>
+        {/* Same selector the dashboard tiles read, so the two screens cannot
+            report different figures for the same thing. */}
         <p className="text-xs text-subtle-foreground">
-          {rows.length} items across the next 90 days.
+          <span className="font-medium text-foreground">
+            {demand.overdue.count} overdue
+          </span>{" "}
+          ({formatCurrency(demand.overdue.estimatedCost)} est.) ·{" "}
+          <span className="font-medium text-foreground">
+            {demand.dueSoon.count} due soon
+          </span>{" "}
+          ({formatCurrency(demand.dueSoon.estimatedCost)} est.) · {listed}{" "}
+          {listed === 1 ? "item" : "items"} listed within 90 days
+          {beyondHorizon > 0 ? `, ${beyondHorizon} further ahead` : ""}.
         </p>
       </div>
 

@@ -1,12 +1,4 @@
-import {
-  addDays,
-  differenceInCalendarDays,
-  endOfMonth,
-  formatISO,
-  startOfMonth,
-  subDays,
-  subMonths,
-} from "date-fns";
+import { addDays, formatISO, subDays } from "date-fns";
 import type {
   FleetDocument,
   FleetState,
@@ -15,10 +7,10 @@ import type {
   TaskState,
   Vehicle,
   WorkOrder,
-  WorkOrderStatus,
-  WorkOrderType,
+  WorkOrderEvent,
 } from "@/types";
 import { SERVICE_TASKS } from "@/lib/service-tasks";
+import { evaluateVehicle } from "@/lib/pms";
 
 /**
  * Deterministic PRNG. The demo fleet has to look lived-in — uneven odometers,
@@ -39,19 +31,34 @@ function iso(date: Date) {
   return formatISO(date, { representation: "date" });
 }
 
+const LABOR_RATE_PER_HOUR = 650;
+
 /** How far through its intervals a vehicle should sit when the demo loads. */
 type WearProfile = "overdue" | "due_soon" | "healthy";
 
+/**
+ * A vehicle is described by how hard it is worked and how long it has been in
+ * service. **The odometer is derived, never stated.**
+ *
+ * Stating both an odometer and a daily rate lets them drift apart, and they had:
+ * the previous fleet carried odometers roughly half what its own daily rates
+ * implied. That matters beyond looking wrong — the due-date projection converts
+ * a distance interval into a date using the daily rate, so an inflated rate made
+ * intervals appear to fall due far earlier than the mileage justified.
+ */
 interface VehicleSpec {
   plateNumber: string;
   make: string;
   model: string;
-  year: number;
   vehicleClass: Vehicle["vehicleClass"];
   fuelType: Vehicle["fuelType"];
   color: string;
-  odometer: number;
+  /** Rolling average distance per day. */
   avgDailyKm: number;
+  /** Days the unit has been on the fleet; drives both odometer and age. */
+  daysInService: number;
+  /** Days since the last odometer reading was taken. */
+  readingAgeDays: number;
   status: Vehicle["status"];
   assignedTo: string;
   department: string;
@@ -64,12 +71,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "NBA 4821",
     make: "Toyota",
     model: "Hilux 2.4 G",
-    year: 2022,
     vehicleClass: "pickup",
     fuelType: "diesel",
     color: "Super White",
-    odometer: 84_320,
-    avgDailyKm: 96,
+    avgDailyKm: 48,
+    daysInService: 950,
+    readingAgeDays: 0,
     status: "active",
     assignedTo: "Rafael Domingo",
     department: "Field Operations",
@@ -80,12 +87,14 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "CBA 1177",
     make: "Ford",
     model: "Ranger Wildtrak",
-    year: 2023,
     vehicleClass: "pickup",
     fuelType: "diesel",
     color: "Meteor Grey",
-    odometer: 51_940,
-    avgDailyKm: 78,
+    avgDailyKm: 44,
+    daysInService: 875,
+    // Demonstrates the stale-odometer affordance out of the box — every other
+    // unit reads within the last few days.
+    readingAgeDays: 21,
     status: "active",
     assignedTo: "Marisol Bautista",
     department: "Field Operations",
@@ -96,12 +105,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "NCT 9034",
     make: "Toyota",
     model: "Innova 2.8 E",
-    year: 2021,
     vehicleClass: "van",
     fuelType: "diesel",
     color: "Attitude Black",
-    odometer: 112_780,
-    avgDailyKm: 118,
+    avgDailyKm: 50,
+    daysInService: 960,
+    readingAgeDays: 0,
     status: "in_service",
     assignedTo: "Joel Ramirez",
     department: "Executive Transport",
@@ -112,12 +121,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "ABC 2290",
     make: "Mitsubishi",
     model: "L300 Cab & Chassis",
-    year: 2020,
     vehicleClass: "van",
     fuelType: "diesel",
     color: "White",
-    odometer: 148_610,
-    avgDailyKm: 132,
+    avgDailyKm: 55,
+    daysInService: 1035,
+    readingAgeDays: 1,
     status: "active",
     assignedTo: "Danilo Cruz",
     department: "Logistics",
@@ -128,12 +137,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "NEA 7712",
     make: "Toyota",
     model: "Vios 1.3 XLE",
-    year: 2023,
     vehicleClass: "sedan",
     fuelType: "gasoline",
     color: "Platinum Silver",
-    odometer: 32_450,
-    avgDailyKm: 54,
+    avgDailyKm: 29,
+    daysInService: 815,
+    readingAgeDays: 0,
     status: "active",
     assignedTo: "Andrea Salcedo",
     department: "Sales",
@@ -144,12 +153,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "DAX 5561",
     make: "Isuzu",
     model: "D-Max LS-A",
-    year: 2022,
     vehicleClass: "pickup",
     fuelType: "diesel",
     color: "Silky Pearl",
-    odometer: 69_880,
-    avgDailyKm: 88,
+    avgDailyKm: 41,
+    daysInService: 955,
+    readingAgeDays: 0,
     status: "active",
     assignedTo: "Ferdinand Lopez",
     department: "Field Operations",
@@ -160,12 +169,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "NGE 3308",
     make: "Toyota",
     model: "Fortuner 2.8 V",
-    year: 2023,
     vehicleClass: "suv",
     fuelType: "diesel",
     color: "Phantom Brown",
-    odometer: 44_120,
-    avgDailyKm: 72,
+    avgDailyKm: 33,
+    daysInService: 920,
+    readingAgeDays: 0,
     status: "active",
     assignedTo: "Camille Ortega",
     department: "Executive Transport",
@@ -176,12 +185,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "CAB 8845",
     make: "Nissan",
     model: "Navara VL 4x4",
-    year: 2021,
     vehicleClass: "pickup",
     fuelType: "diesel",
     color: "Galaxy Black",
-    odometer: 97_530,
-    avgDailyKm: 104,
+    avgDailyKm: 42,
+    daysInService: 1060,
+    readingAgeDays: 5,
     status: "down",
     assignedTo: "Unassigned",
     department: "Field Operations",
@@ -192,12 +201,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "NHK 1926",
     make: "Honda",
     model: "City RS",
-    year: 2024,
     vehicleClass: "sedan",
     fuelType: "gasoline",
     color: "Lunar Silver",
-    odometer: 18_240,
-    avgDailyKm: 46,
+    avgDailyKm: 25,
+    daysInService: 665,
+    readingAgeDays: 0,
     status: "active",
     assignedTo: "Patricia Yulo",
     department: "Sales",
@@ -208,12 +217,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "DBK 4407",
     make: "Toyota",
     model: "Hiace Commuter Deluxe",
-    year: 2022,
     vehicleClass: "van",
     fuelType: "diesel",
     color: "White",
-    odometer: 126_990,
-    avgDailyKm: 145,
+    avgDailyKm: 62,
+    daysInService: 925,
+    readingAgeDays: 0,
     status: "active",
     assignedTo: "Roberto Aquino",
     department: "Logistics",
@@ -224,12 +233,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "NLM 6653",
     make: "Hyundai",
     model: "Accent 1.4 GL",
-    year: 2021,
     vehicleClass: "sedan",
     fuelType: "gasoline",
     color: "Polar White",
-    odometer: 61_370,
-    avgDailyKm: 58,
+    avgDailyKm: 27,
+    daysInService: 1005,
+    readingAgeDays: 3,
     status: "active",
     assignedTo: "Gabriel Tan",
     department: "Sales",
@@ -240,12 +249,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "CDE 3391",
     make: "Isuzu",
     model: "N-Series NLR 55",
-    year: 2020,
     vehicleClass: "truck",
     fuelType: "diesel",
     color: "White",
-    odometer: 187_450,
-    avgDailyKm: 156,
+    avgDailyKm: 58,
+    daysInService: 1185,
+    readingAgeDays: 0,
     status: "in_service",
     assignedTo: "Victor Manalo",
     department: "Logistics",
@@ -256,12 +265,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "NPQ 2214",
     make: "Ford",
     model: "Everest Titanium",
-    year: 2024,
     vehicleClass: "suv",
     fuelType: "diesel",
     color: "Absolute Black",
-    odometer: 21_680,
-    avgDailyKm: 62,
+    avgDailyKm: 31,
+    daysInService: 630,
+    readingAgeDays: 0,
     status: "active",
     assignedTo: "Elena Villanueva",
     department: "Executive Transport",
@@ -272,12 +281,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "DFG 7758",
     make: "Suzuki",
     model: "APV GLX",
-    year: 2021,
     vehicleClass: "van",
     fuelType: "gasoline",
     color: "Silky Silver",
-    odometer: 78_910,
-    avgDailyKm: 84,
+    avgDailyKm: 36,
+    daysInService: 990,
+    readingAgeDays: 0,
     status: "active",
     assignedTo: "Noel Fajardo",
     department: "Logistics",
@@ -288,12 +297,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "NRS 5580",
     make: "Mazda",
     model: "BT-50 4x2",
-    year: 2022,
     vehicleClass: "pickup",
     fuelType: "diesel",
     color: "Rock Grey",
-    odometer: 58_240,
-    avgDailyKm: 76,
+    avgDailyKm: 39,
+    daysInService: 845,
+    readingAgeDays: 0,
     status: "active",
     assignedTo: "Ivan Mercado",
     department: "Field Operations",
@@ -304,12 +313,12 @@ const VEHICLE_SPECS: VehicleSpec[] = [
     plateNumber: "NTU 9903",
     make: "Toyota",
     model: "Corolla Altis Hybrid",
-    year: 2024,
     vehicleClass: "sedan",
     fuelType: "hybrid",
     color: "Celestite Grey",
-    odometer: 14_760,
-    avgDailyKm: 42,
+    avgDailyKm: 23,
+    daysInService: 585,
+    readingAgeDays: 0,
     status: "active",
     assignedTo: "Sofia Reyes",
     department: "Executive Transport",
@@ -343,84 +352,6 @@ function makeVin(random: () => number) {
     { length: 17 },
     () => VIN_CHARS[Math.floor(random() * VIN_CHARS.length)]
   ).join("");
-}
-
-/**
- * Places each task somewhere inside (or past) its interval according to the
- * vehicle's wear profile, and back-dates the matching service record.
- */
-function buildTaskState(
-  spec: VehicleSpec,
-  random: () => number,
-  today: Date
-): Record<string, TaskState> {
-  const taskState: Record<string, TaskState> = {};
-
-  // One or two intervals per "overdue" vehicle are pushed past 1.0; the rest of
-  // that vehicle's schedule stays healthy so the detail page still looks real.
-  const breachCount = spec.profile === "overdue" ? 1 + Math.floor(random() * 2) : 0;
-  const warnCount = spec.profile === "due_soon" ? 1 + Math.floor(random() * 2) : 0;
-  const breachIndexes = new Set<number>();
-  while (breachIndexes.size < breachCount + warnCount) {
-    breachIndexes.add(Math.floor(random() * SERVICE_TASKS.length));
-  }
-  const flagged = [...breachIndexes];
-  const breached = new Set(flagged.slice(0, breachCount));
-  const warned = new Set(flagged.slice(breachCount));
-
-  SERVICE_TASKS.forEach((task, index) => {
-    let progress: number;
-    if (breached.has(index)) progress = 1.05 + random() * 0.45;
-    else if (warned.has(index)) progress = 0.9 + random() * 0.08;
-    else progress = 0.12 + random() * 0.6;
-
-    const kmProgress = progress;
-    // Time rarely tracks distance exactly — nudge them apart so the "governed
-    // by" column has something to say.
-    const timeProgress = progress * (0.82 + random() * 0.34);
-
-    const lastDoneOdometer = Math.max(
-      0,
-      Math.round(spec.odometer - kmProgress * task.intervalKm)
-    );
-    const elapsedDays = Math.round(timeProgress * task.intervalMonths * 30.44);
-
-    taskState[task.id] = {
-      lastDoneOdometer,
-      lastDoneOn: iso(subDays(today, elapsedDays)),
-    };
-  });
-
-  return taskState;
-}
-
-function buildVehicles(today: Date): Vehicle[] {
-  return VEHICLE_SPECS.map((spec, index) => {
-    const random = mulberry32(1000 + index * 37);
-    const ageYears = today.getFullYear() - spec.year;
-
-    return {
-      id: `veh-${String(index + 1).padStart(3, "0")}`,
-      plateNumber: spec.plateNumber,
-      make: spec.make,
-      model: spec.model,
-      year: spec.year,
-      vin: makeVin(random),
-      vehicleClass: spec.vehicleClass,
-      fuelType: spec.fuelType,
-      color: spec.color,
-      odometer: spec.odometer,
-      avgDailyKm: spec.avgDailyKm,
-      status: spec.status,
-      assignedTo: spec.assignedTo,
-      department: spec.department,
-      location: spec.location,
-      acquiredOn: iso(subDays(today, ageYears * 365 + Math.floor(random() * 200))),
-      registrationExpiry: iso(addDays(today, Math.floor(random() * 330) - 30)),
-      insuranceExpiry: iso(addDays(today, Math.floor(random() * 300) + 20)),
-      taskState: buildTaskState(spec, random, today),
-    } satisfies Vehicle;
-  });
 }
 
 interface CatalogueEntry {
@@ -559,221 +490,360 @@ const CORRECTIVE_JOBS: { title: string; priority: Priority }[] = [
   { title: "Power window regulator failure", priority: "medium" },
 ];
 
-function buildWorkOrders(vehicles: Vehicle[], today: Date): WorkOrder[] {
+/* -------------------------------------------------------------- vehicles */
+
+interface BuiltVehicle {
+  vehicle: Vehicle;
+  spec: VehicleSpec;
+  acquiredOn: Date;
+  /** Every service the vehicle has had, oldest first. */
+  history: ServiceEvent[];
+}
+
+interface ServiceEvent {
+  taskId: string;
+  odometer: number;
+  on: Date;
+}
+
+/**
+ * Walks a vehicle's mileage from delivery to today and records a service each
+ * time an interval comes round.
+ *
+ * Deriving history from the mileage model is what makes it believable: a service
+ * can only appear at a distance the vehicle had actually covered by that date,
+ * so a 60,000 km transmission service can never land at 11,907 km the way the
+ * previous randomly-generated history allowed.
+ */
+function buildHistory(
+  spec: VehicleSpec,
+  odometer: number,
+  acquiredOn: Date,
+  random: () => number
+): { history: ServiceEvent[]; taskState: Record<string, TaskState> } {
+  const history: ServiceEvent[] = [];
+  const taskState: Record<string, TaskState> = {};
+
+  const dayForOdometer = (km: number) =>
+    addDays(acquiredOn, Math.round(km / spec.avgDailyKm));
+
+  const spacingFor = (task: (typeof SERVICE_TASKS)[number]) =>
+    Math.min(task.intervalKm, task.intervalMonths * 30.44 * spec.avgDailyKm);
+
+  // One or two intervals per non-healthy vehicle get their most recent service
+  // withheld; the rest of that vehicle's schedule stays current so the detail
+  // page still looks like a real unit rather than a wreck.
+  //
+  // Only intervals the vehicle has actually reached are eligible. Withholding a
+  // service on a 60,000 km item from a unit with 44,000 km on the clock cannot
+  // produce a breach — the baseline would clamp to delivery — so flagging those
+  // silently does nothing.
+  const eligible = SERVICE_TASKS.filter(
+    (task) => spacingFor(task) * 1.5 < odometer
+  );
+  const flaggedCount =
+    spec.profile === "healthy" || eligible.length === 0
+      ? 0
+      : 1 + Math.floor(random() * 2);
+  const flagged = new Set<string>();
+  while (flagged.size < Math.min(flaggedCount, eligible.length)) {
+    flagged.add(eligible[Math.floor(random() * eligible.length)].id);
+  }
+
+  for (const task of SERVICE_TASKS) {
+    // The interval falls due on whichever limit arrives first, so the effective
+    // spacing is the shorter of the two expressed in kilometres.
+    const spacing = spacingFor(task);
+    const completedCycles = Math.floor(odometer / spacing);
+
+    const isFlagged = flagged.has(task.id);
+    // An overdue unit skipped its most recent due service outright; a due-soon
+    // one had its last service slightly early. Both are ordinary fleet
+    // behaviour, and both keep every recorded service at a distance the vehicle
+    // had genuinely covered.
+    const cyclesToRecord =
+      isFlagged && spec.profile === "overdue"
+        ? completedCycles - 1
+        : completedCycles;
+
+    for (let cycle = 1; cycle <= cyclesToRecord; cycle++) {
+      // Vehicles come in when a bay is free, not on the exact kilometre. The
+      // spread also keeps services from landing in lockstep across the fleet,
+      // which would make the cost trend lurch between empty and enormous months.
+      const jitter = Math.round((random() - 0.5) * spacing * 0.22);
+      const at = Math.min(
+        odometer,
+        Math.max(0, Math.round(cycle * spacing + jitter))
+      );
+      history.push({ taskId: task.id, odometer: at, on: dayForOdometer(at) });
+    }
+
+    const lastRecorded = [...history]
+      .reverse()
+      .find((event) => event.taskId === task.id);
+
+    let lastDoneOdometer = lastRecorded?.odometer ?? 0;
+
+    if (isFlagged && spec.profile === "due_soon" && lastRecorded) {
+      // Nudge the most recent service earlier so the interval sits just inside
+      // the warning band rather than wherever the cycle happened to land.
+      const target = Math.max(
+        0,
+        Math.round(odometer - spacing * (0.9 + random() * 0.08))
+      );
+      lastRecorded.odometer = target;
+      lastRecorded.on = dayForOdometer(target);
+      lastDoneOdometer = target;
+    }
+
+    taskState[task.id] = {
+      lastDoneOdometer,
+      lastDoneOn: iso(
+        lastDoneOdometer > 0 ? dayForOdometer(lastDoneOdometer) : acquiredOn
+      ),
+    };
+  }
+
+  history.sort((a, b) => a.odometer - b.odometer);
+  return { history, taskState };
+}
+
+function buildVehicles(today: Date): BuiltVehicle[] {
+  return VEHICLE_SPECS.map((spec, index) => {
+    const random = mulberry32(1000 + index * 37);
+
+    const acquiredOn = subDays(today, spec.daysInService);
+    // Derived, not stated — see the note on VehicleSpec.
+    const odometer = Math.round(spec.avgDailyKm * spec.daysInService);
+    const odometerReadAt = subDays(today, spec.readingAgeDays);
+    // The reading is what was on the clock when it was taken.
+    const readingOdometer = Math.round(
+      odometer - spec.readingAgeDays * spec.avgDailyKm
+    );
+
+    const { history, taskState } = buildHistory(
+      spec,
+      readingOdometer,
+      acquiredOn,
+      random
+    );
+
+    const vehicle: Vehicle = {
+      id: `veh-${String(index + 1).padStart(3, "0")}`,
+      plateNumber: spec.plateNumber,
+      make: spec.make,
+      model: spec.model,
+      year: acquiredOn.getFullYear(),
+      vin: makeVin(random),
+      vehicleClass: spec.vehicleClass,
+      fuelType: spec.fuelType,
+      color: spec.color,
+      odometer: readingOdometer,
+      odometerReadAt: iso(odometerReadAt),
+      avgDailyKm: spec.avgDailyKm,
+      status: spec.status,
+      assignedTo: spec.assignedTo,
+      department: spec.department,
+      location: spec.location,
+      acquiredOn: iso(acquiredOn),
+      registrationExpiry: iso(addDays(today, Math.floor(random() * 330) - 30)),
+      insuranceExpiry: iso(addDays(today, Math.floor(random() * 300) + 20)),
+      taskState,
+    };
+
+    return { vehicle, spec, acquiredOn, history };
+  });
+}
+
+/* ----------------------------------------------------------- work orders */
+
+const TASK_BY_ID = new Map(SERVICE_TASKS.map((task) => [task.id, task]));
+
+function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
   const orders: WorkOrder[] = [];
   const random = mulberry32(90210);
   let counter = 1;
+  let historySeq = 1;
 
-  const push = (order: Omit<WorkOrder, "id" | "reference">) => {
-    const id = `wo-${String(counter).padStart(4, "0")}`;
+  /**
+   * Synthesizes a plausible status history from data the order already
+   * carries — every job starts `open`, then optionally moves through
+   * `in_progress` before landing on its current status.
+   */
+  const buildHistory = (
+    openedOn: Date,
+    status: WorkOrder["status"],
+    actor: string,
+    endsOn?: Date
+  ): WorkOrderEvent[] => {
+    const events: WorkOrderEvent[] = [
+      { id: `hist-${historySeq++}`, status: "open", at: openedOn.toISOString(), actor },
+    ];
+    if (status !== "open") {
+      events.push({
+        id: `hist-${historySeq++}`,
+        status,
+        at: (endsOn ?? openedOn).toISOString(),
+        actor,
+      });
+    }
+    return events;
+  };
+
+  const push = (draft: Omit<WorkOrder, "id" | "reference">) => {
     orders.push({
-      ...order,
-      id,
+      ...draft,
+      id: `wo-${String(counter).padStart(4, "0")}`,
       reference: `WO-${today.getFullYear()}-${String(counter).padStart(4, "0")}`,
     });
     counter += 1;
   };
 
-  // Twelve months of completed history — this is what the cost trend reads from.
-  for (let monthsAgo = 11; monthsAgo >= 0; monthsAgo--) {
-    // Dates are drawn inside the calendar month itself rather than by 30-day
-    // arithmetic, which would otherwise push most of "this month" back into the
-    // previous bucket and leave the current month reading zero.
-    const monthStart = startOfMonth(subMonths(today, monthsAgo));
-    const monthEnd = monthsAgo === 0 ? today : endOfMonth(monthStart);
-    const spanDays = differenceInCalendarDays(monthEnd, monthStart);
+  const historyWindowStart = subDays(today, 365);
 
-    let perMonth = 3 + Math.floor(random() * 4);
-    if (monthsAgo === 0) {
-      // The current month is only partly elapsed; scale the volume to match.
-      const elapsed = (spanDays + 1) / differenceInCalendarDays(
-        endOfMonth(monthStart),
-        monthStart
+  // Closed preventive work comes straight from the service history, so the
+  // work-order ledger and the vehicles' PMS baselines describe the same events.
+  for (const { vehicle, history } of built) {
+    for (const event of history) {
+      if (event.on < historyWindowStart) continue;
+      const task = TASK_BY_ID.get(event.taskId);
+      if (!task) continue;
+
+      const parts = buildParts(
+        PART_CATALOGUE[task.id] ?? [],
+        random,
+        `h${counter}`
       );
-      perMonth = Math.max(1, Math.round(perMonth * elapsed));
-    }
-
-    for (let n = 0; n < perMonth; n++) {
-      const vehicle = vehicles[Math.floor(random() * vehicles.length)];
-      const completedOn = addDays(
-        monthStart,
-        Math.floor(random() * (spanDays + 1))
-      );
-      const daysAgo = Math.max(0, differenceInCalendarDays(today, completedOn));
-      const isCorrective = random() < 0.32;
-      const task = SERVICE_TASKS[Math.floor(random() * SERVICE_TASKS.length)];
-      const job = CORRECTIVE_JOBS[Math.floor(random() * CORRECTIVE_JOBS.length)];
-
-      const catalogue = isCorrective
-        ? pickSome(GENERIC_PARTS, 1 + Math.floor(random() * 3), random)
-        : (PART_CATALOGUE[task.id] ?? []);
-      const parts = buildParts(catalogue, random, `h${counter}`);
-      const partsCost = partsTotal(parts);
-
-      const laborCost = isCorrective
-        ? Math.round((800 + random() * 4_500) / 50) * 50
-        : Math.round((task.estimatedHours * 650 * (0.85 + random() * 0.4)) / 50) * 50;
+      const laborCost =
+        Math.round(
+          (task.estimatedHours * LABOR_RATE_PER_HOUR * (0.85 + random() * 0.4)) / 50
+        ) * 50;
+      const technician = TECHNICIANS[Math.floor(random() * TECHNICIANS.length)];
+      const openedOnDate = subDays(event.on, 1 + Math.floor(random() * 3));
 
       push({
         vehicleId: vehicle.id,
-        title: isCorrective ? job.title : task.name,
-        type: isCorrective ? "corrective" : "preventive",
+        title: task.name,
+        type: task.id === "safety-inspection" ? "inspection" : "preventive",
         status: "completed",
-        priority: isCorrective ? job.priority : "medium",
-        openedOn: iso(subDays(completedOn, 1 + Math.floor(random() * 4))),
-        scheduledFor: iso(completedOn),
-        completedOn: iso(completedOn),
-        odometerAtService: Math.max(
-          0,
-          Math.round(vehicle.odometer - daysAgo * vehicle.avgDailyKm)
-        ),
-        technician: TECHNICIANS[Math.floor(random() * TECHNICIANS.length)],
+        priority: task.critical ? "high" : "medium",
+        openedOn: iso(openedOnDate),
+        scheduledFor: iso(event.on),
+        completedOn: iso(event.on),
+        odometerAtService: event.odometer,
+        technician,
         vendor: VENDORS[Math.floor(random() * VENDORS.length)],
         laborCost,
-        partsCost,
+        partsCost: partsTotal(parts),
         parts,
-        findings: isCorrective
-          ? CORRECTIVE_FINDINGS[Math.floor(random() * CORRECTIVE_FINDINGS.length)]
-          : PREVENTIVE_FINDINGS[Math.floor(random() * PREVENTIVE_FINDINGS.length)],
-        taskIds: isCorrective ? [] : [task.id],
-        notes: isCorrective
-          ? "Diagnosed and repaired. Road tested before release."
-          : "Completed per PMS schedule. Next interval logged.",
+        findings:
+          PREVENTIVE_FINDINGS[Math.floor(random() * PREVENTIVE_FINDINGS.length)],
+        taskIds: [task.id],
+        notes: "Completed per PMS schedule. Next interval logged.",
+        history: buildHistory(openedOnDate, "completed", technician, event.on),
       });
     }
   }
 
-  // Live board: whatever is currently open, scheduled, or on a lift.
-  const active: {
-    vehicleIndex: number;
-    status: WorkOrderStatus;
-    type: WorkOrderType;
-    priority: Priority;
-    title: string;
-    dayOffset: number;
-    taskIds: string[];
-  }[] = [
-    {
-      vehicleIndex: 2,
-      status: "in_progress",
-      type: "preventive",
-      priority: "high",
-      title: "Engine oil & filter change",
-      dayOffset: 0,
-      taskIds: ["oil-filter"],
-    },
-    {
-      vehicleIndex: 11,
-      status: "in_progress",
-      type: "corrective",
-      priority: "critical",
-      title: "Rear brake caliper seized",
-      dayOffset: 0,
-      taskIds: [],
-    },
-    {
-      vehicleIndex: 7,
-      status: "open",
-      type: "corrective",
-      priority: "critical",
-      title: "Transmission overheating under load",
-      dayOffset: 1,
-      taskIds: [],
-    },
-    {
-      vehicleIndex: 0,
-      status: "scheduled",
-      type: "preventive",
-      priority: "high",
-      title: "Brake pad & rotor inspection",
-      dayOffset: 2,
-      taskIds: ["brake-inspection"],
-    },
-    {
-      vehicleIndex: 3,
-      status: "scheduled",
-      type: "preventive",
-      priority: "medium",
-      title: "Engine oil & filter change",
-      dayOffset: 4,
-      taskIds: ["oil-filter"],
-    },
-    {
-      vehicleIndex: 9,
-      status: "scheduled",
-      type: "preventive",
-      priority: "medium",
-      title: "Tire rotation & pressure check",
-      dayOffset: 6,
-      taskIds: ["tire-rotation"],
-    },
-    {
-      vehicleIndex: 5,
-      status: "open",
-      type: "inspection",
-      priority: "medium",
-      title: "Annual roadworthiness inspection",
-      dayOffset: 9,
-      taskIds: ["safety-inspection"],
-    },
-    {
-      vehicleIndex: 1,
-      status: "scheduled",
-      type: "preventive",
-      priority: "low",
-      title: "Cabin filter replacement",
-      dayOffset: 12,
-      taskIds: ["cabin-filter"],
-    },
-  ];
+  // Unplanned repairs, roughly one per vehicle per year.
+  for (const { vehicle, spec } of built) {
+    const count = spec.profile === "healthy" ? 1 : 1 + Math.floor(random() * 2);
+    for (let i = 0; i < count; i++) {
+      const daysAgo = 20 + Math.floor(random() * 330);
+      const completedOn = subDays(today, daysAgo);
+      const job = CORRECTIVE_JOBS[Math.floor(random() * CORRECTIVE_JOBS.length)];
+      const parts = buildParts(
+        pickSome(GENERIC_PARTS, 1 + Math.floor(random() * 2), random),
+        random,
+        `c${counter}`
+      );
+      const laborCost = Math.round((900 + random() * 4_200) / 50) * 50;
+      const technician = TECHNICIANS[Math.floor(random() * TECHNICIANS.length)];
+      const openedOnDate = subDays(completedOn, 1 + Math.floor(random() * 4));
 
-  for (const entry of active) {
-    const vehicle = vehicles[entry.vehicleIndex];
-    const scheduledFor = addDays(today, entry.dayOffset);
-    const estimate = entry.taskIds
-      .map((id) => SERVICE_TASKS.find((task) => task.id === id))
-      .filter(Boolean);
-    const partsCost = estimate.length
-      ? Math.round(estimate.reduce((t, task) => t + (task?.estimatedCost ?? 0), 0))
-      : Math.round((2_000 + random() * 14_000) / 50) * 50;
-    const laborCost = estimate.length
-      ? Math.round(estimate.reduce((t, task) => t + (task?.estimatedHours ?? 0), 0) * 650)
-      : Math.round((1_200 + random() * 5_000) / 50) * 50;
+      push({
+        vehicleId: vehicle.id,
+        title: job.title,
+        type: "corrective",
+        status: "completed",
+        priority: job.priority,
+        openedOn: iso(openedOnDate),
+        scheduledFor: iso(completedOn),
+        completedOn: iso(completedOn),
+        odometerAtService: Math.max(
+          0,
+          Math.round(vehicle.odometer - daysAgo * spec.avgDailyKm)
+        ),
+        technician,
+        vendor: VENDORS[Math.floor(random() * VENDORS.length)],
+        laborCost,
+        partsCost: partsTotal(parts),
+        parts,
+        findings:
+          CORRECTIVE_FINDINGS[Math.floor(random() * CORRECTIVE_FINDINGS.length)],
+        taskIds: [],
+        notes: "Diagnosed and repaired. Road tested before release.",
+        history: buildHistory(openedOnDate, "completed", technician, completedOn),
+      });
+    }
+  }
+
+  // The live board. Derived from what is genuinely due right now, so the open
+  // jobs correspond to real breaches rather than an arbitrary hand-written list.
+  const pending = built
+    .flatMap(({ vehicle }) => {
+      const health = evaluateVehicle(vehicle, today);
+      return health.items
+        .filter((item) => item.status !== "ok")
+        .map((item) => ({ vehicle, item }));
+    })
+    .sort((a, b) => a.item.daysRemaining - b.item.daysRemaining)
+    .slice(0, 8);
+
+  pending.forEach(({ vehicle, item }, index) => {
+    const status =
+      index < 2 ? "in_progress" : index < 4 ? ("open" as const) : ("scheduled" as const);
+    const technician = TECHNICIANS[Math.floor(random() * TECHNICIANS.length)];
+    const openedOnDate = subDays(today, 1 + Math.floor(random() * 5));
 
     push({
       vehicleId: vehicle.id,
-      title: entry.title,
-      type: entry.type,
-      status: entry.status,
-      priority: entry.priority,
-      openedOn: iso(subDays(today, 1 + Math.floor(random() * 5))),
-      scheduledFor: iso(scheduledFor),
+      title: item.task.name,
+      type: item.task.id === "safety-inspection" ? "inspection" : "preventive",
+      status,
+      priority: item.status === "overdue" ? "critical" : "high",
+      openedOn: iso(openedOnDate),
+      scheduledFor: iso(addDays(today, Math.floor(index / 2))),
       completedOn: null,
       odometerAtService: vehicle.odometer,
-      technician: TECHNICIANS[Math.floor(random() * TECHNICIANS.length)],
+      technician,
       vendor: VENDORS[Math.floor(random() * VENDORS.length)],
-      laborCost,
-      partsCost,
+      laborCost: Math.round(item.task.estimatedHours * LABOR_RATE_PER_HOUR),
+      partsCost: item.task.estimatedCost,
       // Open work carries an estimate, not a record: parts and findings are
       // filled in at completion.
       parts: [],
       findings: "",
-      taskIds: entry.taskIds,
+      taskIds: [item.task.id],
+      history: buildHistory(
+        openedOnDate,
+        status,
+        technician,
+        status === "in_progress" ? today : undefined
+      ),
       notes:
-        entry.status === "in_progress"
+        status === "in_progress"
           ? "Vehicle on the lift. Parts drawn from stock."
           : "Awaiting bay slot confirmation.",
     });
-  }
+  });
 
-  return orders.sort(
-    (a, b) => parseDate(b.scheduledFor) - parseDate(a.scheduledFor)
+  return orders.sort((a, b) =>
+    (b.completedOn ?? b.scheduledFor).localeCompare(a.completedOn ?? a.scheduledFor)
   );
 }
 
-function parseDate(value: string) {
-  return new Date(value).getTime();
-}
+/* ------------------------------------------------------------- documents */
 
 /**
  * The document library. Seeded records are metadata only — `dataUrl` is null,
@@ -828,10 +898,9 @@ function buildDocuments(
     });
   }
 
-  // Invoices and reports against roughly half the closed jobs.
   const completed = orders.filter((order) => order.status === "completed");
   for (const order of completed) {
-    if (random() > 0.55) continue;
+    if (random() > 0.4) continue;
     const vehicle = vehicles.find((v) => v.id === order.vehicleId);
     const uploadedOn = order.completedOn ?? iso(today);
 
@@ -849,7 +918,7 @@ function buildDocuments(
       notes: `${order.vendor} — ${vehicle?.plateNumber ?? ""}`.trim(),
     });
 
-    if (random() > 0.5) {
+    if (random() > 0.6) {
       push({
         name: `Service report ${order.reference}.pdf`,
         kind: "service_report",
@@ -870,8 +939,9 @@ function buildDocuments(
 }
 
 export function createSeedState(today = new Date()): FleetState {
-  const vehicles = buildVehicles(today);
-  const workOrders = buildWorkOrders(vehicles, today);
+  const built = buildVehicles(today);
+  const vehicles = built.map((entry) => entry.vehicle);
+  const workOrders = buildWorkOrders(built, today);
 
   return {
     vehicles,

@@ -17,7 +17,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { PriorityBadge, WorkOrderStatusBadge } from "@/components/status";
+import {
+  PriorityBadge,
+  WORK_ORDER_STATUS_LABEL,
+  WorkOrderStatusBadge,
+} from "@/components/status";
 import { CompleteWorkOrderDialog } from "@/components/work-orders/complete-work-order-dialog";
 import { DocumentList } from "@/components/documents/document-list";
 import { UploadDocumentDialog } from "@/components/documents/upload-document-dialog";
@@ -70,14 +74,6 @@ export default function WorkOrderDetailPage({
   const attached = documents.filter((doc) => doc.workOrderId === order.id);
   const closed = order.status === "completed" || order.status === "cancelled";
   const partsCost = resolvePartsCost(order);
-
-  const timeline = [
-    { label: "Raised", date: order.openedOn },
-    { label: "Scheduled for", date: order.scheduledFor },
-    ...(order.completedOn
-      ? [{ label: "Completed", date: order.completedOn }]
-      : []),
-  ];
 
   return (
     <>
@@ -338,29 +334,38 @@ export default function WorkOrderDetailPage({
 
           <section className="card-raised p-5">
             <h3 className="text-sm font-semibold tracking-tight">Timeline</h3>
+            <p className="mt-0.5 text-2xs text-subtle-foreground">
+              Every status change, oldest first.
+            </p>
             <ol className="mt-4 space-y-3">
-              {timeline.map((entry, index) => (
-                <li key={entry.label} className="flex gap-3">
+              {order.history.map((entry, index) => (
+                <li key={entry.id} className="flex gap-3">
                   <span className="relative flex flex-col items-center">
-                    <span className="mt-1 size-2 shrink-0 rounded-full bg-brand" />
-                    {index < timeline.length - 1 ? (
+                    {entry.status === "cancelled" ? (
+                      <XCircle className="size-3.5 text-critical" />
+                    ) : (
+                      <span className="mt-1 size-2 shrink-0 rounded-full bg-brand" />
+                    )}
+                    {index < order.history.length - 1 ? (
                       <span className="mt-1 w-px flex-1 bg-border" />
                     ) : null}
                   </span>
                   <span className="pb-1">
-                    <span className="block text-xs font-medium">{entry.label}</span>
+                    <span
+                      className={
+                        entry.status === "cancelled"
+                          ? "block text-xs font-medium text-critical"
+                          : "block text-xs font-medium"
+                      }
+                    >
+                      {WORK_ORDER_STATUS_LABEL[entry.status]}
+                    </span>
                     <span className="tabular block text-2xs text-subtle-foreground">
-                      {formatDate(entry.date)}
+                      {formatDate(entry.at)} · {entry.actor}
                     </span>
                   </span>
                 </li>
               ))}
-              {order.status === "cancelled" ? (
-                <li className="flex items-center gap-2 text-xs text-critical">
-                  <XCircle className="size-3.5" />
-                  Cancelled
-                </li>
-              ) : null}
             </ol>
           </section>
         </div>

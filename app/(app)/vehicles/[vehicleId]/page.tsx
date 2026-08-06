@@ -1,12 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { Car, Gauge, HeartPulse, Wallet } from "lucide-react";
+import { Car, Clock, Gauge, HeartPulse, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Meter } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PmsStatusBadge, VehicleStatusBadge } from "@/components/status";
 import { PmsSchedule } from "@/components/vehicles/pms-schedule";
@@ -16,12 +22,13 @@ import { WorkOrderTable } from "@/components/work-orders/work-order-table";
 import { DocumentList } from "@/components/documents/document-list";
 import { UploadDocumentDialog } from "@/components/documents/upload-document-dialog";
 import { useFleet } from "@/lib/store";
-import { workOrderCost } from "@/lib/pms";
+import { isOdometerStale, odometerAgeDays, workOrderCost } from "@/lib/pms";
 import {
   formatCurrency,
   formatDate,
   formatDayDelta,
   formatKm,
+  formatRelative,
   titleCase,
 } from "@/lib/utils";
 
@@ -67,6 +74,7 @@ export default function VehicleDetailPage({
 
   const { vehicle, items, nextItem } = entry;
   const vehiclesById = new Map(vehicles.map((v) => [v.id, v]));
+  const staleReading = isOdometerStale(vehicle);
 
   const orders = workOrders
     .filter((order) => order.vehicleId === vehicle.id)
@@ -163,8 +171,17 @@ export default function VehicleDetailPage({
             {vehicle.odometer.toLocaleString("en-US")}
             <span className="ml-1 text-sm font-normal text-subtle-foreground">km</span>
           </p>
-          <p className="mt-4 text-2xs text-subtle-foreground">
-            Averaging {vehicle.avgDailyKm} km per day
+          <p className="mt-4 flex flex-wrap items-center gap-2 text-2xs text-subtle-foreground">
+            <span>
+              Averaging {vehicle.avgDailyKm} km per day · read{" "}
+              {formatRelative(vehicle.odometerReadAt)}
+            </span>
+            {staleReading ? (
+              <Badge tone="warning">
+                <Clock />
+                Stale reading
+              </Badge>
+            ) : null}
           </p>
         </div>
 
@@ -180,9 +197,24 @@ export default function VehicleDetailPage({
               <p className="mt-3 truncate text-sm font-semibold tracking-tight">
                 {nextItem.task.name}
               </p>
-              <p className="tabular mt-1 text-xs text-muted-foreground">
-                {formatDate(nextItem.dueDate)} · {formatDayDelta(nextItem.daysRemaining)}
-              </p>
+              {staleReading ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="tabular mt-1 text-xs text-subtle-foreground">
+                      {formatDate(nextItem.dueDate)} ·{" "}
+                      {formatDayDelta(nextItem.daysRemaining)}
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Projection based on a reading {odometerAgeDays(vehicle)} days
+                    old.
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <p className="tabular mt-1 text-xs text-muted-foreground">
+                  {formatDate(nextItem.dueDate)} · {formatDayDelta(nextItem.daysRemaining)}
+                </p>
+              )}
               <Meter
                 className="mt-3"
                 value={nextItem.progress}
@@ -255,7 +287,7 @@ export default function VehicleDetailPage({
               </p>
             </header>
             <div className="border-t border-border">
-              <PmsSchedule vehicle={vehicle} items={items} />
+              <PmsSchedule vehicle={vehicle} items={items} isStale={staleReading} />
             </div>
           </section>
         </TabsContent>

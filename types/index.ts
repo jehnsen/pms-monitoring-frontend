@@ -40,6 +40,12 @@ export interface Vehicle {
   color: string;
   /** Current odometer reading, in kilometres. */
   odometer: number;
+  /**
+   * When that reading was taken. Readings are not always same-day, so distance
+   * projections roll the odometer forward from here rather than assuming it is
+   * current.
+   */
+  odometerReadAt: string;
   /** Rolling average distance per day, used to project km-based intervals onto a date. */
   avgDailyKm: number;
   status: VehicleOperationalStatus;
@@ -80,6 +86,19 @@ export interface ServiceTask {
   critical: boolean;
 }
 
+/**
+ * One entry in a work order's status history. Append-only — nothing ever
+ * edits or removes an entry, so the record can't drift from what actually
+ * happened.
+ */
+export interface WorkOrderEvent {
+  id: string;
+  status: WorkOrderStatus;
+  /** ISO datetime. */
+  at: string;
+  actor: string;
+}
+
 /** One line on a work order's parts list. */
 export interface PartLine {
   id: string;
@@ -117,6 +136,8 @@ export interface WorkOrder {
   /** Task template ids covered by this order. */
   taskIds: string[];
   notes: string;
+  /** Every status change, oldest first — append-only. */
+  history: WorkOrderEvent[];
 }
 
 /** A single computed PMS item for one vehicle — the output of the due engine. */

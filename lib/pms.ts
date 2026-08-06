@@ -1,5 +1,4 @@
 import {
-  addDays,
   addMonths,
   differenceInCalendarDays,
   formatISO,
@@ -14,13 +13,25 @@ import type {
   WorkOrder,
 } from "@/types";
 import { SERVICE_TASKS } from "@/lib/service-tasks";
+import { computeIntervalStatus, DUE_SOON_DAYS, DUE_SOON_KM } from "@/lib/interval-status";
 import { clamp } from "@/lib/utils";
 
-/** A task enters the warning band this far ahead of either limit. */
-export const DUE_SOON_KM = 750;
-export const DUE_SOON_DAYS = 21;
+// Re-exported so callers keep importing thresholds from the domain module.
+export { DUE_SOON_KM, DUE_SOON_DAYS };
 
-const DAYS_PER_MONTH = 30.44;
+/** Past this many days, a reading is old enough that projections should say so. */
+export const ODOMETER_STALE_DAYS = 14;
+
+export function odometerAgeDays(vehicle: Vehicle, today = new Date()) {
+  return Math.max(
+    0,
+    differenceInCalendarDays(today, parseISO(vehicle.odometerReadAt))
+  );
+}
+
+export function isOdometerStale(vehicle: Vehicle, today = new Date()) {
+  return odometerAgeDays(vehicle, today) > ODOMETER_STALE_DAYS;
+}
 
 function toISODate(date: Date) {
   return formatISO(date, { representation: "date" });
@@ -29,9 +40,9 @@ function toISODate(date: Date) {
 /**
  * Resolves one PMS item for one vehicle.
  *
- * Distance and time limits run in parallel and the item is due on whichever
- * arrives first, so the distance limit is projected onto the calendar using the
- * vehicle's rolling daily average before the two are compared.
+ * The projection itself lives in `computeIntervalStatus` — a pure function with
+ * its own tests. This wrapper only adapts vehicle records to that contract and
+ * maps the result onto the shape the UI consumes.
  */
 export function evaluateTask(
   vehicle: Vehicle,
@@ -43,42 +54,31 @@ export function evaluateTask(
     lastDoneOn: toISODate(addMonths(today, -task.intervalMonths)),
   };
 
-  const dueOdometer = state.lastDoneOdometer + task.intervalKm;
-  const kmRemaining = dueOdometer - vehicle.odometer;
-
-  const dailyKm = Math.max(vehicle.avgDailyKm, 1);
-  const daysFromDistance = Math.round(kmRemaining / dailyKm);
-
-  const timeDueDate = addMonths(parseISO(state.lastDoneOn), task.intervalMonths);
-  const daysFromTime = differenceInCalendarDays(timeDueDate, today);
-
-  const governedBy = daysFromDistance <= daysFromTime ? "distance" : "time";
-  const daysRemaining = Math.min(daysFromDistance, daysFromTime);
-  const dueDate =
-    governedBy === "distance" ? addDays(today, daysFromDistance) : timeDueDate;
-
-  const distanceProgress =
-    (vehicle.odometer - state.lastDoneOdometer) / task.intervalKm;
-  const elapsedDays = differenceInCalendarDays(
+  const result = computeIntervalStatus({
+    lastCompletedAt: parseISO(state.lastDoneOn),
+    lastCompletedOdometer: state.lastDoneOdometer,
+    distanceIntervalKm: task.intervalKm,
+    timeIntervalMonths: task.intervalMonths,
+    currentOdometer: vehicle.odometer,
+    currentOdometerReadAt: parseISO(
+      vehicle.odometerReadAt ?? toISODate(today)
+    ),
+    avgKmPerDay: vehicle.avgDailyKm,
     today,
-    parseISO(state.lastDoneOn)
-  );
-  const timeProgress = elapsedDays / (task.intervalMonths * DAYS_PER_MONTH);
+  });
 
-  let status: PmsStatus = "ok";
-  if (kmRemaining <= 0 || daysRemaining <= 0) status = "overdue";
-  else if (kmRemaining <= DUE_SOON_KM || daysRemaining <= DUE_SOON_DAYS)
-    status = "due_soon";
+  const status: PmsStatus =
+    result.status === "on_schedule" ? "ok" : result.status;
 
   return {
     task,
     status,
-    kmRemaining,
-    daysRemaining,
-    progress: Math.max(distanceProgress, timeProgress, 0),
-    dueOdometer,
-    dueDate: toISODate(dueDate),
-    governedBy,
+    kmRemaining: result.kmRemaining,
+    daysRemaining: result.daysRemaining,
+    progress: result.progress,
+    dueOdometer: result.distanceDueAt,
+    dueDate: toISODate(result.projectedDue),
+    governedBy: result.governedBy,
     lastDoneOn: state.lastDoneOn,
     lastDoneOdometer: state.lastDoneOdometer,
   };
@@ -200,6 +200,10 @@ export function applyCompletion(vehicle: Vehicle, order: WorkOrder): Vehicle {
     ...vehicle,
     taskState,
     odometer: Math.max(vehicle.odometer, order.odometerAtService),
+    // Closing the job is itself a fresh reading — the odometer above was
+    // read at the moment of service, not left over from whenever it was
+    // last logged.
+    odometerReadAt: order.completedOn ?? toISODate(new Date()),
     status: "active",
   };
 }
