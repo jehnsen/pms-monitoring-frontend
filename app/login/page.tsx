@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { CalendarClock, GaugeCircle, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CalendarClock, GaugeCircle, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/layout/logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { LoginForm } from "@/components/auth/login-form";
@@ -81,6 +82,14 @@ export default function LoginPage({
               );
             })}
           </ul>
+
+          <Link
+            href="/workflow"
+            className="mt-8 inline-flex items-center gap-1.5 text-xs font-medium text-white/80 transition-colors hover:text-white"
+          >
+            See how the whole workflow fits together
+            <ArrowRight className="size-3.5" />
+          </Link>
         </div>
 
         <p className="relative mt-auto pt-10 text-2xs text-white/50">
