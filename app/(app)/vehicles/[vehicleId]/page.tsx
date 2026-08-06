@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PmsStatusBadge, VehicleStatusBadge } from "@/components/status";
 import { PmsSchedule } from "@/components/vehicles/pms-schedule";
 import { OdometerDialog } from "@/components/vehicles/odometer-dialog";
+import { VehicleFormDialog } from "@/components/vehicles/vehicle-form-dialog";
 import { NewWorkOrderDialog } from "@/components/work-orders/new-work-order-dialog";
 import { WorkOrderTable } from "@/components/work-orders/work-order-table";
 import { DocumentList } from "@/components/documents/document-list";
@@ -391,10 +392,11 @@ export default function VehicleDetailPage({
 
         <TabsContent value="details">
           <section className="card-raised">
-            <header className="px-5 pb-3 pt-4">
+            <header className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3 pt-4">
               <h3 className="text-sm font-semibold tracking-tight">
                 Specification & assignment
               </h3>
+              <VehicleFormDialog vehicle={vehicle} />
             </header>
             <dl className="grid gap-x-6 gap-y-4 border-t border-border px-5 py-5 sm:grid-cols-2 lg:grid-cols-3">
               {specs.map((spec) => (

@@ -13,6 +13,7 @@ import type {
   PurchaseOrder,
   PurchaseOrderLine,
   PurchaseOrderStatus,
+  TaskState,
   TenantSettings,
   Vehicle,
   WorkOrder,
@@ -20,6 +21,7 @@ import type {
   WorkOrderLine,
 } from "@/types";
 import { createSeedState } from "@/lib/seed";
+import { SERVICE_TASKS } from "@/lib/service-tasks";
 import { applyCompletion, evaluateFleet, summariseFleet } from "@/lib/pms";
 import { buildAlerts, viewAlerts } from "@/lib/alerts";
 import { useSession } from "@/lib/auth";
@@ -253,6 +255,9 @@ function workOrderEvent(status: WorkOrder["status"], actor: string): WorkOrderEv
 function approvalLogId() {
   return `log-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
+
+/** What a caller supplies for a new vehicle — the id and service history are the store's to set. */
+export type NewVehicleDraft = Omit<Vehicle, "id" | "taskState">;
 
 /** What a caller supplies for a new line — the approval fields are the store's to set. */
 export type NewWorkOrderLine = Pick<
@@ -552,6 +557,29 @@ export function useFleetActions() {
     }));
   }, []);
 
+  /**
+   * A new vehicle enters the fleet with a clean slate: every tracked interval
+   * is seeded as "just done" at its starting odometer, so the PMS engine has
+   * a baseline to project from instead of reading every task as overdue.
+   */
+  const addVehicle = useCallback((draft: NewVehicleDraft): Vehicle | null => {
+    let created: Vehicle | null = null;
+    setState((current) => {
+      const now = formatISO(new Date(), { representation: "date" });
+      const taskState: Record<string, TaskState> = {};
+      for (const task of SERVICE_TASKS) {
+        taskState[task.id] = { lastDoneOdometer: draft.odometer, lastDoneOn: now };
+      }
+      created = {
+        ...draft,
+        id: `veh-${Date.now().toString(36)}`,
+        taskState,
+      };
+      return { ...current, vehicles: [created, ...current.vehicles] };
+    });
+    return created;
+  }, []);
+
   const addDocument = useCallback(
     (draft: Omit<FleetDocument, "id" | "uploadedOn">) => {
       if (draft.sizeBytes > MAX_DOCUMENT_BYTES) {
@@ -729,6 +757,7 @@ export function useFleetActions() {
     scheduleWorkOrder,
     completeWorkOrder,
     updateVehicle,
+    addVehicle,
     addDocument,
     deleteDocument,
     markAlertsRead,

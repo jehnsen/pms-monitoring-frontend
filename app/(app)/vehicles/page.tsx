@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { VehicleCard } from "@/components/vehicles/vehicle-card";
 import { VehicleTable } from "@/components/vehicles/vehicle-table";
 import { NewWorkOrderDialog } from "@/components/work-orders/new-work-order-dialog";
+import { VehicleFormDialog } from "@/components/vehicles/vehicle-form-dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -186,7 +187,12 @@ export default function VehiclesPage() {
       <PageHeader
         title="Vehicles"
         description="Every unit in the fleet with its current odometer, operational state, and nearest service interval."
-        actions={<NewWorkOrderDialog />}
+        actions={
+          <>
+            <VehicleFormDialog />
+            <NewWorkOrderDialog />
+          </>
+        }
       />
       <Suspense fallback={<Skeleton className="h-96" />}>
         <VehiclesView />

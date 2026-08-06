@@ -28,7 +28,7 @@ export interface DemoAccount {
 /** One account per role, so every permission level can be demonstrated. */
 export const DEMO_ACCOUNTS: DemoAccount[] = [
   {
-    email: "fleet@mekanikomore.ph",
+    email: "fleet@mekanikomor.ph",
     password: "demo1234",
     name: "Mike Manabat",
     role: "fleet_manager",
@@ -49,7 +49,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     title: "Lead Technician",
   },
   {
-    email: "purchasing@mekanikomore.ph",
+    email: "purchasing@mekanikomor.ph",
     password: "demo1234",
     name: "Grace Villanueva",
     role: "purchasing_officer",

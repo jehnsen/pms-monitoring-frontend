@@ -199,6 +199,20 @@ export function LoginForm({ next }: { next?: string }) {
             <dd className="tabular font-medium">{PRIMARY_ACCOUNT.password}</dd>
           </div>
         </dl>
+
+        <hr />
+
+        <dl className="mt-2 space-y-1 text-xs">
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-subtle-foreground">Email</dt>
+            <dd className="tabular font-medium">purchasing@mekanikomor.ph</dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-subtle-foreground">Password</dt>
+            <dd className="tabular font-medium">{PRIMARY_ACCOUNT.password}</dd>
+          </div>
+        </dl>
+
         <Button
           variant="secondary"
           size="sm"

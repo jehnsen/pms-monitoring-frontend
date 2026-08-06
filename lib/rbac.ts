@@ -19,6 +19,7 @@ export type { UserRole };
 
 export type Capability =
   | "vehicle:update"
+  | "vehicle:manage"
   | "workorder:create"
   | "workorder:update"
   | "workorder:complete"
@@ -62,6 +63,7 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
   purchasing_officer: ["workorder:approve", "po:issue", "document:upload"],
   operations: [
     "vehicle:update",
+    "vehicle:manage",
     "workorder:create",
     "workorder:update",
     "workorder:complete",
@@ -70,6 +72,7 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
   ],
   fleet_manager: [
     "vehicle:update",
+    "vehicle:manage",
     "workorder:create",
     "workorder:update",
     "workorder:complete",
@@ -84,6 +87,7 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
 
 export const ALL_CAPABILITIES: Capability[] = [
   "vehicle:update",
+  "vehicle:manage",
   "workorder:create",
   "workorder:update",
   "workorder:complete",
@@ -97,6 +101,7 @@ export const ALL_CAPABILITIES: Capability[] = [
 
 export const CAPABILITY_LABEL: Record<Capability, string> = {
   "vehicle:update": "Log odometer readings",
+  "vehicle:manage": "Add and edit vehicle records",
   "workorder:create": "Raise work orders",
   "workorder:update": "Update job status",
   "workorder:complete": "Close work orders",
