@@ -105,8 +105,8 @@ function TrackPanel() {
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-3">
         <div
-          className="h-full rounded-full bg-warning transition-[width] duration-[1100ms] ease-out"
-          style={{ width: `${pct}%` }}
+          className="h-full rounded-full bg-warning"
+          style={{ width: `${pct}%`, transition: "width 1100ms ease-out" }}
         />
       </div>
       <div className="mt-3 grid grid-cols-2 gap-3 text-2xs">
@@ -155,8 +155,8 @@ function DetectPanel() {
       </p>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-3">
         <div
-          className="h-full rounded-full bg-critical transition-[width] duration-[1300ms] ease-out"
-          style={{ width: `${score}%` }}
+          className="h-full rounded-full bg-critical"
+          style={{ width: `${score}%`, transition: "width 1300ms ease-out" }}
         />
       </div>
       <div

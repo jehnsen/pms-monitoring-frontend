@@ -1,11 +1,10 @@
 "use client";
 
-import { Check, Minus, ShieldCheck, UserCheck } from "lucide-react";
+import { Check, Lock, Minus, ShieldCheck, UserCheck } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
-import { DeniedAction } from "@/components/auth/denied-action";
 import { DEMO_ACCOUNTS, useAuthActions, useSession } from "@/lib/auth";
 import {
   ALL_CAPABILITIES,
@@ -164,7 +163,9 @@ export default function AccessPage() {
               Permission matrix
             </h3>
             <p className="mt-0.5 text-xs text-subtle-foreground">
-              Every capability the application checks, and which roles hold it.
+              {can("access:manage")
+                ? "Every capability the application checks, and which roles hold it."
+                : "Who holds which capability — visible to the Fleet Manager role only."}
             </p>
           </div>
           {can("access:manage") ? (
@@ -173,70 +174,79 @@ export default function AccessPage() {
               You can manage access
             </Badge>
           ) : (
-            <DeniedAction reason={reason("access:manage")}>
-              <Badge tone="neutral" size="md">
-                Read-only view
-              </Badge>
-            </DeniedAction>
+            <Badge tone="neutral" size="md">
+              <Lock />
+              Fleet Manager only
+            </Badge>
           )}
         </header>
 
-        <div className="overflow-x-auto border-t border-border">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase tracking-wider text-subtle-foreground">
-                  Capability
-                </th>
-                {ROLE_ORDER.map((role) => (
-                  <th
-                    key={role}
-                    className="px-3 py-2.5 text-center text-2xs font-semibold uppercase tracking-wider text-subtle-foreground"
-                  >
-                    {ROLE_LABEL[role]}
+        {can("access:manage") ? (
+          <div className="overflow-x-auto border-t border-border">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase tracking-wider text-subtle-foreground">
+                    Capability
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {ALL_CAPABILITIES.map((capability) => (
-                <tr key={capability} className="hover:bg-surface-2/50">
-                  <td className="px-4 py-2.5">
-                    <span className="text-xs font-medium">
-                      {CAPABILITY_LABEL[capability]}
-                    </span>
-                    <span className="tabular mt-0.5 block text-2xs text-subtle-foreground">
-                      {capability}
-                    </span>
-                  </td>
-                  {ROLE_ORDER.map((role) => {
-                    const granted = ROLE_CAPABILITIES[role].includes(capability);
-                    return (
-                      <td key={role} className="px-3 py-2.5 text-center">
-                        {/* Icon plus a text label for screen readers — never a
-                            bare colour or glyph carrying the meaning alone. */}
-                        {granted ? (
-                          <>
-                            <Check className="mx-auto size-4 text-ok" aria-hidden />
-                            <span className="sr-only">Granted</span>
-                          </>
-                        ) : (
-                          <>
-                            <Minus
-                              className="mx-auto size-4 text-border-strong"
-                              aria-hidden
-                            />
-                            <span className="sr-only">Not granted</span>
-                          </>
-                        )}
-                      </td>
-                    );
-                  })}
+                  {ROLE_ORDER.map((role) => (
+                    <th
+                      key={role}
+                      className="px-3 py-2.5 text-center text-2xs font-semibold uppercase tracking-wider text-subtle-foreground"
+                    >
+                      {ROLE_LABEL[role]}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {ALL_CAPABILITIES.map((capability) => (
+                  <tr key={capability} className="hover:bg-surface-2/50">
+                    <td className="px-4 py-2.5">
+                      <span className="text-xs font-medium">
+                        {CAPABILITY_LABEL[capability]}
+                      </span>
+                      <span className="tabular mt-0.5 block text-2xs text-subtle-foreground">
+                        {capability}
+                      </span>
+                    </td>
+                    {ROLE_ORDER.map((role) => {
+                      const granted = ROLE_CAPABILITIES[role].includes(capability);
+                      return (
+                        <td key={role} className="px-3 py-2.5 text-center">
+                          {/* Icon plus a text label for screen readers — never a
+                              bare colour or glyph carrying the meaning alone. */}
+                          {granted ? (
+                            <>
+                              <Check className="mx-auto size-4 text-ok" aria-hidden />
+                              <span className="sr-only">Granted</span>
+                            </>
+                          ) : (
+                            <>
+                              <Minus
+                                className="mx-auto size-4 text-border-strong"
+                                aria-hidden
+                              />
+                              <span className="sr-only">Not granted</span>
+                            </>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 border-t border-border px-5 py-14 text-center">
+            <Lock className="size-5 text-subtle-foreground" />
+            <p className="text-sm font-medium">Restricted to the Fleet Manager role</p>
+            <p className="max-w-sm text-xs leading-relaxed text-subtle-foreground">
+              {reason("access:manage")}
+            </p>
+          </div>
+        )}
       </section>
     </>
   );
