@@ -1,13 +1,112 @@
 /**
  * Lives here rather than in `lib/rbac.ts` so `lib/auth.ts` can type a session's
  * role without importing the RBAC module, which imports auth in turn.
+ *
+ * Roles split by which side of the tenancy boundary they sit on. A client-side
+ * role is always scoped to exactly one `FleetClient`; a provider-side role sees
+ * every client beneath its `Provider`. See `lib/tenancy.ts`.
  */
-export type UserRole =
+export type ClientUserRole =
   | "fleet_manager"
   | "operations"
   | "technician"
   | "purchasing_officer"
   | "viewer";
+
+export type ProviderUserRole =
+  | "provider_admin"
+  | "service_advisor"
+  | "provider_technician";
+
+export type UserRole = ClientUserRole | ProviderUserRole;
+
+/* --------------------------------------------------------------- tenancy */
+
+/**
+ * The service centre operating this instance. One provider serves many fleet
+ * clients; it is the root of the tenancy tree.
+ */
+export interface Provider {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  /** Hex, e.g. "#1d5ba6". */
+  brandColor: string;
+  supportEmail: string;
+  createdAt: string;
+}
+
+export type FleetClientStatus = "active" | "suspended";
+
+/**
+ * One fleet operator served by a provider. Every vehicle belongs to exactly one
+ * of these, and it is the unit of data isolation — a client-side user never
+ * sees across this boundary, not even to a sibling under the same provider.
+ */
+export interface FleetClient {
+  id: string;
+  providerId: string;
+  name: string;
+  slug: string;
+  contactName: string;
+  contactEmail: string;
+  contractTerms: string;
+  paymentTermsDays: number;
+  /** Per-client approval band overrides; null falls back to the provider's. */
+  approvalThresholdOverrides: Partial<ApprovalSettings> | null;
+  /**
+   * Client-side branding. Null on either field falls back to the provider's,
+   * so a client that hasn't supplied a mark still gets a coherent shell rather
+   * than a blank one.
+   */
+  logoUrl: string | null;
+  brandColor: string | null;
+  status: FleetClientStatus;
+  createdAt: string;
+}
+
+/**
+ * A service bay on the provider's floor. Static catalogue rather than stored
+ * state — bays are a property of the building, and nothing in the app creates
+ * or retires one. See `lib/bays.ts`.
+ */
+export interface Bay {
+  id: string;
+  name: string;
+  /** What the bay specialises in; advisory when assigning, never enforced. */
+  focus: string;
+  /** Working hours the bay can absorb in one day — the denominator for utilisation. */
+  capacityHoursPerDay: number;
+}
+
+/** A technician on the provider's staff. Static catalogue; see `lib/technicians.ts`. */
+export interface Technician {
+  /** Matches `WorkOrder.technician`, which stores the name rather than an id. */
+  name: string;
+  specialty: TaskCategory | "general";
+  /** Bay this technician normally works out of. */
+  homeBayId: string;
+}
+
+/**
+ * The signed-in user. A provider-side user carries `providerId` with
+ * `fleetClientId` null; a client-side user carries both. Any other combination
+ * is ambiguous and `resolveTenantScope` fails closed on it.
+ *
+ * Lives here rather than in `lib/auth.ts` so `lib/tenancy.ts` can type a
+ * session without importing the auth module.
+ */
+export interface Session {
+  email: string;
+  name: string;
+  role: UserRole;
+  /** Job title for display; `role` is what permissions key off. */
+  title: string;
+  signedInAt: string;
+  providerId: string | null;
+  fleetClientId: string | null;
+}
 
 export type VehicleOperationalStatus = "active" | "in_service" | "down";
 
@@ -47,6 +146,11 @@ export type FuelType = "gasoline" | "diesel" | "hybrid" | "electric";
 
 export interface Vehicle {
   id: string;
+  /**
+   * The tenancy anchor. Work orders and PMS intervals derive their client from
+   * here rather than carrying a copy — one unambiguous hop, no denormalisation.
+   */
+  fleetClientId: string;
   plateNumber: string;
   make: string;
   model: string;
@@ -159,6 +263,7 @@ export interface WorkOrderLine {
 }
 
 export type ApprovalAction =
+  | "sent_for_approval"
   | "auto_approved"
   | "approved"
   | "declined"
@@ -172,6 +277,12 @@ export type ApprovalAction =
  */
 export interface ApprovalLogEntry {
   id: string;
+  /**
+   * Carried explicitly rather than derived. This table is append-only and is
+   * the shop's liability record; it must remain readable in isolation without
+   * joining back through a work order to a vehicle. Backfilled by `normalise()`.
+   */
+  fleetClientId: string;
   /** Null for order-level entries, e.g. a variance re-approval at close-out. */
   lineId: string | null;
   action: ApprovalAction;
@@ -209,6 +320,11 @@ export interface ApprovalSettings {
  */
 export interface Part {
   id: string;
+  /**
+   * Explicit: parts stock has no vehicle relationship at all, so there is
+   * nothing to derive from. Stock is held per client, not pooled.
+   */
+  fleetClientId: string;
   sku: string;
   name: string;
   category: TaskCategory | "other";
@@ -239,6 +355,11 @@ export interface PurchaseOrderLine {
 
 export interface PurchaseOrder {
   id: string;
+  /**
+   * Explicit: a PO's lines can span many vehicles or none, so the vehicle
+   * relationship is ambiguous — cheaper and safer than joining through lines.
+   */
+  fleetClientId: string;
   reference: string;
   vendor: string;
   status: PurchaseOrderStatus;
@@ -269,10 +390,24 @@ export interface WorkOrder {
   priority: Priority;
   openedOn: string;
   scheduledFor: string;
+  /**
+   * Arrival slot on `scheduledFor`, as "HH:mm". Null for jobs booked before
+   * the counter workflow existed, which only ever recorded a date.
+   */
+  scheduledTime: string | null;
   completedOn: string | null;
   odometerAtService: number;
   technician: string;
   vendor: string;
+  /** Bay the job is assigned to. Null for work sent out to a third-party vendor. */
+  bayId: string | null;
+  /**
+   * When the client actually took the vehicle back. A job can be `closed`
+   * without being collected — that gap is the "ready for collection" queue the
+   * counter works from.
+   */
+  collectedAt: string | null;
+  collectedBy: string | null;
   laborCost: number;
   /**
    * Authoritative only while `parts` is empty (estimates, seeded history). Once
@@ -345,6 +480,11 @@ export type DocumentKind =
 
 export interface FleetDocument {
   id: string;
+  /**
+   * Explicit: a document may hang off a vehicle, a work order, both, or
+   * neither — the unlinked case has no derivation path.
+   */
+  fleetClientId: string;
   name: string;
   kind: DocumentKind;
   /** Documents may hang off a vehicle, a work order, both, or neither. */
@@ -402,11 +542,20 @@ export interface AlertInteraction {
   dismissedIds: string[];
 }
 
+/**
+ * Read/dismiss bookkeeping, bucketed by tenant scope key (see
+ * `tenantScopeKey`). It was a single flat pair before tenancy, which meant one
+ * client's dismissals followed the reader into every other client.
+ */
+export type AlertInteractionByScope = Record<string, AlertInteraction>;
+
 export interface FleetState {
+  providers: Provider[];
+  fleetClients: FleetClient[];
   vehicles: Vehicle[];
   workOrders: WorkOrder[];
   documents: FleetDocument[];
-  alerts: AlertInteraction;
+  alerts: AlertInteractionByScope;
   approvalSettings: ApprovalSettings;
   parts: Part[];
   purchaseOrders: PurchaseOrder[];

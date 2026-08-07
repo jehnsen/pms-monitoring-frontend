@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Car, Clock, FileWarning, OctagonAlert, Timer, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatTile } from "@/components/dashboard/stat-tile";
@@ -20,10 +22,27 @@ import {
 } from "@/lib/analytics";
 import { DUE_SOON_DAYS, isOdometerStale } from "@/lib/pms";
 import { DASHBOARD_EXPIRY_WINDOW_DAYS, expiringDocumentSummary } from "@/lib/compliance";
+import { useCan } from "@/lib/rbac";
+import { isProviderRole } from "@/lib/tenancy";
 import { formatCurrency, formatCurrencyCompact } from "@/lib/utils";
+
+/** Bounces provider staff to their own home screen. */
+function ProviderRedirect() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/shop");
+  }, [router]);
+  return <Skeleton className="h-96" />;
+}
 
 export default function DashboardPage() {
   const { ready, health, workOrders, vehicles, documents, summary } = useFleet();
+  const { role } = useCan();
+
+  // A provider user reaching this by URL would be looking at every client's
+  // fleet merged into one compliance view, which is not their job. Their home
+  // is the shop floor.
+  if (isProviderRole(role)) return <ProviderRedirect />;
 
   if (!ready) {
     return (

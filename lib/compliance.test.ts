@@ -19,6 +19,7 @@ function iso(daysFromToday: number) {
 function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
   return {
     id: "veh-1",
+    fleetClientId: "fc-actimed",
     plateNumber: "NBA 4821",
     make: "Toyota",
     model: "Hilux",
@@ -46,6 +47,7 @@ function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
 function doc(overrides: Partial<FleetDocument> = {}): FleetDocument {
   return {
     id: "doc-1",
+    fleetClientId: "fc-actimed",
     name: "LTO registration",
     kind: "lto_registration",
     vehicleId: "veh-1",

@@ -47,6 +47,7 @@ function part(id: string, overrides: Partial<Part> = {}): Part {
   const def = PART_BY_ID.get(id)!;
   return {
     id: def.id,
+    fleetClientId: "fc-actimed",
     sku: def.sku,
     name: def.name,
     category: def.category,
@@ -80,10 +81,14 @@ function workOrder(overrides: Partial<WorkOrder> = {}): WorkOrder {
     priority: "medium",
     openedOn: iso(0),
     scheduledFor: iso(2),
+    scheduledTime: null,
     completedOn: null,
     odometerAtService: 0,
     technician: "Tester",
-    vendor: "Bay 1",
+    vendor: "In-house Fleet Bay 1",
+    bayId: "bay-1",
+    collectedAt: null,
+    collectedBy: null,
     laborCost: 0,
     partsCost: 0,
     parts: [],
@@ -102,6 +107,7 @@ function workOrder(overrides: Partial<WorkOrder> = {}): WorkOrder {
 function purchaseOrder(overrides: Partial<PurchaseOrder> = {}): PurchaseOrder {
   return {
     id: "po-1",
+    fleetClientId: "fc-actimed",
     reference: "PO-TEST",
     vendor: "Vendor",
     status: "sent",

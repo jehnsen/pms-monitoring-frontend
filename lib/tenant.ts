@@ -1,4 +1,4 @@
-import type { TenantSettings } from "@/types";
+import type { FleetClient, Provider, TenantSettings } from "@/types";
 
 /** Current hardcoded values, kept as the default so branding is opt-in, not a breaking change. */
 export const DEFAULT_TENANT_SETTINGS: TenantSettings = {
@@ -6,6 +6,49 @@ export const DEFAULT_TENANT_SETTINGS: TenantSettings = {
   logoUrl: null,
   brandColor: "#1d5ba6", // matches --brand: 213 72% 39% in light mode
   supportEmail: "support@mekanikomore.ph",
+};
+
+/**
+ * The tenancy root the existing demo collapses into: everything that shipped
+ * before tenancy existed belongs to this one provider and this one client, so
+ * the seeded fleet and any payload already in a browser keep working unchanged.
+ * `normalise()` in `lib/store.ts` backfills against these ids.
+ */
+export const SEED_PROVIDER: Provider = {
+  id: "prov-mekanikomore",
+  name: "MekanikoMoR",
+  slug: "mekanikomore",
+  logoUrl: null,
+  brandColor: "#1d5ba6",
+  supportEmail: "support@mekanikomore.ph",
+  createdAt: "2024-01-01",
+};
+
+/**
+ * Client ids as constants so `lib/auth.ts` can pin demo accounts to a tenant
+ * without importing the whole seed module.
+ */
+export const FLEET_CLIENT_IDS = {
+  actimed: "fc-actimed",
+  northwind: "fc-northwind",
+  sagrada: "fc-sagrada",
+  bayani: "fc-bayani",
+} as const;
+
+export const SEED_FLEET_CLIENT: FleetClient = {
+  id: FLEET_CLIENT_IDS.actimed,
+  providerId: SEED_PROVIDER.id,
+  name: "Actimed",
+  slug: "actimed",
+  contactName: "Marisol Bautista",
+  contactEmail: "fleet@actimed.ph",
+  contractTerms: "Full-service PMS retainer, 16 units",
+  paymentTermsDays: 30,
+  approvalThresholdOverrides: null,
+  logoUrl: null,
+  brandColor: "#0f7a5a",
+  status: "active",
+  createdAt: "2024-01-01",
 };
 
 /** Parses a `#rgb` or `#rrggbb` hex colour into an `"H S% L%"` triplet for a CSS custom property. */

@@ -8,18 +8,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/layout/logo";
 import { DEMO_ACCOUNTS, useAuthActions, useSession } from "@/lib/auth";
+import { homeHrefFor } from "@/lib/nav";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types";
 
-const [PRIMARY_ACCOUNT] = DEMO_ACCOUNTS;
+/**
+ * The account the login screen advertises. Looked up by email rather than by
+ * position — `DEMO_ACCOUNTS` is now ordered provider-side first, and taking
+ * `[0]` would quietly hand out the Provider Admin instead.
+ */
+const PRIMARY_ACCOUNT =
+  DEMO_ACCOUNTS.find((account) => account.role === "provider_admin") ??
+  DEMO_ACCOUNTS[0];
 
 /**
- * Purchasing officers live in the approval queue, not the fleet-manager
- * dashboard — everyone else still lands there. `/dashboard` stays reachable
- * for them regardless; this only picks where a bare sign-in drops you.
+ * Where a bare sign-in drops you. Provider staff land on the shop floor,
+ * client staff on their fleet dashboard — two different jobs, two different
+ * home screens. See `homeHrefFor`.
  */
 function defaultDestinationFor(role: UserRole | undefined) {
-  return role === "purchasing_officer" ? "/requests" : "/dashboard";
+  return homeHrefFor(role);
 }
 
 /**
@@ -210,6 +218,19 @@ export function LoginForm({ next }: { next?: string }) {
           <div className="flex items-center justify-between gap-3">
             <dt className="text-subtle-foreground">Password</dt>
             <dd className="tabular font-medium">{PRIMARY_ACCOUNT.password}</dd>
+          </div>
+        </dl>
+
+        <hr />
+
+        <dl className="mt-2 space-y-1 text-xs">
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-subtle-foreground">Email</dt>
+            <dd className="tabular font-medium">fleet@actimed.ph</dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-subtle-foreground">Password</dt>
+            <dd className="tabular font-medium">demo1234</dd>
           </div>
         </dl>
 

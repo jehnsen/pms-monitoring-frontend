@@ -61,10 +61,13 @@ export function canApprove(
   orderPendingValue: number,
   settings: ApprovalSettings
 ): boolean {
-  if (role === "fleet_manager") return true;
+  // Unlimited authority — but still only over work orders inside the caller's
+  // tenant scope, which `lib/tenancy.ts` has already narrowed before this runs.
+  if (role === "fleet_manager" || role === "provider_admin") return true;
   if (role === "operations" || role === "purchasing_officer") {
     return orderPendingValue <= settings.opsApprovalUnder;
   }
+  // Service advisors quote work; they do not authorise the spend on it.
   return false;
 }
 

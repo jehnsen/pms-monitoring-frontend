@@ -3,6 +3,8 @@ import {
   CalendarRange,
   Car,
   ClipboardCheck,
+  ClipboardList,
+  DoorOpen,
   FolderOpen,
   LayoutDashboard,
   LineChart,
@@ -10,9 +12,12 @@ import {
   Settings,
   ShieldCheck,
   TrendingUp,
+  UsersRound,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
+import { isProviderRole } from "@/lib/tenancy";
+import type { UserRole } from "@/types";
 
 export interface NavItem {
   href: string;
@@ -28,7 +33,11 @@ export interface NavSection {
   items: NavItem[];
 }
 
-export const NAV_SECTIONS: NavSection[] = [
+/**
+ * Client-side navigation — the fleet operator's job. Reached by every
+ * client-side role; a provider user never sees it.
+ */
+export const CLIENT_NAV_SECTIONS: NavSection[] = [
   {
     label: "Monitor",
     items: [
@@ -124,4 +133,90 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-export const NAV_ITEMS = NAV_SECTIONS.flatMap((section) => section.items);
+/**
+ * Provider-side navigation — the service centre's own job, which is a
+ * different one: bays and a book of work across every client, not one fleet's
+ * compliance. Deliberately not a superset of the client nav.
+ */
+export const PROVIDER_NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Floor",
+    items: [
+      {
+        href: "/shop",
+        label: "Shop today",
+        icon: LayoutDashboard,
+        description: "What is happening in the bays",
+      },
+      {
+        href: "/shop/queue",
+        label: "Job queue",
+        icon: ClipboardList,
+        description: "Every active job, all clients",
+      },
+      {
+        href: "/shop/check-in",
+        label: "Check in / out",
+        icon: DoorOpen,
+        description: "The counter workflow",
+      },
+    ],
+  },
+  {
+    label: "Book of work",
+    items: [
+      {
+        href: "/shop/clients",
+        label: "Clients",
+        icon: Building2,
+        description: "Fleets under this provider",
+      },
+      {
+        href: "/shop/technicians",
+        label: "Technicians",
+        icon: UsersRound,
+        description: "Roster, load, and variance",
+      },
+      {
+        href: "/shop/reports",
+        label: "Reports",
+        icon: TrendingUp,
+        description: "Revenue, utilisation, and mix",
+      },
+    ],
+  },
+  {
+    label: "Configure",
+    items: [
+      {
+        href: "/access",
+        label: "User access",
+        icon: ShieldCheck,
+        description: "Roles and permissions",
+      },
+      {
+        href: "/settings",
+        label: "Settings",
+        icon: Settings,
+        description: "Branding, thresholds, and data",
+      },
+    ],
+  },
+];
+
+/** The nav for whichever side of the tenancy boundary this role sits on. */
+export function navSectionsFor(role: UserRole | undefined): NavSection[] {
+  return isProviderRole(role) ? PROVIDER_NAV_SECTIONS : CLIENT_NAV_SECTIONS;
+}
+
+/** Where a bare sign-in lands. The two sides have different home screens. */
+export function homeHrefFor(role: UserRole | undefined): string {
+  if (isProviderRole(role)) return "/shop";
+  // Purchasing officers live in the approval queue, not the dashboard.
+  return role === "purchasing_officer" ? "/requests" : "/dashboard";
+}
+
+export const NAV_ITEMS = [
+  ...CLIENT_NAV_SECTIONS,
+  ...PROVIDER_NAV_SECTIONS,
+].flatMap((section) => section.items);

@@ -32,6 +32,8 @@ import { useAuthActions, useSession } from "@/lib/auth";
 import { AlertsPanel } from "@/components/alerts/alerts-panel";
 import { ROLE_LABEL } from "@/lib/rbac";
 import { useFleet } from "@/lib/store";
+import { homeHrefFor } from "@/lib/nav";
+import { isProviderRole } from "@/lib/tenancy";
 
 export function Topbar() {
   const router = useRouter();
@@ -62,8 +64,12 @@ export function Topbar() {
           <Menu />
         </Button>
 
-        <Link href="/dashboard" className="lg:hidden">
-          <Logo name={tenant.displayName} logoUrl={tenant.logoUrl} />
+        <Link href={homeHrefFor(user.role)} className="lg:hidden">
+          <Logo
+            name={tenant.displayName}
+            logoUrl={tenant.logoUrl}
+            tagline={isProviderRole(user.role) ? "Service Centre" : "Fleet PMS"}
+          />
         </Link>
 
         <button

@@ -1,6 +1,7 @@
 import { addDays, formatISO, parseISO, subDays } from "date-fns";
 import type {
   ApprovalLogEntry,
+  FleetClient,
   FleetDocument,
   FleetState,
   LineUrgency,
@@ -20,7 +21,12 @@ import { SERVICE_TASKS } from "@/lib/service-tasks";
 import { evaluateVehicle } from "@/lib/pms";
 import { DEFAULT_APPROVAL_SETTINGS, requiredApprover } from "@/lib/approvals";
 import { PART_BY_ID, PART_DEFINITIONS, SERVICE_ITEM_PARTS } from "@/lib/parts";
-import { DEFAULT_TENANT_SETTINGS } from "@/lib/tenant";
+import { TECHNICIAN_BY_NAME } from "@/lib/technicians";
+import {
+  DEFAULT_TENANT_SETTINGS,
+  SEED_FLEET_CLIENT,
+  SEED_PROVIDER,
+} from "@/lib/tenant";
 
 /**
  * Deterministic PRNG. The demo fleet has to look lived-in — uneven odometers,
@@ -355,6 +361,356 @@ const VENDORS = [
   "Bridgestone Tire Center",
 ];
 
+/* ------------------------------------------------- additional fleet clients */
+
+/**
+ * Three more clients beneath the same provider.
+ *
+ * They exist so the shop-side views have a real book of work to aggregate and
+ * so isolation is demonstrable rather than asserted — signing in as Actimed
+ * and then as the provider should visibly change what is on screen. They carry
+ * lighter fleets than Actimed and no parts stock of their own: these are
+ * supplier-provided-parts accounts, which is also what makes the margin split
+ * on the provider's parts report worth looking at.
+ */
+interface SatelliteClient {
+  client: FleetClient;
+  specs: VehicleSpec[];
+  managerName: string;
+  supervisorName: string;
+}
+
+function satelliteClient(
+  overrides: Partial<FleetClient> & { id: string; name: string; slug: string }
+): FleetClient {
+  return {
+    providerId: SEED_PROVIDER.id,
+    contactName: "",
+    contactEmail: "",
+    contractTerms: "Standard PMS retainer",
+    paymentTermsDays: 30,
+    approvalThresholdOverrides: null,
+    logoUrl: null,
+    brandColor: null,
+    status: "active",
+    createdAt: "2024-06-01",
+    ...overrides,
+  };
+}
+
+const SATELLITE_CLIENTS: SatelliteClient[] = [
+  {
+    client: satelliteClient({
+      id: "fc-northwind",
+      name: "Northwind Logistics",
+      slug: "northwind",
+      contactName: "Ruben Salcedo",
+      contactEmail: "fleet@northwind.ph",
+      contractTerms: "Full-service PMS retainer, 7 units",
+      paymentTermsDays: 45,
+      brandColor: "#8a4b12",
+      // Runs long-haul: a bigger auto-approve band, because stopping a truck
+      // for a ₱5,000 sign-off costs them more than the part does.
+      approvalThresholdOverrides: { autoApproveUnder: 12_000, slaHours: 2 },
+    }),
+    managerName: "Ruben Salcedo",
+    supervisorName: "Aileen Mercado",
+    specs: [
+      {
+        plateNumber: "NWL 1201",
+        make: "Isuzu",
+        model: "N-Series NPR",
+        vehicleClass: "truck",
+        fuelType: "diesel",
+        color: "Arctic White",
+        avgDailyKm: 96,
+        daysInService: 1_180,
+        readingAgeDays: 1,
+        status: "active",
+        assignedTo: "Danilo Reyes",
+        department: "Long Haul",
+        location: "Valenzuela Depot",
+        profile: "overdue",
+      },
+      {
+        plateNumber: "NWL 1202",
+        make: "Isuzu",
+        model: "N-Series NQR",
+        vehicleClass: "truck",
+        fuelType: "diesel",
+        color: "Arctic White",
+        avgDailyKm: 88,
+        daysInService: 990,
+        readingAgeDays: 2,
+        status: "in_service",
+        assignedTo: "Efren Tolentino",
+        department: "Long Haul",
+        location: "Valenzuela Depot",
+        profile: "due_soon",
+      },
+      {
+        plateNumber: "NWL 1203",
+        make: "Hino",
+        model: "300 Series",
+        vehicleClass: "truck",
+        fuelType: "diesel",
+        color: "Signal Red",
+        avgDailyKm: 74,
+        daysInService: 760,
+        readingAgeDays: 3,
+        status: "active",
+        assignedTo: "Bernard Aquino",
+        department: "Regional",
+        location: "Valenzuela Depot",
+        profile: "healthy",
+      },
+      {
+        plateNumber: "NWL 1204",
+        make: "Mitsubishi",
+        model: "L300 Cab & Chassis",
+        vehicleClass: "van",
+        fuelType: "diesel",
+        color: "Silver",
+        avgDailyKm: 62,
+        daysInService: 640,
+        readingAgeDays: 0,
+        status: "active",
+        assignedTo: "Carlo Villaruel",
+        department: "Metro Delivery",
+        location: "Caloocan Yard",
+        profile: "due_soon",
+      },
+      {
+        plateNumber: "NWL 1205",
+        make: "Mitsubishi",
+        model: "L300 Cab & Chassis",
+        vehicleClass: "van",
+        fuelType: "diesel",
+        color: "Silver",
+        avgDailyKm: 58,
+        daysInService: 610,
+        readingAgeDays: 4,
+        status: "active",
+        assignedTo: "Noel Padilla",
+        department: "Metro Delivery",
+        location: "Caloocan Yard",
+        profile: "healthy",
+      },
+      {
+        plateNumber: "NWL 1206",
+        make: "Toyota",
+        model: "Hiace Commuter",
+        vehicleClass: "van",
+        fuelType: "diesel",
+        color: "Super White",
+        avgDailyKm: 70,
+        daysInService: 520,
+        readingAgeDays: 1,
+        status: "active",
+        assignedTo: "Gilbert Ocampo",
+        department: "Metro Delivery",
+        location: "Caloocan Yard",
+        profile: "healthy",
+      },
+      {
+        plateNumber: "NWL 1207",
+        make: "Isuzu",
+        model: "D-Max LS",
+        vehicleClass: "pickup",
+        fuelType: "diesel",
+        color: "Obsidian Grey",
+        avgDailyKm: 52,
+        daysInService: 430,
+        readingAgeDays: 2,
+        status: "down",
+        assignedTo: "Marvin Estrada",
+        department: "Supervisory",
+        location: "Valenzuela Depot",
+        profile: "overdue",
+      },
+    ],
+  },
+  {
+    client: satelliteClient({
+      id: "fc-sagrada",
+      name: "Sagrada Medical Transport",
+      slug: "sagrada",
+      contactName: "Dr. Imelda Cortez",
+      contactEmail: "operations@sagrada.ph",
+      contractTerms: "Priority PMS retainer, 5 units, 4-hour response",
+      paymentTermsDays: 15,
+      brandColor: "#8c1f3d",
+      // Ambulances: nothing goes ahead without a named person signing it.
+      approvalThresholdOverrides: { autoApproveUnder: 0, varianceThresholdPct: 5 },
+    }),
+    managerName: "Imelda Cortez",
+    supervisorName: "Jonas Rivera",
+    specs: [
+      {
+        plateNumber: "SGR 8801",
+        make: "Toyota",
+        model: "Hiace Ambulance",
+        vehicleClass: "van",
+        fuelType: "diesel",
+        color: "Super White",
+        avgDailyKm: 84,
+        daysInService: 880,
+        readingAgeDays: 0,
+        status: "active",
+        assignedTo: "Rico Del Rosario",
+        department: "Emergency",
+        location: "Manila Base",
+        profile: "due_soon",
+      },
+      {
+        plateNumber: "SGR 8802",
+        make: "Toyota",
+        model: "Hiace Ambulance",
+        vehicleClass: "van",
+        fuelType: "diesel",
+        color: "Super White",
+        avgDailyKm: 79,
+        daysInService: 830,
+        readingAgeDays: 1,
+        status: "in_service",
+        assignedTo: "Alvin Bautista",
+        department: "Emergency",
+        location: "Manila Base",
+        profile: "overdue",
+      },
+      {
+        plateNumber: "SGR 8803",
+        make: "Nissan",
+        model: "Urvan Premium",
+        vehicleClass: "van",
+        fuelType: "diesel",
+        color: "Brilliant Silver",
+        avgDailyKm: 66,
+        daysInService: 700,
+        readingAgeDays: 2,
+        status: "active",
+        assignedTo: "Teresa Lim",
+        department: "Patient Transfer",
+        location: "Manila Base",
+        profile: "healthy",
+      },
+      {
+        plateNumber: "SGR 8804",
+        make: "Nissan",
+        model: "Urvan Premium",
+        vehicleClass: "van",
+        fuelType: "diesel",
+        color: "Brilliant Silver",
+        avgDailyKm: 61,
+        daysInService: 560,
+        readingAgeDays: 1,
+        status: "active",
+        assignedTo: "Paolo Herrera",
+        department: "Patient Transfer",
+        location: "Quezon City Annex",
+        profile: "healthy",
+      },
+      {
+        plateNumber: "SGR 8805",
+        make: "Toyota",
+        model: "Innova 2.8 E",
+        vehicleClass: "van",
+        fuelType: "diesel",
+        color: "Attitude Black",
+        avgDailyKm: 44,
+        daysInService: 400,
+        readingAgeDays: 3,
+        status: "active",
+        assignedTo: "Cristina Yap",
+        department: "Administration",
+        location: "Quezon City Annex",
+        profile: "due_soon",
+      },
+    ],
+  },
+  {
+    client: satelliteClient({
+      id: "fc-bayani",
+      name: "Bayani Construction",
+      slug: "bayani",
+      contactName: "Andres Malolos",
+      contactEmail: "yard@bayanicon.ph",
+      contractTerms: "Pay-per-job, no retainer",
+      paymentTermsDays: 60,
+      status: "suspended",
+      brandColor: "#6b5a12",
+    }),
+    managerName: "Andres Malolos",
+    supervisorName: "Lorna Sison",
+    specs: [
+      {
+        plateNumber: "BYC 4410",
+        make: "Isuzu",
+        model: "Forward FVR",
+        vehicleClass: "truck",
+        fuelType: "diesel",
+        color: "Construction Yellow",
+        avgDailyKm: 38,
+        daysInService: 1_460,
+        readingAgeDays: 12,
+        status: "active",
+        assignedTo: "Rolando Cruz",
+        department: "Site Haulage",
+        location: "Bulacan Yard",
+        profile: "overdue",
+      },
+      {
+        plateNumber: "BYC 4411",
+        make: "Mitsubishi",
+        model: "Fuso Canter",
+        vehicleClass: "truck",
+        fuelType: "diesel",
+        color: "Construction Yellow",
+        avgDailyKm: 34,
+        daysInService: 1_240,
+        readingAgeDays: 9,
+        status: "down",
+        assignedTo: "Jerry Manalo",
+        department: "Site Haulage",
+        location: "Bulacan Yard",
+        profile: "overdue",
+      },
+      {
+        plateNumber: "BYC 4412",
+        make: "Ford",
+        model: "Ranger XLS",
+        vehicleClass: "pickup",
+        fuelType: "diesel",
+        color: "Absolute Black",
+        avgDailyKm: 46,
+        daysInService: 820,
+        readingAgeDays: 5,
+        status: "active",
+        assignedTo: "Emil Fajardo",
+        department: "Site Supervision",
+        location: "Bulacan Yard",
+        profile: "due_soon",
+      },
+      {
+        plateNumber: "BYC 4413",
+        make: "Toyota",
+        model: "Hilux 2.4 G",
+        vehicleClass: "pickup",
+        fuelType: "diesel",
+        color: "Super White",
+        avgDailyKm: 41,
+        daysInService: 610,
+        readingAgeDays: 6,
+        status: "active",
+        assignedTo: "Ramil Ignacio",
+        department: "Site Supervision",
+        location: "Pampanga Site",
+        profile: "healthy",
+      },
+    ],
+  },
+];
+
 const VIN_CHARS = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
 
 function makeVin(random: () => number) {
@@ -574,9 +930,36 @@ function buildHistory(
   return { history, taskState };
 }
 
-function buildVehicles(today: Date): BuiltVehicle[] {
-  return VEHICLE_SPECS.map((spec, index) => {
-    const random = mulberry32(1000 + index * 37);
+/**
+ * Options that let the same builders produce a second, third, or fourth
+ * client's fleet without colliding with Actimed's. Defaults reproduce the
+ * original single-tenant output byte for byte — same PRNG seeds, same ids —
+ * so the client-side experience is untouched.
+ */
+interface FleetBuildOptions {
+  fleetClientId?: string;
+  /** Added to generated `veh-NNN` numbers so ids stay unique across clients. */
+  idOffset?: number;
+  /** Added to the per-vehicle PRNG seed so two clients don't draw identically. */
+  seedOffset?: number;
+  /** Who signs off this client's own approvals. */
+  managerName?: string;
+  supervisorName?: string;
+}
+
+function buildVehicles(
+  today: Date,
+  specs: VehicleSpec[] = VEHICLE_SPECS,
+  options: FleetBuildOptions = {}
+): BuiltVehicle[] {
+  const {
+    fleetClientId = SEED_FLEET_CLIENT.id,
+    idOffset = 0,
+    seedOffset = 0,
+  } = options;
+
+  return specs.map((spec, index) => {
+    const random = mulberry32(1000 + seedOffset + index * 37);
 
     const acquiredOn = subDays(today, spec.daysInService);
     // Derived, not stated — see the note on VehicleSpec.
@@ -606,7 +989,8 @@ function buildVehicles(today: Date): BuiltVehicle[] {
           : iso(addDays(today, 200 + Math.floor(random() * 500)));
 
     const vehicle: Vehicle = {
-      id: `veh-${String(index + 1).padStart(3, "0")}`,
+      id: `veh-${String(index + 1 + idOffset).padStart(3, "0")}`,
+      fleetClientId,
       plateNumber: spec.plateNumber,
       make: spec.make,
       model: spec.model,
@@ -637,15 +1021,32 @@ function buildVehicles(today: Date): BuiltVehicle[] {
 
 const TASK_BY_ID = new Map(SERVICE_TASKS.map((task) => [task.id, task]));
 
-const FLEET_MANAGER_NAME = "Mike Manabat";
+// Mike Manabat owns the shop and now sits provider-side, so Actimed carries
+// its own Fleet Manager for the approvals its own people signed off.
+const FLEET_MANAGER_NAME = "Elena Rosales";
+
+/** Releases collected vehicles at the counter. */
+const SERVICE_ADVISOR_NAME = "Divina Lacson";
 const OPS_SUPERVISOR_NAME = "Marisol Bautista";
 
-function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
+function buildWorkOrders(
+  built: BuiltVehicle[],
+  today: Date,
+  options: FleetBuildOptions = {}
+): WorkOrder[] {
+  const {
+    fleetClientId = SEED_FLEET_CLIENT.id,
+    idOffset = 0,
+    seedOffset = 0,
+    managerName = FLEET_MANAGER_NAME,
+    supervisorName = OPS_SUPERVISOR_NAME,
+  } = options;
+
   const orders: WorkOrder[] = [];
-  const random = mulberry32(90210);
-  let counter = 1;
-  let historySeq = 1;
-  let logSeq = 1;
+  const random = mulberry32(90210 + seedOffset);
+  let counter = 1 + idOffset;
+  let historySeq = 1 + idOffset * 20;
+  let logSeq = 1 + idOffset * 20;
 
   const evt = (status: WorkOrderStatus, at: Date, actor: string): WorkOrderEvent => ({
     id: `hist-${historySeq++}`,
@@ -663,6 +1064,7 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
     note: string | null = null
   ): ApprovalLogEntry => ({
     id: `alog-${logSeq++}`,
+    fleetClientId,
     lineId,
     action,
     actorId: actorName,
@@ -674,11 +1076,63 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
 
   /** Who would plausibly have approved this, given the band it falls in. */
   const approverFor = (band: ReturnType<typeof requiredApprover>) =>
-    band === "fleet_manager" ? FLEET_MANAGER_NAME : OPS_SUPERVISOR_NAME;
+    band === "fleet_manager" ? managerName : supervisorName;
 
-  const push = (draft: Omit<WorkOrder, "id" | "reference">) => {
+  type WorkOrderDraft = Omit<
+    WorkOrder,
+    | "id"
+    | "reference"
+    | "bayId"
+    | "collectedAt"
+    | "collectedBy"
+    | "scheduledTime"
+  > &
+    Partial<
+      Pick<
+        WorkOrder,
+        "bayId" | "collectedAt" | "collectedBy" | "scheduledTime"
+      >
+    >;
+
+  /** Arrival slots across the working day, so the morning list is not one lump. */
+  const SLOTS = ["08:00", "09:30", "11:00", "13:00", "14:30", "16:00"];
+
+  const push = (draft: WorkOrderDraft) => {
+    // Bay follows the technician's home bay unless the job went out to a
+    // third-party vendor, which is what makes "group by bay" on the shop
+    // queue line up with who is actually standing in it.
+    const outsourced = !draft.vendor.startsWith("In-house");
+    const bayId =
+      draft.bayId !== undefined
+        ? draft.bayId
+        : outsourced
+          ? null
+          : (TECHNICIAN_BY_NAME.get(draft.technician)?.homeBayId ?? "bay-1");
+
+    // Most finished jobs have been picked up; a few have not, which is the
+    // "ready for collection" queue the counter works from.
+    const uncollected = counter % 4 === 0;
+    const collectedAt =
+      draft.collectedAt !== undefined
+        ? draft.collectedAt
+        : draft.status === "closed" && draft.completedOn && !uncollected
+          ? iso(addDays(parseISO(draft.completedOn), 1))
+          : null;
+
     orders.push({
       ...draft,
+      bayId,
+      scheduledTime:
+        draft.scheduledTime !== undefined
+          ? draft.scheduledTime
+          : SLOTS[counter % SLOTS.length],
+      collectedAt,
+      collectedBy:
+        draft.collectedBy !== undefined
+          ? draft.collectedBy
+          : collectedAt
+            ? SERVICE_ADVISOR_NAME
+            : null,
       id: `wo-${String(counter).padStart(4, "0")}`,
       reference: `WO-${today.getFullYear()}-${String(counter).padStart(4, "0")}`,
     });
@@ -911,7 +1365,7 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
         .map((item) => ({ vehicle, item }));
     })
     .sort((a, b) => a.item.daysRemaining - b.item.daysRemaining)
-    .slice(0, 8);
+    .slice(0, 9);
 
   const LIVE_BOARD_PLAN: {
     status: WorkOrderStatus;
@@ -941,6 +1395,9 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
     { status: "approved", costMultiplier: 0.6, urgency: "optional" },
     { status: "scheduled", costMultiplier: 1, urgency: "recommended" },
     { status: "in_progress", costMultiplier: 1, urgency: "safety_critical" },
+    // Quoted but not yet sent — the shop's own draft, sitting where the
+    // provider's "Send for approval" action picks it up.
+    { status: "draft", costMultiplier: 2.4, urgency: "recommended" },
   ];
 
   pending.forEach(({ vehicle, item }, index) => {
@@ -999,6 +1456,24 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
         log(lineId, "declined", today, approverFor(band), total, plan.declineReason ?? null)
       );
       approvalWaitHours = 3.5;
+    } else if (plan.status === "draft") {
+      // Quoted, not yet sent. The lines are priced but nobody has been asked
+      // to decide on them, so there is no approval log entry at all — the
+      // first one will be written when the shop sends it.
+      lines.push({
+        id: lineId,
+        description: item.task.name,
+        category: item.task.category,
+        partCost,
+        labourCost,
+        urgency: plan.urgency,
+        partsSource: DEFAULT_APPROVAL_SETTINGS.defaultPartsSource,
+        approvalStatus: "pending",
+        approvedBy: null,
+        approvedAt: null,
+        declineReason: null,
+        photoUrls: [],
+      });
     } else {
       // approved / partially_approved / scheduled / in_progress all start
       // from at least one approved line.
@@ -1065,7 +1540,9 @@ function buildWorkOrders(built: BuiltVehicle[], today: Date): WorkOrder[] {
     const resolvedAt = new Date(openedOnDate.getTime() + 2 * 3_600_000);
     const history: WorkOrderEvent[] = [];
 
-    if (plan.status === "pending_approval") {
+    if (plan.status === "draft") {
+      history.push(evt("draft", openedOnDate, technician));
+    } else if (plan.status === "pending_approval") {
       history.push(evt("pending_approval", parseISOOrDate(pendingApprovalEnteredAt), technician));
     } else if (plan.status === "declined") {
       history.push(evt("pending_approval", openedOnDate, technician));
@@ -1148,9 +1625,15 @@ function buildDocuments(
   let counter = 1;
 
   const push = (
-    draft: Omit<FleetDocument, "id" | "uploadedOn"> & { uploadedOn: string }
+    draft: Omit<FleetDocument, "id" | "uploadedOn" | "fleetClientId"> & {
+      uploadedOn: string;
+    }
   ) => {
-    documents.push({ ...draft, id: `doc-${String(counter).padStart(4, "0")}` });
+    documents.push({
+      ...draft,
+      id: `doc-${String(counter).padStart(4, "0")}`,
+      fleetClientId: SEED_FLEET_CLIENT.id,
+    });
     counter += 1;
   };
 
@@ -1298,6 +1781,7 @@ function buildPartsInventory(): Part[] {
     const stockFactor = index % 3 === 0 ? 0.3 + random() * 0.5 : 1 + random() * 1.5;
     return {
       id: def.id,
+      fleetClientId: SEED_FLEET_CLIENT.id,
       sku: def.sku,
       name: def.name,
       category: def.category,
@@ -1321,6 +1805,7 @@ function buildPurchaseOrders(vehicles: Vehicle[], today: Date): PurchaseOrder[] 
 
   const sent: PurchaseOrder = {
     id: "po-seed-0001",
+    fleetClientId: SEED_FLEET_CLIENT.id,
     reference: `PO-${today.getFullYear()}-0001`,
     vendor: timingBelt.preferredVendor,
     status: "sent",
@@ -1351,6 +1836,7 @@ function buildPurchaseOrders(vehicles: Vehicle[], today: Date): PurchaseOrder[] 
 
   const draft: PurchaseOrder = {
     id: "po-seed-0002",
+    fleetClientId: SEED_FLEET_CLIENT.id,
     reference: `PO-${today.getFullYear()}-0002`,
     vendor: brakePads.preferredVendor,
     status: "draft",
@@ -1374,15 +1860,52 @@ function buildPurchaseOrders(vehicles: Vehicle[], today: Date): PurchaseOrder[] 
 }
 
 export function createSeedState(today = new Date()): FleetState {
+  // Actimed: the original fleet, built exactly as before. Its ids, PRNG draws,
+  // and history are unchanged, because the client-side experience ships as-is.
   const built = buildVehicles(today);
   const vehicles = built.map((entry) => entry.vehicle);
   const workOrders = buildWorkOrders(built, today);
 
+  // The other clients under the same provider. Offsets keep their vehicle and
+  // work-order ids from colliding with Actimed's or each other's.
+  const satellites = SATELLITE_CLIENTS.map((entry, index) => {
+    const scoped: FleetBuildOptions = {
+      fleetClientId: entry.client.id,
+      idOffset: 100 + index * 50,
+      seedOffset: 5_000 + index * 1_300,
+      managerName: entry.managerName,
+      supervisorName: entry.supervisorName,
+    };
+    const satelliteBuilt = buildVehicles(today, entry.specs, scoped);
+    return {
+      vehicles: satelliteBuilt.map((v) => v.vehicle),
+      workOrders: buildWorkOrders(satelliteBuilt, today, {
+        ...scoped,
+        idOffset: 1_000 + index * 300,
+      }),
+    };
+  });
+
+  const allVehicles = [...vehicles, ...satellites.flatMap((s) => s.vehicles)];
+  const allWorkOrders = [
+    ...workOrders,
+    ...satellites.flatMap((s) => s.workOrders),
+  ];
+
   return {
-    vehicles,
-    workOrders,
+    providers: [SEED_PROVIDER],
+    fleetClients: [
+      SEED_FLEET_CLIENT,
+      ...SATELLITE_CLIENTS.map((entry) => entry.client),
+    ],
+    vehicles: allVehicles,
+    workOrders: allWorkOrders,
+    // Documents, parts stock, and purchase orders stay Actimed-only: the other
+    // clients are supplier-provided-parts accounts and file their own
+    // paperwork, which is also what gives the provider's margin report a
+    // genuine own-stock/supplier split to show.
     documents: buildDocuments(vehicles, workOrders, today),
-    alerts: { readIds: [], dismissedIds: [] },
+    alerts: {},
     approvalSettings: DEFAULT_APPROVAL_SETTINGS,
     parts: buildPartsInventory(),
     purchaseOrders: buildPurchaseOrders(vehicles, today),

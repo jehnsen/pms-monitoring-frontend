@@ -170,8 +170,16 @@ function ApprovalThresholdsCard() {
 
 function BrandingCard() {
   const { ready, tenant } = useFleet();
-  const { updateTenantSettings } = useFleetActions();
+  const { updateTenantSettings, canEditBranding } = useFleetActions();
   const { can, reason } = useCan();
+
+  // Two independent gates: the capability, and which side of the tenancy
+  // boundary you sit on. A client's Fleet Manager holds `settings:manage` but
+  // still may not rebrand the service centre's instance for everyone else.
+  const editable = can("settings:manage") && canEditBranding;
+  const denial = !can("settings:manage")
+    ? reason("settings:manage")
+    : "Branding belongs to the service provider. A fleet client can't change how the provider's application is presented.";
 
   const [draft, setDraft] = useState<TenantSettings>(tenant);
 
@@ -190,7 +198,7 @@ function BrandingCard() {
           <Input
             id="tenant-name"
             value={draft.displayName}
-            disabled={!can("settings:manage")}
+            disabled={!editable}
             onChange={(event) =>
               setDraft((current) => ({ ...current, displayName: event.target.value }))
             }
@@ -203,7 +211,7 @@ function BrandingCard() {
             id="tenant-support-email"
             type="email"
             value={draft.supportEmail}
-            disabled={!can("settings:manage")}
+            disabled={!editable}
             onChange={(event) =>
               setDraft((current) => ({ ...current, supportEmail: event.target.value }))
             }
@@ -216,7 +224,7 @@ function BrandingCard() {
             id="tenant-logo-url"
             value={draft.logoUrl ?? ""}
             placeholder="https://…  (leave blank for the built-in mark)"
-            disabled={!can("settings:manage")}
+            disabled={!editable}
             onChange={(event) =>
               setDraft((current) => ({
                 ...current,
@@ -233,7 +241,7 @@ function BrandingCard() {
               id="tenant-brand-color"
               type="color"
               value={validColor ? draft.brandColor : "#000000"}
-              disabled={!can("settings:manage")}
+              disabled={!editable}
               onChange={(event) =>
                 setDraft((current) => ({ ...current, brandColor: event.target.value }))
               }
@@ -241,7 +249,7 @@ function BrandingCard() {
             />
             <Input
               value={draft.brandColor}
-              disabled={!can("settings:manage")}
+              disabled={!editable}
               placeholder="#1d5ba6"
               className="tabular"
               onChange={(event) =>
@@ -257,7 +265,7 @@ function BrandingCard() {
         </div>
       </div>
 
-      {can("settings:manage") ? (
+      {editable ? (
         <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
           <p className="text-2xs text-subtle-foreground">
             Drives the sidebar header, page title, and primary button colour.
@@ -284,10 +292,10 @@ function BrandingCard() {
           make it read like one.
         </p>
       </header>
-      {can("settings:manage") ? (
+      {editable ? (
         body
       ) : (
-        <DeniedAction reason={reason("settings:manage")}>
+        <DeniedAction reason={denial}>
           <div className="block w-full">{body}</div>
         </DeniedAction>
       )}

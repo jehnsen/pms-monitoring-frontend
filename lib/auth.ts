@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
-import type { UserRole } from "@/types";
+import type { Session, UserRole } from "@/types";
+import { FLEET_CLIENT_IDS, SEED_FLEET_CLIENT, SEED_PROVIDER } from "@/lib/tenant";
 
 /**
  * Demo session handling.
@@ -23,16 +24,57 @@ export interface DemoAccount {
   name: string;
   role: UserRole;
   title: string;
+  /** Always set. A user with no provider resolves to no scope at all. */
+  providerId: string;
+  /** Null for provider-side staff, who see every client beneath the provider. */
+  fleetClientId: string | null;
 }
 
-/** One account per role, so every permission level can be demonstrated. */
+/**
+ * One account per role, so every permission level can be demonstrated — now on
+ * both sides of the tenancy boundary. The client-side accounts are all pinned
+ * to Actimed, which is the single client the seeded fleet belongs to.
+ */
 export const DEMO_ACCOUNTS: DemoAccount[] = [
+  // ---------------------------------------------------------- provider side
   {
-    email: "fleet@mekanikomor.ph",
+    // The shop owner. He ran the demo as Actimed's Fleet Manager before the
+    // provider side existed; this is where he actually belongs.
+    email: "owner@mekanikomore.ph",
     password: "demo1234",
     name: "Mike Manabat",
+    role: "provider_admin",
+    title: "Owner / Provider Admin",
+    providerId: SEED_PROVIDER.id,
+    fleetClientId: null,
+  },
+  {
+    email: "advisor@mekanikomore.ph",
+    password: "demo1234",
+    name: "Divina Lacson",
+    role: "service_advisor",
+    title: "Service Advisor",
+    providerId: SEED_PROVIDER.id,
+    fleetClientId: null,
+  },
+  {
+    email: "bay@mekanikomore.ph",
+    password: "demo1234",
+    name: "Arnel Pascual",
+    role: "provider_technician",
+    title: "Provider Technician",
+    providerId: SEED_PROVIDER.id,
+    fleetClientId: null,
+  },
+  // ------------------------------------------- client side · Actimed
+  {
+    email: "fleet@actimed.ph",
+    password: "demo1234",
+    name: "Elena Rosales",
     role: "fleet_manager",
     title: "Fleet Manager",
+    providerId: SEED_PROVIDER.id,
+    fleetClientId: FLEET_CLIENT_IDS.actimed,
   },
   {
     email: "ops@mekanikomore.ph",
@@ -40,6 +82,8 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     name: "Marisol Bautista",
     role: "operations",
     title: "Operations Supervisor",
+    providerId: SEED_PROVIDER.id,
+    fleetClientId: SEED_FLEET_CLIENT.id,
   },
   {
     email: "tech@mekanikomore.ph",
@@ -47,6 +91,8 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     name: "Arnel Pascual",
     role: "technician",
     title: "Lead Technician",
+    providerId: SEED_PROVIDER.id,
+    fleetClientId: SEED_FLEET_CLIENT.id,
   },
   {
     email: "purchasing@mekanikomor.ph",
@@ -54,6 +100,8 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     name: "Grace Villanueva",
     role: "purchasing_officer",
     title: "Purchasing Officer",
+    providerId: SEED_PROVIDER.id,
+    fleetClientId: SEED_FLEET_CLIENT.id,
   },
   {
     email: "viewer@mekanikomore.ph",
@@ -61,17 +109,63 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     name: "Camille Ortega",
     role: "viewer",
     title: "Authorised Viewer",
+    providerId: SEED_PROVIDER.id,
+    fleetClientId: SEED_FLEET_CLIENT.id,
+  },
+
+  // ------------------------------- client side · the other fleet clients
+  // One account each, so isolation can be seen rather than asserted: signing
+  // in here shows a different fleet entirely, under the same provider.
+  {
+    email: "fleet@northwind.ph",
+    password: "demo1234",
+    name: "Ruben Salcedo",
+    role: "fleet_manager",
+    title: "Fleet Manager",
+    providerId: SEED_PROVIDER.id,
+    fleetClientId: FLEET_CLIENT_IDS.northwind,
+  },
+  {
+    email: "operations@sagrada.ph",
+    password: "demo1234",
+    name: "Imelda Cortez",
+    role: "fleet_manager",
+    title: "Operations Director",
+    providerId: SEED_PROVIDER.id,
+    fleetClientId: FLEET_CLIENT_IDS.sagrada,
+  },
+  {
+    // Bayani is suspended. This account resolves to no scope at all — it is
+    // here so the fail-closed path is demonstrable, not just tested.
+    email: "yard@bayanicon.ph",
+    password: "demo1234",
+    name: "Andres Malolos",
+    role: "fleet_manager",
+    title: "Yard Manager (suspended account)",
+    providerId: SEED_PROVIDER.id,
+    fleetClientId: FLEET_CLIENT_IDS.bayani,
   },
 ];
 
-export interface Session {
-  email: string;
-  name: string;
-  role: UserRole;
-  /** Job title for display; `role` is what permissions key off. */
-  title: string;
-  signedInAt: string;
+/** The one place a `DemoAccount` becomes a `Session`, so tenancy is never dropped. */
+function sessionFromAccount(account: DemoAccount): Session {
+  return {
+    email: account.email,
+    name: account.name,
+    role: account.role,
+    title: account.title,
+    signedInAt: new Date().toISOString(),
+    providerId: account.providerId,
+    fleetClientId: account.fleetClientId,
+  };
 }
+
+/**
+ * Re-exported for the many call sites that already import it from here; the
+ * definition lives in `@/types` so `lib/tenancy.ts` can type a session without
+ * importing this module.
+ */
+export type { Session };
 
 /**
  * `undefined` means "not hydrated yet" and is what the server renders;
@@ -89,7 +183,20 @@ function read(): Session | null {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Session;
-    return parsed?.email ? parsed : null;
+    if (!parsed?.email) return null;
+
+    // TENANCY BACKFILL. A session written before tenancy existed carries no
+    // provider, which would now resolve to no scope and lock the user out of
+    // their own data. Prefer the account's current tenancy, falling back to the
+    // seeded provider/client that all pre-tenancy data belongs to.
+    const account = DEMO_ACCOUNTS.find((a) => a.email === parsed.email);
+    return {
+      ...parsed,
+      providerId: parsed.providerId ?? account?.providerId ?? SEED_PROVIDER.id,
+      fleetClientId:
+        parsed.fleetClientId ??
+        (account ? account.fleetClientId : SEED_FLEET_CLIENT.id),
+    };
   } catch {
     return null;
   }
@@ -144,13 +251,7 @@ export function useAuthActions() {
       };
     }
 
-    const next: Session = {
-      email: match.email,
-      name: match.name,
-      role: match.role,
-      title: match.title,
-      signedInAt: new Date().toISOString(),
-    };
+    const next = sessionFromAccount(match);
 
     session = next;
     hydrated = true;
@@ -173,13 +274,7 @@ export function useAuthActions() {
     const match = DEMO_ACCOUNTS.find((account) => account.email === email);
     if (!match) return;
 
-    const next: Session = {
-      email: match.email,
-      name: match.name,
-      role: match.role,
-      title: match.title,
-      signedInAt: new Date().toISOString(),
-    };
+    const next = sessionFromAccount(match);
 
     session = next;
     hydrated = true;

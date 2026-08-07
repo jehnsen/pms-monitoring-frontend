@@ -10,6 +10,7 @@ import {
   FileText,
   Play,
   ReceiptText,
+  Send,
   Stethoscope,
   ThumbsDown,
   ThumbsUp,
@@ -28,6 +29,7 @@ import {
   WorkOrderStatusBadge,
 } from "@/components/status";
 import { ApprovalPanel } from "@/components/work-orders/approval-panel";
+import { ApprovalWaitBanner } from "@/components/work-orders/approval-wait-banner";
 import { ScheduleDialog } from "@/components/work-orders/schedule-dialog";
 import { CompleteWorkOrderDialog } from "@/components/work-orders/complete-work-order-dialog";
 import { DocumentList } from "@/components/documents/document-list";
@@ -35,6 +37,7 @@ import { UploadDocumentDialog } from "@/components/documents/upload-document-dia
 import { DeniedAction } from "@/components/auth/denied-action";
 import { useFleet, useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
+import { isProviderRole } from "@/lib/tenancy";
 import { approvedValue, declinedValue, pendingValue } from "@/lib/approvals";
 import { resolvePartsCost, workOrderCost } from "@/lib/pms";
 import { TASK_BY_ID } from "@/lib/service-tasks";
@@ -49,6 +52,7 @@ const APPROVAL_ACTION_META: Record<
   ApprovalAction,
   { label: string; icon: typeof ThumbsUp; tone: "ok" | "critical" | "neutral" | "warning" }
 > = {
+  sent_for_approval: { label: "Quotation sent", icon: Send, tone: "neutral" },
   auto_approved: { label: "Auto-approved", icon: ThumbsUp, tone: "ok" },
   approved: { label: "Approved", icon: ThumbsUp, tone: "ok" },
   declined: { label: "Declined", icon: ThumbsDown, tone: "critical" },
@@ -62,9 +66,10 @@ export default function WorkOrderDetailPage({
 }: {
   params: { orderId: string };
 }) {
-  const { ready, workOrders, vehiclesById, documents } = useFleet();
-  const { updateWorkOrder } = useFleetActions();
-  const { can, reason } = useCan();
+  const { ready, workOrders, vehiclesById, documents, approvalSettings } = useFleet();
+  const { updateWorkOrder, sendForApproval } = useFleetActions();
+  const { can, reason, role } = useCan();
+  const [sendError, setSendError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
 
   if (!ready) {
@@ -123,6 +128,31 @@ export default function WorkOrderDetailPage({
         description={order.title}
         actions={
           <>
+            {/* The provider's half of the approval loop: a draft is the shop's
+                own quotation until it is sent, at which point the client's
+                clock starts. */}
+            {order.status === "draft" ? (
+              can("workorder:update") ? (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    const result = sendForApproval(order.id);
+                    setSendError(result.ok ? null : result.error);
+                  }}
+                >
+                  <Send />
+                  Send for approval
+                </Button>
+              ) : (
+                <DeniedAction reason={reason("workorder:update")}>
+                  <Button variant="primary">
+                    <Send />
+                    Send for approval
+                  </Button>
+                </DeniedAction>
+              )
+            ) : null}
+
             {canSchedule && can("workorder:update") ? <ScheduleDialog order={order} /> : null}
 
             {order.status === "scheduled" && can("workorder:update") ? (
@@ -153,6 +183,24 @@ export default function WorkOrderDetailPage({
           </>
         }
       />
+
+      {sendError ? (
+        <p className="mb-5 rounded-lg border border-critical/25 bg-critical/[0.06] px-4 py-3 text-xs text-critical">
+          {sendError}
+        </p>
+      ) : null}
+
+      {/* Provider-side only: the client already sees this as their own queue.
+          What the shop needs is the clock, because it is the shop that has to
+          answer for the delay. */}
+      {isProviderRole(role) &&
+      order.status === "pending_approval" &&
+      order.pendingApprovalEnteredAt ? (
+        <ApprovalWaitBanner
+          since={order.pendingApprovalEnteredAt}
+          slaHours={approvalSettings.slaHours}
+        />
+      ) : null}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">

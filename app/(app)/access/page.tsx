@@ -9,26 +9,54 @@ import { DEMO_ACCOUNTS, useAuthActions, useSession } from "@/lib/auth";
 import {
   ALL_CAPABILITIES,
   CAPABILITY_LABEL,
+  CLIENT_ROLES,
+  PROVIDER_ROLES,
   ROLE_CAPABILITIES,
   ROLE_DESCRIPTION,
   ROLE_LABEL,
   useCan,
   type UserRole,
 } from "@/lib/rbac";
+import { useFleet } from "@/lib/store";
+import { scopeAccounts } from "@/lib/tenancy";
 import { cn, formatDate } from "@/lib/utils";
 
-const ROLE_ORDER: UserRole[] = [
-  "fleet_manager",
-  "operations",
-  "purchasing_officer",
-  "technician",
-  "viewer",
+/**
+ * The two sides of the tenancy boundary, rendered as separate matrices rather
+ * than one merged table — the distinction that matters is not which
+ * capabilities a role holds but how far they reach, and a single table hides
+ * exactly that.
+ */
+const MATRICES: {
+  key: string;
+  title: string;
+  reach: string;
+  roles: UserRole[];
+}[] = [
+  {
+    key: "provider",
+    title: "Provider-side roles",
+    reach: "Reach every fleet client beneath the provider.",
+    roles: PROVIDER_ROLES,
+  },
+  {
+    key: "client",
+    title: "Client-side roles",
+    reach:
+      "Scoped to one fleet client. No client-side role can see another client's data, even under the same provider.",
+    roles: CLIENT_ROLES,
+  },
 ];
 
 export default function AccessPage() {
   const { session } = useSession();
   const { switchAccount } = useAuthActions();
   const { can, reason } = useCan();
+  const { scope } = useFleet();
+
+  // The directory is scoped like any other read: a client sees only its own
+  // people, never the provider's staff or a sibling client's roster.
+  const personnel = scopeAccounts(DEMO_ACCOUNTS, scope);
 
   return (
     <>
@@ -78,8 +106,9 @@ export default function AccessPage() {
         <header className="px-5 pb-3 pt-4">
           <h3 className="text-sm font-semibold tracking-tight">Personnel</h3>
           <p className="mt-0.5 text-xs text-subtle-foreground">
-            Accounts authorised on this fleet. Switching signs you in as that
-            person so you can see the interface they get.
+            {scope?.kind === "provider"
+              ? "Everyone authorised on this provider, across every fleet client beneath it."
+              : "Everyone authorised on your fleet. Provider staff and other clients' people are not listed."}
           </p>
         </header>
 
@@ -87,7 +116,7 @@ export default function AccessPage() {
           <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="border-b border-border text-left">
-                {["Person", "Email", "Role", "Grants", ""].map((heading, index) => (
+                {["Person", "Email", "Role", "Grants"].map((heading, index) => (
                   <th
                     key={heading || index}
                     className="whitespace-nowrap px-4 py-2.5 text-2xs font-semibold uppercase tracking-wider text-subtle-foreground"
@@ -98,7 +127,7 @@ export default function AccessPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {DEMO_ACCOUNTS.map((account) => {
+              {personnel.map((account) => {
                 const active = session?.email === account.email;
                 return (
                   <tr
@@ -132,27 +161,52 @@ export default function AccessPage() {
                     <td className="tabular px-4 py-3 text-xs text-muted-foreground">
                       {ROLE_CAPABILITIES[account.role].length} of{" "}
                       {ALL_CAPABILITIES.length}
-                    </td>
-                    <td className="px-4 py-3 text-right">
                       {active ? (
-                        <span className="text-2xs font-medium text-brand">
-                          Current session
+                        <span className="ml-2 text-2xs font-medium text-brand">
+                          · current session
                         </span>
-                      ) : (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => switchAccount(account.email)}
-                        >
-                          Sign in as
-                        </Button>
-                      )}
+                      ) : null}
                     </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+        </div>
+      </section>
+
+      {/* Separated from the directory above on purpose. Switching account
+          crosses the tenancy boundary the rest of the page enforces, so it is
+          labelled as the bypass it is rather than sitting inside a roster. */}
+      <section className="card-raised mb-5 border-warning/35">
+        <header className="px-5 pb-3 pt-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+            <ShieldCheck className="size-4 shrink-0 text-subtle-foreground" />
+            Demo account switcher
+          </h3>
+          <p className="mt-0.5 text-xs leading-relaxed text-subtle-foreground">
+            Signs you in as anyone, on either side of the tenancy boundary and
+            across fleet clients — so the isolation above can be seen working.
+            This deliberately ignores scoping and disappears with the demo
+            accounts once a real identity provider goes in.
+          </p>
+        </header>
+
+        <div className="flex flex-wrap gap-2 border-t border-border px-5 py-4">
+          {DEMO_ACCOUNTS.map((account) => {
+            const active = session?.email === account.email;
+            return (
+              <Button
+                key={account.email}
+                variant={active ? "primary" : "secondary"}
+                size="sm"
+                disabled={active}
+                onClick={() => switchAccount(account.email)}
+              >
+                {ROLE_LABEL[account.role]}
+              </Button>
+            );
+          })}
         </div>
       </section>
 
@@ -182,61 +236,80 @@ export default function AccessPage() {
         </header>
 
         {can("access:manage") ? (
-          <div className="overflow-x-auto border-t border-border">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase tracking-wider text-subtle-foreground">
-                    Capability
-                  </th>
-                  {ROLE_ORDER.map((role) => (
-                    <th
-                      key={role}
-                      className="px-3 py-2.5 text-center text-2xs font-semibold uppercase tracking-wider text-subtle-foreground"
-                    >
-                      {ROLE_LABEL[role]}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {ALL_CAPABILITIES.map((capability) => (
-                  <tr key={capability} className="hover:bg-surface-2/50">
-                    <td className="px-4 py-2.5">
-                      <span className="text-xs font-medium">
-                        {CAPABILITY_LABEL[capability]}
-                      </span>
-                      <span className="tabular mt-0.5 block text-2xs text-subtle-foreground">
-                        {capability}
-                      </span>
-                    </td>
-                    {ROLE_ORDER.map((role) => {
-                      const granted = ROLE_CAPABILITIES[role].includes(capability);
-                      return (
-                        <td key={role} className="px-3 py-2.5 text-center">
-                          {/* Icon plus a text label for screen readers — never a
-                              bare colour or glyph carrying the meaning alone. */}
-                          {granted ? (
-                            <>
-                              <Check className="mx-auto size-4 text-ok" aria-hidden />
-                              <span className="sr-only">Granted</span>
-                            </>
-                          ) : (
-                            <>
-                              <Minus
-                                className="mx-auto size-4 text-border-strong"
-                                aria-hidden
-                              />
-                              <span className="sr-only">Not granted</span>
-                            </>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="border-t border-border">
+            {MATRICES.map((matrix) => (
+              <section key={matrix.key} className="border-b border-border last:border-b-0">
+                <header className="px-5 pb-2.5 pt-4">
+                  <h4 className="text-xs font-semibold tracking-tight">
+                    {matrix.title}
+                  </h4>
+                  <p className="mt-0.5 text-2xs leading-relaxed text-subtle-foreground">
+                    {matrix.reach}
+                  </p>
+                </header>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-sm">
+                    <thead>
+                      <tr className="border-y border-border">
+                        <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase tracking-wider text-subtle-foreground">
+                          Capability
+                        </th>
+                        {matrix.roles.map((role) => (
+                          <th
+                            key={role}
+                            className="px-3 py-2.5 text-center text-2xs font-semibold uppercase tracking-wider text-subtle-foreground"
+                          >
+                            {ROLE_LABEL[role]}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {ALL_CAPABILITIES.map((capability) => (
+                        <tr key={capability} className="hover:bg-surface-2/50">
+                          <td className="px-4 py-2.5">
+                            <span className="text-xs font-medium">
+                              {CAPABILITY_LABEL[capability]}
+                            </span>
+                            <span className="tabular mt-0.5 block text-2xs text-subtle-foreground">
+                              {capability}
+                            </span>
+                          </td>
+                          {matrix.roles.map((role) => {
+                            const granted =
+                              ROLE_CAPABILITIES[role].includes(capability);
+                            return (
+                              <td key={role} className="px-3 py-2.5 text-center">
+                                {/* Icon plus a text label for screen readers —
+                                    never a bare colour or glyph carrying the
+                                    meaning alone. */}
+                                {granted ? (
+                                  <>
+                                    <Check
+                                      className="mx-auto size-4 text-ok"
+                                      aria-hidden
+                                    />
+                                    <span className="sr-only">Granted</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Minus
+                                      className="mx-auto size-4 text-border-strong"
+                                      aria-hidden
+                                    />
+                                    <span className="sr-only">Not granted</span>
+                                  </>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ))}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 border-t border-border px-5 py-14 text-center">

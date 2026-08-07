@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { OctagonAlert } from "lucide-react";
-import { NAV_SECTIONS } from "@/lib/nav";
+import { homeHrefFor, navSectionsFor } from "@/lib/nav";
 import { useFleet } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
+import { isProviderRole } from "@/lib/tenancy";
 import { canApprove, pendingValue } from "@/lib/approvals";
 import { Logo } from "@/components/layout/logo";
 import { cn } from "@/lib/utils";
@@ -30,10 +31,13 @@ function useRequestsForMeCount() {
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const requestsForMe = useRequestsForMeCount();
+  const { role } = useCan();
+  // The two sides get different section lists, not one list with items hidden.
+  const sections = navSectionsFor(role);
 
   return (
     <nav className="flex flex-1 flex-col gap-6 px-3 py-4">
-      {NAV_SECTIONS.map((section) => (
+      {sections.map((section) => (
         <div key={section.label}>
           <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-subtle-foreground">
             {section.label}
@@ -92,7 +96,12 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 /** Standing alert at the foot of the rail — the number that should never be ignored. */
 function OverdueCallout() {
   const { ready, summary } = useFleet();
+  const { role } = useCan();
 
+  // Provider-side, "vehicles overdue" is every client's problem at once and
+  // links into a fleet screen that side does not have. The shop's equivalent
+  // standing number is the approval queue, which lives on its own dashboard.
+  if (isProviderRole(role)) return null;
   if (!ready || summary.overdue === 0) return null;
 
   return (
@@ -113,12 +122,18 @@ function OverdueCallout() {
 
 export function Sidebar() {
   const { tenant } = useFleet();
+  const { role } = useCan();
+  const providerSide = isProviderRole(role);
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-border bg-surface lg:flex">
       <div className="flex h-14 items-center border-b border-border px-5">
-        <Link href="/dashboard" className="rounded-md">
-          <Logo name={tenant.displayName} logoUrl={tenant.logoUrl} />
+        <Link href={homeHrefFor(role)} className="rounded-md">
+          <Logo
+            name={tenant.displayName}
+            logoUrl={tenant.logoUrl}
+            tagline={providerSide ? "Service Centre" : "Fleet PMS"}
+          />
         </Link>
       </div>
       <div className="flex flex-1 flex-col overflow-y-auto">

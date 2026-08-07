@@ -40,6 +40,16 @@ export function formatDateShort(iso: string) {
   return format(parseISO(iso), "dd MMM");
 }
 
+/** An "HH:mm" arrival slot in 12-hour form; an em dash when none was recorded. */
+export function formatTime(time: string | null | undefined) {
+  if (!time) return "—";
+  const [hours, minutes] = time.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return "—";
+  const suffix = hours < 12 ? "am" : "pm";
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  return `${hour12}:${String(minutes).padStart(2, "0")}${suffix}`;
+}
+
 export function formatRelative(iso: string) {
   return formatDistanceToNowStrict(parseISO(iso), { addSuffix: true });
 }

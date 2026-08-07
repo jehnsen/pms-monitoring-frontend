@@ -6,6 +6,7 @@ import { validateOdometerReading } from "@/lib/odometer-validation";
 function vehicle(overrides: Partial<Vehicle> = {}): Vehicle {
   return {
     id: "v-1",
+    fleetClientId: "fc-actimed",
     plateNumber: "TEST 0001",
     make: "Toyota",
     model: "Hilux",

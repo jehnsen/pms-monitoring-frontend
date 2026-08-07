@@ -2,9 +2,9 @@
 
 import { useCallback } from "react";
 import { useSession } from "@/lib/auth";
-import type { UserRole } from "@/types";
+import type { ClientUserRole, ProviderUserRole, UserRole } from "@/types";
 
-export type { UserRole };
+export type { UserRole, ClientUserRole, ProviderUserRole };
 
 /**
  * Role-based access control.
@@ -31,6 +31,9 @@ export type Capability =
   | "access:manage";
 
 export const ROLE_LABEL: Record<UserRole, string> = {
+  provider_admin: "Provider Admin",
+  service_advisor: "Service Advisor",
+  provider_technician: "Provider Technician",
   fleet_manager: "Fleet Manager",
   operations: "Operations Staff",
   technician: "Technician",
@@ -39,8 +42,14 @@ export const ROLE_LABEL: Record<UserRole, string> = {
 };
 
 export const ROLE_DESCRIPTION: Record<UserRole, string> = {
+  provider_admin:
+    "Full access to the provider and every fleet client beneath it. The only role that can onboard clients or see across them.",
+  service_advisor:
+    "Front of house across all clients: checks vehicles in and out, raises work orders, and sends quotations.",
+  provider_technician:
+    "Works assigned jobs across all clients: records findings and parts, and closes jobs. Cannot approve spend.",
   fleet_manager:
-    "Full control: schedules, work orders, documents, settings, and access. The only role with unlimited approval authority.",
+    "Full control of their own fleet: schedules, work orders, documents, settings, and access. Unlimited approval authority within that one client.",
   operations:
     "Raises and schedules work, logs readings, files documents, and approves purchases within threshold. Cannot change settings or access.",
   technician:
@@ -51,7 +60,35 @@ export const ROLE_DESCRIPTION: Record<UserRole, string> = {
     "Read-only. Sees every screen and can export nothing that changes state.",
 };
 
-/** Capability grants per role. Order is least- to most-privileged. */
+/**
+ * Which side of the tenancy boundary each role sits on. Client-side roles are
+ * scoped to one fleet client and can never see across; provider-side roles see
+ * every client beneath their provider. Enforced in `lib/tenancy.ts`, not here —
+ * this is only how the matrix is presented.
+ */
+export const CLIENT_ROLES: ClientUserRole[] = [
+  "fleet_manager",
+  "operations",
+  "purchasing_officer",
+  "technician",
+  "viewer",
+];
+
+export const PROVIDER_ROLES: ProviderUserRole[] = [
+  "provider_admin",
+  "service_advisor",
+  "provider_technician",
+];
+
+/**
+ * Capability grants per role. Order is least- to most-privileged.
+ *
+ * Note what a provider-side grant does and does not mean: it is the same
+ * capability set, applied across every client beneath the provider rather than
+ * one. Cross-client *visibility* comes from the tenant scope in
+ * `lib/tenancy.ts`, never from a capability here — which is why no client-side
+ * role can be widened into one by editing this table.
+ */
 export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
   viewer: [],
   technician: [
@@ -71,6 +108,36 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "document:upload",
   ],
   fleet_manager: [
+    "vehicle:update",
+    "vehicle:manage",
+    "workorder:create",
+    "workorder:update",
+    "workorder:complete",
+    "workorder:approve",
+    "po:issue",
+    "document:upload",
+    "document:delete",
+    "settings:manage",
+    "access:manage",
+  ],
+
+  // ------------------------------------------------------------ provider side
+  /** Assigned jobs only: records findings and closes them. No spend authority. */
+  provider_technician: [
+    "vehicle:update",
+    "workorder:update",
+    "workorder:complete",
+    "document:upload",
+  ],
+  /** Front of house: check-in/out, raises work, quotes. Does not approve spend. */
+  service_advisor: [
+    "vehicle:update",
+    "vehicle:manage",
+    "workorder:create",
+    "workorder:update",
+    "document:upload",
+  ],
+  provider_admin: [
     "vehicle:update",
     "vehicle:manage",
     "workorder:create",

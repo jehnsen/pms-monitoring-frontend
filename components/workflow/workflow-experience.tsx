@@ -25,14 +25,14 @@ import {
 } from "@/components/status";
 import { cn, formatCurrency } from "@/lib/utils";
 
-const AUTOPLAY_MS = 6500;
+export const AUTOPLAY_MS = 6500;
 
 /**
  * Each panel below is remounted (via a `key` on its wrapper) every time its
  * step becomes active, so a plain mount-triggered animation is enough —
  * no need to thread an `active` prop through for replay.
  */
-function useCountUp(target: number, duration = 900) {
+export function useCountUp(target: number, duration = 900) {
   const [value, setValue] = useState(0);
   useEffect(() => {
     let raf = 0;
@@ -50,7 +50,7 @@ function useCountUp(target: number, duration = 900) {
 }
 
 /** Flips true one frame after mount, so opacity/transform transitions gated on it actually animate instead of painting their end state immediately. */
-function useRevealed() {
+export function useRevealed() {
   const [revealed, setRevealed] = useState(false);
   useEffect(() => {
     const raf = requestAnimationFrame(() => setRevealed(true));
@@ -59,7 +59,7 @@ function useRevealed() {
   return revealed;
 }
 
-function MockScreen({
+export function MockScreen({
   label,
   children,
   className,
@@ -216,9 +216,9 @@ function DecidePanel() {
           )}
         >
           <span className="flex size-5 items-center justify-center rounded-full bg-brand-muted text-[9px] font-semibold text-brand">
-            GV
+            ER
           </span>
-          Grace Villanueva · Fleet Manager
+          Elena Rosales · Fleet Manager
         </span>
       </div>
       <p className="mt-4 border-t border-border pt-3 text-2xs leading-relaxed text-subtle-foreground">
@@ -475,7 +475,7 @@ const STEPS = [
   },
 ];
 
-function AutoplayBar({ playing, stepKey }: { playing: boolean; stepKey: number }) {
+export function AutoplayBar({ playing, stepKey }: { playing: boolean; stepKey: number }) {
   const [fill, setFill] = useState(false);
   useEffect(() => {
     setFill(false);
