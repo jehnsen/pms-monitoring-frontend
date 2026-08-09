@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Monitor, Moon, RotateCcw, Sun } from "lucide-react";
+import { Monitor, Moon, RotateCcw, Sun, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { SERVICE_TASKS, CATEGORY_LABEL } from "@/lib/service-tasks";
+import { CATEGORY_LABEL } from "@/lib/service-tasks";
+import { ServiceTaskFormDialog } from "@/components/settings/service-task-form-dialog";
 import { DUE_SOON_DAYS, DUE_SOON_KM } from "@/lib/pms";
 import { useFleetActions, useFleet } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
@@ -437,7 +438,9 @@ function ResetCard() {
 }
 
 export default function SettingsPage() {
-  const { ready, summary } = useFleet();
+  const { ready, summary, serviceTasks } = useFleet();
+  const { deleteServiceTask } = useFleetActions();
+  const { can, reason } = useCan();
 
   return (
     <>
@@ -491,17 +494,20 @@ export default function SettingsPage() {
       </div>
 
       <section className="card-raised mt-5">
-        <header className="px-5 pb-3 pt-4">
-          <h3 className="text-sm font-semibold tracking-tight">
-            PMS interval catalogue
-          </h3>
-          <p className="mt-0.5 text-xs text-subtle-foreground">
-            The schedule every vehicle is measured against. Each item is due on
-            whichever limit arrives first.
-          </p>
+        <header className="flex flex-wrap items-start justify-between gap-3 px-5 pb-3 pt-4">
+          <div>
+            <h3 className="text-sm font-semibold tracking-tight">
+              PMS interval catalogue
+            </h3>
+            <p className="mt-0.5 text-xs text-subtle-foreground">
+              The schedule every vehicle is measured against. Each item is due
+              on whichever limit arrives first.
+            </p>
+          </div>
+          <ServiceTaskFormDialog />
         </header>
         <div className="overflow-x-auto border-t border-border">
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="w-full min-w-[820px] text-sm">
             <thead>
               <tr className="border-b border-border text-left">
                 {[
@@ -511,9 +517,10 @@ export default function SettingsPage() {
                   "Time",
                   "Bay time",
                   "Est. cost",
-                ].map((heading) => (
+                  "",
+                ].map((heading, index) => (
                   <th
-                    key={heading}
+                    key={heading || `action-${index}`}
                     scope="col"
                     className="whitespace-nowrap px-4 py-2.5 text-2xs font-semibold uppercase tracking-wider text-subtle-foreground"
                   >
@@ -523,7 +530,7 @@ export default function SettingsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {SERVICE_TASKS.map((task) => (
+              {serviceTasks.map((task) => (
                 <tr key={task.id} className="transition-colors hover:bg-surface-2/50">
                   <td className="px-4 py-3">
                     <span className="flex flex-wrap items-center gap-2">
@@ -548,8 +555,47 @@ export default function SettingsPage() {
                   <td className="tabular whitespace-nowrap px-4 py-3 text-xs font-medium">
                     {formatCurrency(task.estimatedCost)}
                   </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                    <span className="inline-flex items-center gap-1">
+                      <ServiceTaskFormDialog task={task} />
+                      {can("settings:manage") ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Remove ${task.name}`}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Remove "${task.name}" from the catalogue? Vehicles keep their existing service history for it, but it will no longer be evaluated.`
+                              )
+                            ) {
+                              deleteServiceTask(task.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="text-critical" />
+                        </Button>
+                      ) : (
+                        <DeniedAction reason={reason("settings:manage")}>
+                          <Button variant="ghost" size="sm" aria-label={`Remove ${task.name}`}>
+                            <Trash2 />
+                          </Button>
+                        </DeniedAction>
+                      )}
+                    </span>
+                  </td>
                 </tr>
               ))}
+              {ready && serviceTasks.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-4 py-6 text-center text-xs text-subtle-foreground"
+                  >
+                    No service items yet.
+                  </td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
         </div>

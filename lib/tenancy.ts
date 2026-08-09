@@ -13,13 +13,19 @@ import type {
 /**
  * Tenancy scoping.
  *
- * **This is a UI affordance, not a security control** — the same caveat that
- * governs `lib/rbac.ts`. Everything runs in the browser and the whole fleet,
- * every client, sits in one localStorage blob that the user's own devtools can
- * read. What this module buys is a single, testable definition of "what does
- * this session own", applied in one place so no screen can accidentally render
- * another client's data, and a scoping rule ready to be mirrored server-side
- * verbatim when an API exists. It is not isolation until that server exists.
+ * **This is now enforced server-side as well.** The rules below are mirrored
+ * as Row Level Security policies in `supabase/migrations/0001_pms_schema.sql`
+ * (`pms_visible_client_ids`), keyed off `auth.uid()` and the `pms_profiles`
+ * row — neither of which the browser can forge. A client-side session that
+ * asked for another tenant's rows would get nothing back from the database,
+ * not merely a filtered view.
+ *
+ * This module is still the single definition of scope for the UI: it decides
+ * what a screen renders without a round trip, and it keeps the two copies
+ * honest (see `lib/rls-parity.test.ts`, which pins the SQL to these rules).
+ * Note that `lib/rbac.ts` — *capabilities*, as opposed to *scope* — remains a
+ * UI affordance only; a role's permission to act is not yet checked by the
+ * database.
  *
  * The shape is:
  *

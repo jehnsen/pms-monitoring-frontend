@@ -67,11 +67,10 @@ export function LoginForm({ next }: { next?: string }) {
     }
 
     setPending(true);
-    // Brief hold so the pending state is actually observable; a real call would
-    // supply this latency on its own.
-    await new Promise((resolve) => setTimeout(resolve, 450));
 
-    const result = signIn(email, password);
+    // A real network round-trip to Supabase Auth, which supplies the latency
+    // the pending state used to have to fake.
+    const result = await signIn(email, password);
     if (!result.ok) {
       setError(result.error);
       setPending(false);

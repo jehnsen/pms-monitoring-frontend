@@ -244,6 +244,7 @@ const STATE: FleetState = {
 
 function session(overrides: Partial<Session>): Session {
   return {
+    uid: "00000000-0000-0000-0000-000000000001",
     email: "user@example.ph",
     name: "User",
     role: "fleet_manager",

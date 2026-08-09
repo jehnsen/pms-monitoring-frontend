@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { Check, Lock, Minus, ShieldCheck, UserCheck } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +54,19 @@ export default function AccessPage() {
   const { switchAccount } = useAuthActions();
   const { can, reason } = useCan();
   const { scope } = useFleet();
+
+  // Which account is mid-switch, so the buttons can be held while a real
+  // sign-out/sign-in round trip is in flight.
+  const [switching, setSwitching] = React.useState<string | null>(null);
+  const [switchError, setSwitchError] = React.useState<string | null>(null);
+
+  async function onSwitch(email: string) {
+    setSwitching(email);
+    setSwitchError(null);
+    const result = await switchAccount(email);
+    if (!result.ok) setSwitchError(result.error);
+    setSwitching(null);
+  }
 
   // The directory is scoped like any other read: a client sees only its own
   // people, never the provider's staff or a sibling client's roster.
@@ -200,14 +214,22 @@ export default function AccessPage() {
                 key={account.email}
                 variant={active ? "primary" : "secondary"}
                 size="sm"
-                disabled={active}
-                onClick={() => switchAccount(account.email)}
+                // Switching is a real sign-out/sign-in against Supabase now, so
+                // every button is held while one is in flight.
+                disabled={active || switching !== null}
+                onClick={() => void onSwitch(account.email)}
               >
-                {ROLE_LABEL[account.role]}
+                {switching === account.email ? "Switching…" : ROLE_LABEL[account.role]}
               </Button>
             );
           })}
         </div>
+
+        {switchError ? (
+          <p className="border-t border-border px-5 py-3 text-xs text-critical">
+            {switchError}
+          </p>
+        ) : null}
       </section>
 
       <section className="card-raised">

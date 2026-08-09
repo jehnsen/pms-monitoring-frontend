@@ -4,6 +4,11 @@ out
 build
 .DS_Store
 *.pem
+
+# Secrets. `.env` holds the Supabase service_role key, which bypasses RLS
+# entirely — it must never be committed. Only `.env.example` is tracked.
+.env
+.env.local
 npm-debug.log*
 .env*.local
 .vercel

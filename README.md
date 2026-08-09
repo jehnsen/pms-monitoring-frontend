@@ -53,16 +53,55 @@ components/ui/      Primitives (button, card, dialog, select, meter, …)
 components/charts/  Recharts wrappers, each with a table-view twin
 lib/pms.ts          The due-date engine — the core domain logic
 lib/analytics.ts    Derived series for the dashboard and reports
-lib/seed.ts         Deterministic demo fleet: 16 vehicles, 12 months of history
-lib/store.ts        Client store (useSyncExternalStore + localStorage)
+lib/seed.ts         Deterministic demo fleet, now used only to generate seed SQL
+lib/supabase.ts     Supabase browser client
+lib/fleet-data.ts   Queries against the pms_ tables
+lib/mappers.ts      Row <-> domain mapping
+lib/store.ts        Client store (useSyncExternalStore over Supabase)
+supabase/migrations Schema, RLS policies, auth users, seed data
 ```
 
-**State.** The fleet lives in `localStorage` behind a `useSyncExternalStore`
-store, seeded on first load from a fixed PRNG so the demo is identical across
-reloads. Due dates depend on "now", so the server renders an empty shell and the
-store fills in on mount — this is deliberate, and avoids hydration mismatches.
-Pointing the app at a real backend means replacing `lib/store.ts`; nothing else
-knows where the data came from.
+**State.** The fleet lives in Postgres (Supabase). `lib/store.ts` loads it once
+per session behind a `useSyncExternalStore` store, so reads stay synchronous for
+components, and mutations are optimistic — local state updates immediately, the
+write goes to Postgres, and a failure rolls the change back. Due dates depend on
+"now", so the server renders an empty shell and the store fills in on mount;
+check `ready` before rendering data.
+
+**Tenancy is enforced in the database.** `lib/tenancy.ts` decides what the UI
+renders, and the same rules are mirrored as Row Level Security policies keyed
+off `auth.uid()` — see `lib/rls-parity.test.ts`, which pins the SQL to the
+TypeScript so the two copies cannot drift.
+
+## Database setup
+
+The app needs a Supabase project. Note that all its tables are prefixed `pms_`
+so it can share a project with an unrelated application.
+
+1. `cp .env.example .env` and fill in the project URL and **anon** key
+   (Settings -> API). The service_role key is not used by the app and must
+   never reach the browser.
+2. Run the migrations in order, via the Supabase SQL editor or `psql`:
+
+   ```
+   supabase/migrations/0001_pms_schema.sql             tables, RLS policies, grants
+   supabase/migrations/0002_pms_auth_users.sql         the demo accounts
+   supabase/migrations/0003_pms_seed.sql               the demo fleet
+   supabase/migrations/0004_pms_service_tasks.sql      the PMS interval catalogue table
+   supabase/migrations/0005_pms_service_tasks_seed.sql the default 12 service items
+   ```
+
+   All five are idempotent — re-running them will not duplicate anything.
+3. Sign in as `owner@mekanikomore.ph` / `demo1234`.
+
+**Before exposing this instance to anyone**, rotate the demo passwords (they are
+all `demo1234`) or delete the accounts you do not need. These are now real
+credentials against a real database.
+
+To regenerate the demo fleet so its dates read as current:
+`npx vitest run scripts/emit-seed-sql.ts`. To regenerate the service-task seed
+from `lib/service-tasks.ts`: `npx vitest run scripts/emit-service-tasks-sql.ts`.
+Both need a config whose `include` covers `scripts/` (see the file headers).
 
 **Theming.** Light and dark are driven by CSS custom properties in
 `app/globals.css`, stamped onto `<html>` before first paint so there is no

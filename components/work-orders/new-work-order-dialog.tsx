@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SERVICE_TASKS, CATEGORY_LABEL } from "@/lib/service-tasks";
+import { CATEGORY_LABEL } from "@/lib/service-tasks";
 import { useFleet, useFleetActions, type NewWorkOrderLine } from "@/lib/store";
 import { requiredApprover } from "@/lib/approvals";
 import { useCan } from "@/lib/rbac";
@@ -93,7 +93,7 @@ export function NewWorkOrderDialog({
   taskId?: string;
   trigger?: React.ReactNode;
 }) {
-  const { vehicles, approvalSettings } = useFleet();
+  const { vehicles, approvalSettings, serviceTasks } = useFleet();
   const { createWorkOrder } = useFleetActions();
   const { can, reason } = useCan();
   const [open, setOpen] = React.useState(false);
@@ -101,7 +101,9 @@ export function NewWorkOrderDialog({
   const [form, setForm] = React.useState({
     vehicleId: vehicleId ?? "",
     type: "preventive" as WorkOrderType,
-    taskId: taskId ?? SERVICE_TASKS[0].id,
+    // The catalogue loads asynchronously now, so there's no task to default to
+    // on first render; the effect below fills it in once serviceTasks arrives.
+    taskId: taskId ?? "",
     title: "",
     priority: "medium" as Priority,
     scheduledFor: formatISO(addDays(new Date(), 3), { representation: "date" }),
@@ -121,14 +123,14 @@ export function NewWorkOrderDialog({
     setForm((current) => ({
       ...current,
       vehicleId: vehicleId ?? current.vehicleId,
-      taskId: taskId ?? current.taskId,
+      taskId: taskId ?? (current.taskId || serviceTasks[0]?.id || ""),
       type: taskId ? "preventive" : current.type,
     }));
     setCorrectiveLines([blankDraftLine()]);
-  }, [open, vehicleId, taskId]);
+  }, [open, vehicleId, taskId, serviceTasks]);
 
   const vehicle = vehicles.find((v) => v.id === form.vehicleId);
-  const task = SERVICE_TASKS.find((t) => t.id === form.taskId);
+  const task = serviceTasks.find((t) => t.id === form.taskId);
   const isPreventive = form.type !== "corrective";
 
   const estimate = isPreventive && task ? task : null;
@@ -317,7 +319,7 @@ export function NewWorkOrderDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SERVICE_TASKS.map((t) => (
+                  {serviceTasks.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}
                     </SelectItem>

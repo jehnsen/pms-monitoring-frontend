@@ -1,7 +1,7 @@
 # MekanikoMoR — Fleet PMS & Maintenance
 
 Next.js 14 (App Router) · TypeScript · Tailwind · Radix primitives · Recharts ·
-date-fns · lucide-react. No backend — see "Data" below.
+date-fns · lucide-react · Supabase (Postgres + Auth). See "Data" below.
 
 Two sides share one codebase: the **provider** (the service centre running
 this instance — shop owner, service advisors, technicians) and its **fleet
@@ -33,6 +33,16 @@ governs (`governedBy`).
 
 Thresholds live in `lib/pms.ts` as `DUE_SOON_KM` / `DUE_SOON_DAYS`; the settings
 page reads them from there, so change them in one place.
+
+The catalogue itself — `pms_service_tasks`, mapped through `ServiceTask` —
+lives in the database, provider-global like bays and technicians (see below):
+every fleet client beneath a provider is measured against the same schedule.
+`evaluateVehicle`/`evaluateFleet` take it as an optional parameter defaulting
+to `SERVICE_TASKS` (`lib/service-tasks.ts`, now used only as that default and
+by `lib/seed.ts`'s generator) — `useFleet()` passes the live list from
+`lib/store.ts`. Provider-admin CRUD is `addServiceTask` /`updateServiceTask` /
+`deleteServiceTask` in `useFleetActions()`, gated by `settings:manage`. Editing
+an interval does not retroactively touch any vehicle's `taskState`.
 
 `healthScore` weights are deliberately steep (overdue critical −25, overdue −15,
 due-soon critical −8, due-soon −4). A vehicle with two breached safety intervals
@@ -106,9 +116,10 @@ not one fleet's compliance — and gets its own nav section and dashboard
 `homeHrefFor(role)` decides which side a bare sign-in lands on; both `/shop`
 and `/dashboard` self-guard against the wrong side landing there by URL.
 
-- **`lib/bays.ts` / `lib/technicians.ts`** — static catalogues, same pattern
-  as `SERVICE_TASKS`: a bay or a technician is a property of the shop, not
-  persisted state, so adding one today is a code change, not an admin screen.
+- **`lib/bays.ts` / `lib/technicians.ts`** — still static catalogues (unlike
+  service tasks, now database-backed — see "Domain model" above): a bay or a
+  technician is a property of the shop, so adding one today is a code change,
+  not an admin screen.
   `Bay.focus` is advisory only — nothing stops a job from being assigned to a
   bay outside its specialty, and nothing stops two jobs booked into the same
   bay at once; `bayLoadFor`/`floorUtilisation` will just read over 100%.
@@ -135,35 +146,68 @@ and `/dashboard` self-guard against the wrong side landing there by URL.
 
 ## Data
 
-State is client-side: `lib/store.ts` wraps `localStorage` in a
-`useSyncExternalStore` store, seeded from `lib/seed.ts` (deterministic PRNG).
-The seed is one provider (MekanikoMoR) with four fleet clients — Actimed (16
-vehicles, the original fleet, byte-identical to before tenancy existed),
-Northwind Logistics, Sagrada Medical Transport, and Bayani Construction
-(seeded `suspended`, so its demo account demonstrates the fail-closed path
-live). Consume state through `useFleet()` (already scoped, PMS engine
-applied) and `useFleetActions()` (scoped mutations).
+State lives in **Supabase Postgres**, in tables prefixed `pms_` — the project
+is shared with an unrelated application, so *never query an unprefixed table*.
+`lib/store.ts` loads the visible fleet once per session behind a
+`useSyncExternalStore` store; `lib/fleet-data.ts` holds the queries and
+`lib/mappers.ts` the row↔domain mapping. Consume state through `useFleet()`
+(already scoped, PMS engine applied) and `useFleetActions()` (scoped
+mutations) exactly as before.
 
-Two constraints that follow from this:
+The schema, RLS policies, demo accounts, and seed data are in
+`supabase/migrations/`. The seed is one provider (MekanikoMoR) with four fleet
+clients — Actimed (16 vehicles, the original fleet), Northwind Logistics,
+Sagrada Medical Transport, and Bayani Construction (seeded `suspended`, so its
+demo account demonstrates the fail-closed path live).
+
+Rules that bite:
 
 - **Pages that read fleet data are client components.** Due dates depend on
-  "now", so `getServerSnapshot` returns empty and the UI renders skeletons until
-  mount. Check `ready` before rendering data.
+  "now", so `getServerSnapshot` returns empty and the UI renders skeletons
+  until mount. Check `ready` before rendering data.
+- **Mutations are optimistic.** Local state updates immediately, the write
+  goes to Postgres, and a failure rolls it back and logs. Writes can now fail —
+  they could not before — so a caller that shows success must check the result.
+- **RLS is the real boundary.** `lib/tenancy.ts` still scopes what the UI
+  renders, but the database enforces the same rule independently via
+  `pms_visible_client_ids()`. Any change to one must be made in the other;
+  `lib/rls-parity.test.ts` fails if they drift. Adding a `pms_` table means
+  adding its RLS policies **and** its grants, or that test fails too — and
+  adding a *migration* that creates tables means adding it to that test's
+  `allSchemas`, or its tables are never checked and the test passes vacuously.
+  A child table inherits its parent's tenancy (`pms_client_for_work_order`,
+  `pms_client_for_po_line`) rather than storing a `provider_id` — that filter
+  is the sibling-client leak.
+- **The append-only tables are enforced, not conventional.**
+  `pms_work_order_events` and `pms_approval_log` are granted select+insert
+  only, with no update or delete policy anywhere.
+- **`lib/mappers.ts` is where `normalise()` went.** Any new non-nullable field
+  on a domain type needs a default there, or a null column surfaces as a
+  runtime error deep in a component.
+- **Relations are normalised; the domain types are not.** `0006` moved
+  `task_ids[]`, `service_task_ids[]`, `vehicle_ids[]` and the `parts` jsonb
+  into junction tables (`pms_work_order_tasks`, `pms_work_order_parts`,
+  `pms_purchase_order_line_tasks`/`_vehicles`), and repeated names into
+  `pms_technicians` / `pms_vendors` / `pms_service_tasks` FKs. `order.taskIds`
+  is still a `string[]` at every call site — the mapper is the seam, so
+  normalising storage never rippled into components. Writing one of these
+  fields means writing child rows (`replaceWorkOrderTasks`,
+  `replaceWorkOrderParts` in `lib/store.ts`), not a column.
+- **Every catalogue FK is nullable, deliberately.** A technician recording an
+  unlisted repair has no `service_task_id`, and a part fitted off the shelf has
+  no `pms_parts` row. The text column survives beside each FK as the historical
+  label — a line whose catalogue task is later deleted still renders. Never
+  make one of these `not null`.
+- **Enum columns are already ids.** `pms_task_category` and friends store a
+  4-byte oid per row, not the label. Converting them to lookup tables would
+  grow every row and add a join; don't "normalise" them for space.
 - **Seed dates are drawn inside their calendar month**, not by 30-day
   arithmetic — the naive version left the current month reading zero spend.
-
-Two more rules that bite:
-
-- **`normalise()` in `lib/store.ts` is the migration path.** Older payloads are
-  live in people's browsers; any new required field on a persisted type needs a
-  default there or their first load throws. This now includes tenancy
-  backfill — a `fleetClientId`-less record resolves to `SEED_FLEET_CLIENT`,
-  and a pre-tenancy flat `{ readIds, dismissedIds }` migrates into that
-  client's alert bucket.
-- **Read parts cost via `resolvePartsCost`**, never `order.partsCost`. Estimates
-  carry only the aggregate; itemised lines win once a technician records them.
-
-To point at a real API, replace `lib/store.ts`. Nothing else knows the source.
+  Regenerate with `scripts/emit-seed-sql.ts`, which runs the real
+  `createSeedState()` rather than duplicating it in SQL.
+- **Read parts cost via `resolvePartsCost`**, never `order.partsCost`.
+  Estimates carry only the aggregate; itemised lines win once a technician
+  records them.
 
 ## Styling
 

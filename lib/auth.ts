@@ -1,47 +1,55 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import type { Session, UserRole } from "@/types";
 import { FLEET_CLIENT_IDS, SEED_FLEET_CLIENT, SEED_PROVIDER } from "@/lib/tenant";
+import { describeError, getSupabase } from "@/lib/supabase";
 
 /**
- * Demo session handling.
+ * Authentication, backed by Supabase Auth.
  *
- * There is no backend and therefore no real authentication: credentials are
- * compared in the browser against the fixed list below, and the "session" is a
- * plain localStorage record with no token, expiry, or server verification.
- * It gates the demo so the login screen has something to do — it is not a
- * security boundary, and anyone can bypass it from devtools. Replace this
- * module wholesale when a real identity provider goes in; the rest of the app
- * only consumes `useSession()` and the two actions.
+ * This module used to compare credentials against a hardcoded list in the
+ * browser, which meant the "session" was a localStorage record anyone could
+ * forge from devtools. It is now a real GoTrue session, and — more importantly
+ * — the tenancy it carries comes from `pms_profiles`, the same table the
+ * database's RLS policies read. A user cannot claim a provider or fleet client
+ * they were not granted, because the claim is never theirs to make: the browser
+ * reports what the profile says, and the database independently enforces it.
+ *
+ * `Session` is unchanged, so every consumer of `useSession()` keeps working.
  */
 
-const STORAGE_KEY = "pms.session.v1";
+/* --------------------------------------------------------- demo directory */
 
+/**
+ * The demo roster.
+ *
+ * These are now **descriptions of accounts that exist in Supabase Auth**
+ * (created by `supabase/migrations/0002_pms_auth_users.sql`), not credentials
+ * checked in the browser. The list survives because the access page renders it
+ * as a personnel directory and the login screen offers one-click fill; sign-in
+ * itself goes through Supabase and fails if the account is absent.
+ *
+ * The shared password is a demo convenience — see the security note in 0002.
+ */
 export interface DemoAccount {
   email: string;
   password: string;
   name: string;
   role: UserRole;
   title: string;
-  /** Always set. A user with no provider resolves to no scope at all. */
   providerId: string;
   /** Null for provider-side staff, who see every client beneath the provider. */
   fleetClientId: string | null;
 }
 
-/**
- * One account per role, so every permission level can be demonstrated — now on
- * both sides of the tenancy boundary. The client-side accounts are all pinned
- * to Actimed, which is the single client the seeded fleet belongs to.
- */
+const DEMO_PASSWORD = "demo1234";
+
 export const DEMO_ACCOUNTS: DemoAccount[] = [
   // ---------------------------------------------------------- provider side
   {
-    // The shop owner. He ran the demo as Actimed's Fleet Manager before the
-    // provider side existed; this is where he actually belongs.
     email: "owner@mekanikomore.ph",
-    password: "demo1234",
+    password: DEMO_PASSWORD,
     name: "Mike Manabat",
     role: "provider_admin",
     title: "Owner / Provider Admin",
@@ -50,7 +58,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   },
   {
     email: "advisor@mekanikomore.ph",
-    password: "demo1234",
+    password: DEMO_PASSWORD,
     name: "Divina Lacson",
     role: "service_advisor",
     title: "Service Advisor",
@@ -59,7 +67,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   },
   {
     email: "bay@mekanikomore.ph",
-    password: "demo1234",
+    password: DEMO_PASSWORD,
     name: "Arnel Pascual",
     role: "provider_technician",
     title: "Provider Technician",
@@ -69,7 +77,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   // ------------------------------------------- client side · Actimed
   {
     email: "fleet@actimed.ph",
-    password: "demo1234",
+    password: DEMO_PASSWORD,
     name: "Elena Rosales",
     role: "fleet_manager",
     title: "Fleet Manager",
@@ -78,7 +86,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   },
   {
     email: "ops@mekanikomore.ph",
-    password: "demo1234",
+    password: DEMO_PASSWORD,
     name: "Marisol Bautista",
     role: "operations",
     title: "Operations Supervisor",
@@ -87,7 +95,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   },
   {
     email: "tech@mekanikomore.ph",
-    password: "demo1234",
+    password: DEMO_PASSWORD,
     name: "Arnel Pascual",
     role: "technician",
     title: "Lead Technician",
@@ -96,7 +104,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   },
   {
     email: "purchasing@mekanikomor.ph",
-    password: "demo1234",
+    password: DEMO_PASSWORD,
     name: "Grace Villanueva",
     role: "purchasing_officer",
     title: "Purchasing Officer",
@@ -105,20 +113,17 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   },
   {
     email: "viewer@mekanikomore.ph",
-    password: "demo1234",
+    password: DEMO_PASSWORD,
     name: "Camille Ortega",
     role: "viewer",
     title: "Authorised Viewer",
     providerId: SEED_PROVIDER.id,
     fleetClientId: SEED_FLEET_CLIENT.id,
   },
-
   // ------------------------------- client side · the other fleet clients
-  // One account each, so isolation can be seen rather than asserted: signing
-  // in here shows a different fleet entirely, under the same provider.
   {
     email: "fleet@northwind.ph",
-    password: "demo1234",
+    password: DEMO_PASSWORD,
     name: "Ruben Salcedo",
     role: "fleet_manager",
     title: "Fleet Manager",
@@ -127,7 +132,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   },
   {
     email: "operations@sagrada.ph",
-    password: "demo1234",
+    password: DEMO_PASSWORD,
     name: "Imelda Cortez",
     role: "fleet_manager",
     title: "Operations Director",
@@ -135,10 +140,10 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
     fleetClientId: FLEET_CLIENT_IDS.sagrada,
   },
   {
-    // Bayani is suspended. This account resolves to no scope at all — it is
-    // here so the fail-closed path is demonstrable, not just tested.
+    // Bayani is suspended, so this account resolves to no scope — the
+    // fail-closed path, now enforced by RLS as well as by the client.
     email: "yard@bayanicon.ph",
-    password: "demo1234",
+    password: DEMO_PASSWORD,
     name: "Andres Malolos",
     role: "fleet_manager",
     title: "Yard Manager (suspended account)",
@@ -147,71 +152,104 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   },
 ];
 
-/** The one place a `DemoAccount` becomes a `Session`, so tenancy is never dropped. */
-function sessionFromAccount(account: DemoAccount): Session {
-  return {
-    email: account.email,
-    name: account.name,
-    role: account.role,
-    title: account.title,
-    signedInAt: new Date().toISOString(),
-    providerId: account.providerId,
-    fleetClientId: account.fleetClientId,
-  };
-}
-
-/**
- * Re-exported for the many call sites that already import it from here; the
- * definition lives in `@/types` so `lib/tenancy.ts` can type a session without
- * importing this module.
- */
 export type { Session };
 
+/* ------------------------------------------------------------ session store */
+
 /**
- * `undefined` means "not hydrated yet" and is what the server renders;
- * `null` means "hydrated, and nobody is signed in". The guard has to tell those
- * two apart or it would bounce every first paint to the login screen.
+ * `undefined` means "not resolved yet" and is what the server renders; `null`
+ * means "resolved, nobody signed in". The guard has to tell those apart or it
+ * bounces every first paint to the login screen.
  */
 type Snapshot = Session | null | undefined;
 
 let session: Snapshot = undefined;
-let hydrated = false;
+let loading = false;
 const listeners = new Set<() => void>();
-
-function read(): Session | null {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Session;
-    if (!parsed?.email) return null;
-
-    // TENANCY BACKFILL. A session written before tenancy existed carries no
-    // provider, which would now resolve to no scope and lock the user out of
-    // their own data. Prefer the account's current tenancy, falling back to the
-    // seeded provider/client that all pre-tenancy data belongs to.
-    const account = DEMO_ACCOUNTS.find((a) => a.email === parsed.email);
-    return {
-      ...parsed,
-      providerId: parsed.providerId ?? account?.providerId ?? SEED_PROVIDER.id,
-      fleetClientId:
-        parsed.fleetClientId ??
-        (account ? account.fleetClientId : SEED_FLEET_CLIENT.id),
-    };
-  } catch {
-    return null;
-  }
-}
-
-function ensureHydrated(): Snapshot {
-  if (!hydrated && typeof window !== "undefined") {
-    session = read();
-    hydrated = true;
-  }
-  return session;
-}
 
 function emit() {
   for (const listener of listeners) listener();
+}
+
+function setSession(next: Session | null) {
+  session = next;
+  emit();
+}
+
+/**
+ * Builds the app's `Session` from a Supabase user plus its profile row.
+ *
+ * The profile is the authority on role and tenancy. If it is missing, the user
+ * authenticated but has no place in the tenancy tree — that resolves to no
+ * scope at all rather than to a guessed default, which is the same fail-closed
+ * rule `explainTenantScope` applies.
+ */
+async function loadSession(userId: string, email: string): Promise<Session | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("pms_profiles")
+    .select("email, name, role, title, provider_id, fleet_client_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error || !data) {
+    console.warn(
+      `[auth] no pms_profiles row for ${email}` +
+        (error ? ` (${describeError(error)})` : "") +
+        " — signed in with no tenant scope."
+    );
+    return null;
+  }
+
+  return {
+    uid: userId,
+    email: data.email ?? email,
+    name: data.name ?? email,
+    role: data.role as UserRole,
+    title: data.title ?? "",
+    signedInAt: new Date().toISOString(),
+    providerId: data.provider_id ?? null,
+    fleetClientId: data.fleet_client_id ?? null,
+  };
+}
+
+/**
+ * Resolves the current session once, then keeps it in step with Supabase's own
+ * auth events (token refresh, sign-out, or a sign-out in another tab).
+ */
+function ensureSubscribed() {
+  if (loading) return;
+  loading = true;
+
+  const supabase = getSupabase();
+  if (!supabase) {
+    // Unconfigured: resolve to "nobody signed in" so the app renders the login
+    // screen rather than hanging on a skeleton forever.
+    setSession(null);
+    return;
+  }
+
+  supabase.auth
+    .getSession()
+    .then(async ({ data }) => {
+      const user = data.session?.user;
+      setSession(user ? await loadSession(user.id, user.email ?? "") : null);
+    })
+    .catch(() => setSession(null));
+
+  supabase.auth.onAuthStateChange(async (event, next) => {
+    if (event === "SIGNED_OUT" || !next?.user) {
+      setSession(null);
+      return;
+    }
+    // TOKEN_REFRESHED fires often and carries no tenancy change; re-reading the
+    // profile on every one would be a query per refresh for no benefit.
+    if (event === "SIGNED_IN" || event === "USER_UPDATED" || session === undefined) {
+      setSession(await loadSession(next.user.id, next.user.email ?? ""));
+    }
+  });
 }
 
 function subscribe(listener: () => void) {
@@ -221,8 +259,8 @@ function subscribe(listener: () => void) {
   };
 }
 
-function getSnapshot() {
-  return ensureHydrated();
+function getSnapshot(): Snapshot {
+  return session;
 }
 
 function getServerSnapshot(): Snapshot {
@@ -231,70 +269,96 @@ function getServerSnapshot(): Snapshot {
 
 export function useSession() {
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+
+  // Kicks off resolution on first mount. In an effect rather than inline so the
+  // render pass stays pure.
+  useEffect(() => {
+    ensureSubscribed();
+  }, []);
+
   return { session: snapshot ?? null, ready: snapshot !== undefined };
 }
 
 export type SignInResult = { ok: true } | { ok: false; error: string };
 
 export function useAuthActions() {
-  const signIn = useCallback((email: string, password: string): SignInResult => {
-    const match = DEMO_ACCOUNTS.find(
-      (account) =>
-        account.email.toLowerCase() === email.trim().toLowerCase() &&
-        account.password === password
-    );
+  /**
+   * Signs in against Supabase Auth. Now asynchronous — it is a real network
+   * call rather than a comparison against a list in memory.
+   */
+  const signIn = useCallback(
+    async (email: string, password: string): Promise<SignInResult> => {
+      const supabase = getSupabase();
+      if (!supabase) {
+        return {
+          ok: false,
+          error:
+            "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and " +
+            "NEXT_PUBLIC_SUPABASE_ANON_KEY in .env, then restart the dev server.",
+        };
+      }
 
-    if (!match) {
-      return {
-        ok: false,
-        error: "That email and password combination isn't recognised.",
-      };
-    }
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
 
-    const next = sessionFromAccount(match);
+      if (error || !data.user) {
+        return {
+          ok: false,
+          error:
+            error?.message === "Invalid login credentials"
+              ? "That email and password combination isn't recognised."
+              : describeError(error) || "Sign-in failed.",
+        };
+      }
 
-    session = next;
-    hydrated = true;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Private mode — the session just won't survive a reload.
-    }
-    emit();
-    return { ok: true };
-  }, []);
+      // Resolved eagerly so the caller can route on the new role without
+      // waiting for the auth-state listener to fire.
+      setSession(await loadSession(data.user.id, data.user.email ?? email));
+      return { ok: true };
+    },
+    []
+  );
 
   /**
-   * Demo convenience: switches the active account without a password prompt, so
-   * the permission model can be exercised from the access page. It exists
-   * because there is no real identity provider — delete it along with
-   * `DEMO_ACCOUNTS` when one arrives.
+   * Demo convenience: switches the active account from the access page.
+   *
+   * This is a genuine sign-in now — it has to be, because the database only
+   * honours a real JWT — so it signs the current user out and back in as the
+   * target account using the shared demo password. Delete it along with
+   * `DEMO_ACCOUNTS` once real user management exists.
    */
-  const switchAccount = useCallback((email: string) => {
-    const match = DEMO_ACCOUNTS.find((account) => account.email === email);
-    if (!match) return;
+  const switchAccount = useCallback(
+    async (email: string): Promise<SignInResult> => {
+      const account = DEMO_ACCOUNTS.find((candidate) => candidate.email === email);
+      if (!account) return { ok: false, error: "Unknown account." };
 
-    const next = sessionFromAccount(match);
+      const supabase = getSupabase();
+      if (!supabase) return { ok: false, error: "Supabase is not configured." };
 
-    session = next;
-    hydrated = true;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Private mode — the switch just won't survive a reload.
-    }
-    emit();
-  }, []);
+      await supabase.auth.signOut();
 
-  const signOut = useCallback(() => {
-    session = null;
-    hydrated = true;
-    try {
-      window.localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // Nothing to clean up if storage is unavailable.
-    }
-    emit();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: account.email,
+        password: account.password,
+      });
+
+      if (error || !data.user) {
+        setSession(null);
+        return { ok: false, error: describeError(error) || "Switch failed." };
+      }
+
+      setSession(await loadSession(data.user.id, data.user.email ?? account.email));
+      return { ok: true };
+    },
+    []
+  );
+
+  const signOut = useCallback(async () => {
+    const supabase = getSupabase();
+    if (supabase) await supabase.auth.signOut();
+    setSession(null);
   }, []);
 
   return { signIn, signOut, switchAccount };

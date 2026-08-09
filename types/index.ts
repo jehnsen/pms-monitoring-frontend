@@ -98,6 +98,12 @@ export interface Technician {
  * session without importing the auth module.
  */
 export interface Session {
+  /**
+   * The Supabase `auth.users` id — also the primary key of `pms_profiles`.
+   * Use this, never `email`, as the key for anything that has to match a
+   * database `uuid` column (e.g. `pms_alert_interactions.user_id`).
+   */
+  uid: string;
   email: string;
   name: string;
   role: UserRole;
@@ -248,6 +254,15 @@ export type LineApprovalStatus = "pending" | "approved" | "declined" | "deferred
  */
 export interface WorkOrderLine {
   id: string;
+  /**
+   * The catalogue task this line bills for, when there is one. Null for
+   * ad-hoc work — a technician finding an unlisted repair mid-job has no
+   * catalogue id, and the schema must not force one.
+   *
+   * When set, the catalogue's name is what renders; `description` is the
+   * historical label kept for lines whose task is later removed.
+   */
+  serviceTaskId?: string | null;
   description: string;
   category: TaskCategory | "other";
   partCost: number;

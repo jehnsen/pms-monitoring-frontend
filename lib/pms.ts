@@ -99,9 +99,13 @@ export function compareUrgency(a: PmsItem, b: PmsItem) {
 
 export function evaluateVehicle(
   vehicle: Vehicle,
-  today = new Date()
+  today = new Date(),
+  // Defaults to the static catalogue so every existing caller — tests,
+  // lib/seed.ts's generator — keeps working unchanged. `useFleet()` passes the
+  // provider's live catalogue from the database instead; see lib/store.ts.
+  tasks: ServiceTask[] = SERVICE_TASKS
 ): VehicleHealth {
-  const items = SERVICE_TASKS.map((task) =>
+  const items = tasks.map((task) =>
     evaluateTask(vehicle, task, today)
   ).sort(compareUrgency);
 
@@ -132,8 +136,12 @@ export function evaluateVehicle(
   };
 }
 
-export function evaluateFleet(vehicles: Vehicle[], today = new Date()) {
-  return vehicles.map((vehicle) => evaluateVehicle(vehicle, today));
+export function evaluateFleet(
+  vehicles: Vehicle[],
+  today = new Date(),
+  tasks: ServiceTask[] = SERVICE_TASKS
+) {
+  return vehicles.map((vehicle) => evaluateVehicle(vehicle, today, tasks));
 }
 
 export interface FleetSummary {
