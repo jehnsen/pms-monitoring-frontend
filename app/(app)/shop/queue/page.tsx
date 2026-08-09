@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/select";
 import { useFleet } from "@/lib/store";
 import { BAYS, bayName } from "@/lib/bays";
-import { TECHNICIAN_NAMES } from "@/lib/technicians";
 import {
   elapsedMinutes,
   formatDuration,
@@ -41,7 +40,7 @@ const STATUS_OPTIONS: { value: WorkOrderStatus | "all"; label: string }[] = [
 ];
 
 export default function ShopQueuePage() {
-  const { ready, workOrders, vehiclesById, fleetClients } = useFleet();
+  const { ready, workOrders, vehiclesById, fleetClients, technicians } = useFleet();
 
   const [query, setQuery] = useState("");
   const [technician, setTechnician] = useState("all");
@@ -159,11 +158,13 @@ export default function ShopQueuePage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All technicians</SelectItem>
-            {TECHNICIAN_NAMES.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
-              </SelectItem>
-            ))}
+            {technicians
+              .filter((tech) => tech.active)
+              .map((tech) => (
+                <SelectItem key={tech.id} value={tech.name}>
+                  {tech.name}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
 

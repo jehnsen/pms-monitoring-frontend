@@ -216,6 +216,34 @@ export interface ServiceTask {
 }
 
 /**
+ * A technician on the provider's staff, backed by `pms_technicians`.
+ *
+ * Distinct from `Technician` in `lib/technicians.ts`, which is the older
+ * static, name-keyed catalogue that seeded `WorkOrder.technician`. This is
+ * the database-backed roster a provider admin manages from Settings; a work
+ * order's `technicianId` (nullable) points here, and `WorkOrder.technician`
+ * stays the historical text label so a technician who has since left the shop
+ * still renders a name on old jobs.
+ */
+export interface ProviderTechnician {
+  id: string;
+  name: string;
+  /** Advisory only, like `Bay.focus` — nothing stops a job going elsewhere. */
+  specialty: string;
+  /** Bay this technician normally works out of; null when unassigned. */
+  homeBayId: string | null;
+  /** False retires a technician from new assignments without deleting history. */
+  active: boolean;
+}
+
+/** A repair vendor on the provider's approved list, backed by `pms_vendors`. */
+export interface ProviderVendor {
+  id: string;
+  name: string;
+  active: boolean;
+}
+
+/**
  * One entry in a work order's status history. Append-only — nothing ever
  * edits or removes an entry, so the record can't drift from what actually
  * happened.

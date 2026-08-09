@@ -19,6 +19,8 @@ import type {
   ApprovalLogEntry,
   ApprovalSettings,
   FleetState,
+  ProviderTechnician,
+  ProviderVendor,
   PurchaseOrder,
   ServiceTask,
   WorkOrder,
@@ -36,6 +38,8 @@ import {
   toPart,
   toPartLine,
   toProvider,
+  toProviderTechnician,
+  toProviderVendor,
   toPurchaseOrder,
   toPurchaseOrderLine,
   toServiceTask,
@@ -310,6 +314,24 @@ export async function fetchFleetState(): Promise<FleetState> {
 export async function fetchServiceTasks(): Promise<ServiceTask[]> {
   const rows = await selectAll("pms_service_tasks");
   return rows.map(toServiceTask);
+}
+
+/* ------------------------------------------------------------ provider staff */
+
+/**
+ * The provider's technician roster and approved vendor list — provider-wide
+ * catalogues like `pms_service_tasks`, fetched the same way. `fetchFleetState`
+ * separately loads these same tables to resolve names onto work orders; this
+ * is the list-management read, used by the Settings page.
+ */
+export async function fetchTechnicians(): Promise<ProviderTechnician[]> {
+  const rows = await selectAll("pms_technicians");
+  return rows.map(toProviderTechnician);
+}
+
+export async function fetchVendors(): Promise<ProviderVendor[]> {
+  const rows = await selectAll("pms_vendors");
+  return rows.map(toProviderVendor);
 }
 
 /* -------------------------------------------------------- alert interactions */

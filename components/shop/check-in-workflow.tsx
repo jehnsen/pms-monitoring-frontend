@@ -32,7 +32,6 @@ import { useFleet, useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
 import { validateOdometerReading } from "@/lib/odometer-validation";
 import { BAYS } from "@/lib/bays";
-import { TECHNICIAN_NAMES } from "@/lib/technicians";
 import { serviceableItems } from "@/lib/shop";
 import { requiredApprover } from "@/lib/approvals";
 import { formatCurrency, formatDate, formatDayDelta, formatKm } from "@/lib/utils";
@@ -73,9 +72,15 @@ export function CheckInWorkflow() {
 
 function CheckInPanel() {
   const router = useRouter();
-  const { ready, health, healthById, fleetClients, approvalSettings } = useFleet();
+  const { ready, health, healthById, fleetClients, approvalSettings, technicians } =
+    useFleet();
   const { createWorkOrder, updateVehicle } = useFleetActions();
   const { can, reason } = useCan();
+
+  const activeTechnicians = React.useMemo(
+    () => technicians.filter((tech) => tech.active),
+    [technicians]
+  );
 
   const [query, setQuery] = React.useState("");
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -83,12 +88,20 @@ function CheckInPanel() {
   const [confirmed, setConfirmed] = React.useState(false);
   const [taskIds, setTaskIds] = React.useState<string[]>([]);
   const [bayId, setBayId] = React.useState(BAYS[0].id);
-  const [technician, setTechnician] = React.useState(TECHNICIAN_NAMES[0]);
+  // The roster loads asynchronously, so there is no name to default to on
+  // first render; backfilled below once `technicians` arrives.
+  const [technician, setTechnician] = React.useState("");
   const [slot, setSlot] = React.useState(SLOTS[0]);
   const [notes, setNotes] = React.useState("");
   const [done, setDone] = React.useState<{ count: number; plate: string } | null>(
     null
   );
+
+  React.useEffect(() => {
+    if (!technician && activeTechnicians.length > 0) {
+      setTechnician(activeTechnicians[0].name);
+    }
+  }, [technician, activeTechnicians]);
 
   const matches = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -152,7 +165,11 @@ function CheckInPanel() {
   );
   const band = requiredApprover(estimateTotal, approvalSettings);
 
-  const canSubmit = Boolean(vehicle) && readingOk && chosen.length > 0;
+  // Unlike the static array this replaced, a fresh provider's roster can be
+  // genuinely empty — the create call takes a plain string, so an empty
+  // technician would otherwise post silently rather than surface as a gap.
+  const canSubmit =
+    Boolean(vehicle) && readingOk && chosen.length > 0 && technician.length > 0;
 
   function submit() {
     if (!vehicle || !canSubmit) return;
@@ -465,12 +482,12 @@ function CheckInPanel() {
                   <Label htmlFor="checkin-tech">Technician</Label>
                   <Select value={technician} onValueChange={setTechnician}>
                     <SelectTrigger id="checkin-tech">
-                      <SelectValue />
+                      <SelectValue placeholder="No technicians on the roster" />
                     </SelectTrigger>
                     <SelectContent>
-                      {TECHNICIAN_NAMES.map((name) => (
-                        <SelectItem key={name} value={name}>
-                          {name}
+                      {activeTechnicians.map((tech) => (
+                        <SelectItem key={tech.id} value={tech.name}>
+                          {tech.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

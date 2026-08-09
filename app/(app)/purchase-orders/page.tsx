@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Receipt } from "lucide-react";
+import { FileSpreadsheet, Receipt } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -17,20 +17,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PurchaseOrderStatusBadge } from "@/components/status";
+import { PurchaseOrderExportMenu } from "@/components/purchase-orders/purchase-order-export-menu";
+import { PurchaseOrderPrintDocument } from "@/components/purchase-orders/purchase-order-print";
 import { useFleet, useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
+import { exportPurchaseOrdersToExcel, purchaseOrderTotal } from "@/lib/po-export";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PurchaseOrder } from "@/types";
 
-function lineTotal(order: PurchaseOrder) {
-  return order.lines.reduce((total, line) => total + line.quantity * line.unitCost, 0);
-}
-
 export default function PurchaseOrdersPage() {
-  const { ready, purchaseOrders } = useFleet();
+  const { ready, purchaseOrders, tenant } = useFleet();
   const { updatePurchaseOrderStatus } = useFleetActions();
   const { can, reason } = useCan();
   const [viewing, setViewing] = useState<PurchaseOrder | null>(null);
+  // The one order currently rendered into `.po-print-root` — see
+  // PurchaseOrderExportMenu for why only one may exist at a time.
+  const [printing, setPrinting] = useState<PurchaseOrder | null>(null);
 
   if (!ready) {
     return (
@@ -51,6 +53,17 @@ export default function PurchaseOrdersPage() {
       <PageHeader
         title="Purchase orders"
         description="Formal POs raised from the demand forecast and from approved work."
+        actions={
+          orders.length > 0 ? (
+            <Button
+              variant="secondary"
+              onClick={() => void exportPurchaseOrdersToExcel(orders)}
+            >
+              <FileSpreadsheet />
+              Export all to Excel
+            </Button>
+          ) : undefined
+        }
       />
 
       {orders.length === 0 ? (
@@ -65,10 +78,10 @@ export default function PurchaseOrdersPage() {
       ) : (
         <div className="card-raised">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[880px] text-sm">
               <thead>
                 <tr className="border-b border-border text-left">
-                  {["Reference", "Vendor", "Status", "Lines", "Total", "Created", ""].map(
+                  {["Reference", "Vendor", "Status", "Lines", "Total", "Created", "", ""].map(
                     (heading, index) => (
                       <th
                         key={heading || index}
@@ -105,10 +118,13 @@ export default function PurchaseOrdersPage() {
                       {order.lines.length} {order.lines.length === 1 ? "line" : "lines"}
                     </td>
                     <td className="tabular whitespace-nowrap px-4 py-3 text-right text-xs font-medium">
-                      {formatCurrency(lineTotal(order))}
+                      {formatCurrency(purchaseOrderTotal(order))}
                     </td>
                     <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
                       {formatDate(order.createdOn)}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-3 text-right">
+                      <PurchaseOrderExportMenu order={order} onPrint={setPrinting} />
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       {order.status === "draft" || order.status === "sent" ? (
@@ -147,7 +163,7 @@ export default function PurchaseOrdersPage() {
           <DialogHeader>
             <DialogTitle>{viewing?.reference}</DialogTitle>
             <DialogDescription>
-              {viewing?.vendor} — {viewing ? formatCurrency(lineTotal(viewing)) : ""}
+              {viewing?.vendor} — {viewing ? formatCurrency(purchaseOrderTotal(viewing)) : ""}
             </DialogDescription>
           </DialogHeader>
           <DialogBody>
@@ -168,12 +184,18 @@ export default function PurchaseOrdersPage() {
             </ul>
           </DialogBody>
           <DialogFooter>
+            {viewing ? (
+              <PurchaseOrderExportMenu order={viewing} onPrint={setPrinting} />
+            ) : null}
             <Button variant="secondary" onClick={() => setViewing(null)}>
               Close
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Off-screen until a print is requested; see PurchaseOrderExportMenu. */}
+      {printing ? <PurchaseOrderPrintDocument order={printing} tenant={tenant} /> : null}
     </>
   );
 }

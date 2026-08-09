@@ -8,10 +8,12 @@ import {
   FolderOpen,
   LayoutDashboard,
   LineChart,
+  ListChecks,
   Receipt,
   Settings,
   ShieldCheck,
   TrendingUp,
+  Truck,
   UsersRound,
   Wrench,
   type LucideIcon,
@@ -106,17 +108,17 @@ export const CLIENT_NAV_SECTIONS: NavSection[] = [
         icon: Receipt,
         description: "Issued and pending POs",
       },
-      {
-        href: "/vendors",
-        label: "Vendors",
-        icon: Building2,
-        description: "Approved service providers",
-      },
     ],
   },
   {
     label: "Configure",
     items: [
+      {
+        href: "/service-catalogue",
+        label: "Service catalogue",
+        icon: ListChecks,
+        description: "The PMS interval schedule",
+      },
       {
         href: "/access",
         label: "User access",
@@ -127,7 +129,7 @@ export const CLIENT_NAV_SECTIONS: NavSection[] = [
         href: "/settings",
         label: "Settings",
         icon: Settings,
-        description: "Intervals, thresholds, and data",
+        description: "Thresholds, branding, and data",
       },
     ],
   },
@@ -178,6 +180,12 @@ export const PROVIDER_NAV_SECTIONS: NavSection[] = [
         description: "Roster, load, and variance",
       },
       {
+        href: "/shop/vendors",
+        label: "Vendors",
+        icon: Truck,
+        description: "Approved repair vendors",
+      },
+      {
         href: "/shop/reports",
         label: "Reports",
         icon: TrendingUp,
@@ -188,6 +196,12 @@ export const PROVIDER_NAV_SECTIONS: NavSection[] = [
   {
     label: "Configure",
     items: [
+      {
+        href: "/service-catalogue",
+        label: "Service catalogue",
+        icon: ListChecks,
+        description: "The PMS interval schedule",
+      },
       {
         href: "/access",
         label: "User access",

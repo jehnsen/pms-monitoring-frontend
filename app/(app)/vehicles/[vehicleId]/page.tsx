@@ -1,6 +1,8 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Car, Clock, Gauge, HeartPulse, ShieldAlert, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Meter } from "@/components/ui/progress";
@@ -22,6 +24,7 @@ import { NewWorkOrderDialog } from "@/components/work-orders/new-work-order-dial
 import { WorkOrderTable } from "@/components/work-orders/work-order-table";
 import { DocumentList } from "@/components/documents/document-list";
 import { UploadDocumentDialog } from "@/components/documents/upload-document-dialog";
+import { SuccessDialog } from "@/components/ui/success-dialog";
 import { useFleet } from "@/lib/store";
 import { isOdometerStale, odometerAgeDays, workOrderCost } from "@/lib/pms";
 import { plateEndingRenewalMonth, vehicleComplianceStatus } from "@/lib/compliance";
@@ -39,20 +42,53 @@ export default function VehicleDetailPage({
 }: {
   params: { vehicleId: string };
 }) {
+  return (
+    <React.Suspense fallback={<VehicleDetailSkeleton />}>
+      <VehicleDetailView params={params} />
+    </React.Suspense>
+  );
+}
+
+/**
+ * `useSearchParams` (below, for `?created=1`) opts this subtree out of static
+ * rendering, so it needs its own boundary — matching the pattern in
+ * `vehicles/page.tsx` and `schedule/page.tsx` rather than pulling the whole
+ * page into the client-only path.
+ */
+function VehicleDetailSkeleton() {
+  return (
+    <>
+      <Skeleton className="h-8 w-64" />
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <Skeleton key={index} className="h-28" />
+        ))}
+      </div>
+      <Skeleton className="mt-5 h-96" />
+    </>
+  );
+}
+
+function VehicleDetailView({ params }: { params: { vehicleId: string } }) {
   const { ready, healthById, workOrders, vehicles, documents } = useFleet();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // `?created=1` is set by VehicleFormDialog after a create-then-navigate —
+  // its own dialog state doesn't survive the route change, so the
+  // confirmation is deferred to here. Stripped from the URL immediately so a
+  // refresh or share of the link doesn't replay it.
+  const [showCreated, setShowCreated] = React.useState(false);
+  React.useEffect(() => {
+    if (searchParams.get("created") === "1") {
+      setShowCreated(true);
+      router.replace(`/vehicles/${params.vehicleId}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- router/params.vehicleId are stable; keying on searchParams alone avoids re-running this on every render.
+  }, [searchParams]);
 
   if (!ready) {
-    return (
-      <>
-        <Skeleton className="h-8 w-64" />
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className="h-28" />
-          ))}
-        </div>
-        <Skeleton className="mt-5 h-96" />
-      </>
-    );
+    return <VehicleDetailSkeleton />;
   }
 
   const entry = healthById.get(params.vehicleId);
@@ -157,6 +193,13 @@ export default function VehicleDetailPage({
             <NewWorkOrderDialog vehicleId={vehicle.id} />
           </>
         }
+      />
+
+      <SuccessDialog
+        open={showCreated}
+        onOpenChange={setShowCreated}
+        title="Vehicle added"
+        description={`${vehicle.plateNumber} — ${vehicle.year} ${vehicle.make} ${vehicle.model} — has been added to the fleet.`}
       />
 
       {declinedSafetyCritical.length > 0 ? (

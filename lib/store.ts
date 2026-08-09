@@ -12,6 +12,8 @@ import type {
   LineApprovalStatus,
   Part,
   PartLine,
+  ProviderTechnician,
+  ProviderVendor,
   PurchaseOrder,
   PurchaseOrderLine,
   PurchaseOrderStatus,
@@ -48,6 +50,8 @@ import {
   fetchAlertInteractions,
   fetchFleetState,
   fetchServiceTasks,
+  fetchTechnicians,
+  fetchVendors,
   saveAlertInteraction,
 } from "@/lib/fleet-data";
 import {
@@ -55,6 +59,8 @@ import {
   approvalSettingsToRow,
   documentToRow,
   fleetClientToRow,
+  providerTechnicianToRow,
+  providerVendorToRow,
   purchaseOrderLineTaskRows,
   purchaseOrderLineToRow,
   purchaseOrderLineVehicleRows,
@@ -89,19 +95,24 @@ import {
  */
 
 const EMPTY = EMPTY_STATE;
-/** Stable empty-array reference for the server snapshot — a fresh `[]` on every
- * call would fail `useSyncExternalStore`'s reference-equality check and loop. */
+/** Stable empty-array references for the server snapshot — a fresh `[]` on
+ * every call would fail `useSyncExternalStore`'s reference-equality check and
+ * loop. */
 const EMPTY_SERVICE_TASKS: ServiceTask[] = [];
+const EMPTY_TECHNICIANS: ProviderTechnician[] = [];
+const EMPTY_VENDORS: ProviderVendor[] = [];
 
 let state: FleetState = EMPTY;
 /**
- * The provider's PMS interval catalogue. Held separately from `FleetState`
- * because it is provider-wide rather than tenant data proper — the same
- * reason bays and technicians aren't part of `FleetState` either — but it
- * shares this store's load/subscribe lifecycle since every screen that reads
- * it also reads the fleet.
+ * The provider's PMS interval catalogue, technician roster, and approved
+ * vendor list. Held separately from `FleetState` because all three are
+ * provider-wide rather than tenant data proper — the same reason bays aren't
+ * part of `FleetState` either — but they share this store's load/subscribe
+ * lifecycle since every screen that reads one also reads the fleet.
  */
 let serviceTasks: ServiceTask[] = [];
+let technicians: ProviderTechnician[] = [];
+let vendors: ProviderVendor[] = [];
 /** Set once a load has finished, so `ready` distinguishes "empty" from "loading". */
 let loaded = false;
 let loading = false;
@@ -138,6 +149,22 @@ function getServiceTasksServerSnapshot() {
   return EMPTY_SERVICE_TASKS;
 }
 
+function getTechniciansSnapshot() {
+  return technicians;
+}
+
+function getTechniciansServerSnapshot() {
+  return EMPTY_TECHNICIANS;
+}
+
+function getVendorsSnapshot() {
+  return vendors;
+}
+
+function getVendorsServerSnapshot() {
+  return EMPTY_VENDORS;
+}
+
 /** Replaces local state and notifies subscribers. */
 function commit(next: FleetState) {
   state = next;
@@ -147,6 +174,16 @@ function commit(next: FleetState) {
 /** Replaces the cached service-task catalogue and notifies subscribers. */
 function commitServiceTasks(next: ServiceTask[]) {
   serviceTasks = next;
+  emit();
+}
+
+function commitTechnicians(next: ProviderTechnician[]) {
+  technicians = next;
+  emit();
+}
+
+function commitVendors(next: ProviderVendor[]) {
+  vendors = next;
   emit();
 }
 
@@ -163,13 +200,17 @@ async function load(userId: string) {
   loadError = null;
 
   try {
-    const [fleet, alerts, tasks] = await Promise.all([
+    const [fleet, alerts, tasks, techs, vends] = await Promise.all([
       fetchFleetState(),
       fetchAlertInteractions(userId),
       fetchServiceTasks(),
+      fetchTechnicians(),
+      fetchVendors(),
     ]);
     state = { ...fleet, alerts };
     serviceTasks = tasks;
+    technicians = techs;
+    vendors = vends;
     loaded = true;
     loadedForUser = userId;
   } catch (error) {
@@ -178,6 +219,8 @@ async function load(userId: string) {
     console.error(`[store] failed to load fleet state: ${loadError}`);
     state = EMPTY;
     serviceTasks = [];
+    technicians = [];
+    vendors = [];
     loaded = true;
     loadedForUser = userId;
   } finally {
@@ -190,6 +233,8 @@ async function load(userId: string) {
 function reset() {
   state = EMPTY;
   serviceTasks = [];
+  technicians = [];
+  vendors = [];
   loaded = false;
   loadedForUser = null;
   loadError = null;
@@ -217,6 +262,16 @@ function useRawFleetState() {
     getServiceTasksSnapshot,
     getServiceTasksServerSnapshot
   );
+  const techs = useSyncExternalStore(
+    subscribe,
+    getTechniciansSnapshot,
+    getTechniciansServerSnapshot
+  );
+  const vends = useSyncExternalStore(
+    subscribe,
+    getVendorsSnapshot,
+    getVendorsServerSnapshot
+  );
 
   // The real Supabase auth uid — required by fetchAlertInteractions, whose
   // `user_id` column is `uuid`. The session's email is not a valid key here.
@@ -234,6 +289,8 @@ function useRawFleetState() {
   return {
     snapshot,
     serviceTasks: tasks,
+    technicians: techs,
+    vendors: vends,
     // Not ready until a load has actually completed for this user; otherwise
     // the first paint would render an empty fleet as though it were real.
     ready: loaded && loadedForUser === userId && userId !== null,
@@ -289,9 +346,10 @@ export function useFleet() {
   const { state: snapshot, ready, scope, error } = useFleetState();
   // Provider-global, not tenant-scoped data, so it comes from the raw store
   // rather than `useFleetState` — a client-side session still needs to see
-  // what its vehicles are measured against, even though only the provider can
-  // change it (enforced by RLS, see 0004_pms_service_tasks.sql).
-  const { serviceTasks } = useRawFleetState();
+  // what its vehicles are measured against and who might work on them, even
+  // though only the provider can change any of it (enforced by RLS, see
+  // 0004_pms_service_tasks.sql / 0006_pms_normalisation.sql).
+  const { serviceTasks, technicians, vendors } = useRawFleetState();
 
   return useMemo(() => {
     const health = evaluateFleet(snapshot.vehicles, new Date(), serviceTasks);
@@ -310,12 +368,14 @@ export function useFleet() {
       purchaseOrders: snapshot.purchaseOrders,
       tenant: snapshot.tenant,
       serviceTasks,
+      technicians,
+      vendors,
       health,
       healthById: new Map(health.map((h) => [h.vehicle.id, h])),
       vehiclesById: new Map(snapshot.vehicles.map((v) => [v.id, v])),
       summary: summariseFleet(health),
     };
-  }, [snapshot, ready, scope, error, serviceTasks]);
+  }, [snapshot, ready, scope, error, serviceTasks, technicians, vendors]);
 }
 
 /**
@@ -461,7 +521,11 @@ export function useFleetActions() {
   const { session } = useSession();
   const actor = session?.name ?? "System";
   const { scope } = useTenantScope();
-  const { serviceTasks: catalogue } = useRawFleetState();
+  const {
+    serviceTasks: catalogue,
+    technicians,
+    vendors,
+  } = useRawFleetState();
 
   /**
    * Writes are scoped by the same rule as reads. Unchanged from the
@@ -1845,6 +1909,202 @@ export function useFleetActions() {
     [scope, catalogue, optimisticTasks]
   );
 
+  /** Same optimistic-then-persist shape as `optimistic`, for the technician roster. */
+  const optimisticTechnicians = useCallback(
+    async (
+      next: ProviderTechnician[],
+      persist: () => Promise<void>
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const previous = technicians;
+      commitTechnicians(next);
+      try {
+        await persist();
+        return { ok: true };
+      } catch (error) {
+        commitTechnicians(previous);
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[store] write failed, rolled back: ${message}`);
+        return { ok: false, error: message };
+      }
+    },
+    [technicians]
+  );
+
+  /**
+   * Adds a technician to the provider's staff roster.
+   *
+   * Provider-side only, like `addServiceTask` — a technician is a property of
+   * the shop, and a fleet client's work order can name one but not add to the
+   * roster. `pms_technicians` has a `unique (provider_id, name)` constraint,
+   * so a duplicate name surfaces as a write failure rather than silently
+   * creating a second row for the same person.
+   */
+  const addTechnician = useCallback(
+    (
+      draft: Omit<ProviderTechnician, "id">
+    ): { ok: true } | { ok: false; error: string } => {
+      if (scope?.kind !== "provider") {
+        return { ok: false, error: "Only the provider can edit the technician roster." };
+      }
+
+      const created: ProviderTechnician = {
+        ...draft,
+        id: `tech-${Date.now().toString(36)}`,
+      };
+
+      void optimisticTechnicians([...technicians, created], async () => {
+        const supabase = requireSupabase();
+        const { error } = await supabase
+          .from("pms_technicians")
+          .insert(providerTechnicianToRow(created, scope.providerId));
+        if (error) throw new Error(error.message);
+      });
+
+      return { ok: true };
+    },
+    [scope, technicians, optimisticTechnicians]
+  );
+
+  const updateTechnician = useCallback(
+    (id: string, patch: Partial<Omit<ProviderTechnician, "id">>) => {
+      if (scope?.kind !== "provider") return;
+      const existing = technicians.find((t) => t.id === id);
+      if (!existing) return;
+
+      const updated = { ...existing, ...patch, id };
+
+      void optimisticTechnicians(
+        technicians.map((t) => (t.id === id ? updated : t)),
+        async () => {
+          const supabase = requireSupabase();
+          const row = providerTechnicianToRow(patch, scope.providerId);
+          delete row.provider_id; // never move a technician between providers
+          if (Object.keys(row).length === 0) return;
+          const { error } = await supabase
+            .from("pms_technicians")
+            .update(row)
+            .eq("id", id);
+          if (error) throw new Error(error.message);
+        }
+      );
+    },
+    [scope, technicians, optimisticTechnicians]
+  );
+
+  /**
+   * Removes a technician outright. `technician_id` on any of their past work
+   * orders resolves to null (`on delete set null`) rather than blocking the
+   * delete — those orders keep rendering the historical `technician` text
+   * label regardless. Retiring someone without erasing them is `updateTechnician(id, { active: false })`.
+   */
+  const deleteTechnician = useCallback(
+    (id: string) => {
+      if (scope?.kind !== "provider") return;
+
+      void optimisticTechnicians(
+        technicians.filter((t) => t.id !== id),
+        async () => {
+          const supabase = requireSupabase();
+          const { error } = await supabase
+            .from("pms_technicians")
+            .delete()
+            .eq("id", id);
+          if (error) throw new Error(error.message);
+        }
+      );
+    },
+    [scope, technicians, optimisticTechnicians]
+  );
+
+  /** Same optimistic-then-persist shape as `optimistic`, for the vendor list. */
+  const optimisticVendors = useCallback(
+    async (
+      next: ProviderVendor[],
+      persist: () => Promise<void>
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      const previous = vendors;
+      commitVendors(next);
+      try {
+        await persist();
+        return { ok: true };
+      } catch (error) {
+        commitVendors(previous);
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[store] write failed, rolled back: ${message}`);
+        return { ok: false, error: message };
+      }
+    },
+    [vendors]
+  );
+
+  /** Adds a vendor to the provider's approved list. Provider-side only. */
+  const addVendor = useCallback(
+    (draft: Omit<ProviderVendor, "id">): { ok: true } | { ok: false; error: string } => {
+      if (scope?.kind !== "provider") {
+        return { ok: false, error: "Only the provider can edit the vendor list." };
+      }
+
+      const created: ProviderVendor = {
+        ...draft,
+        id: `vendor-${Date.now().toString(36)}`,
+      };
+
+      void optimisticVendors([...vendors, created], async () => {
+        const supabase = requireSupabase();
+        const { error } = await supabase
+          .from("pms_vendors")
+          .insert(providerVendorToRow(created, scope.providerId));
+        if (error) throw new Error(error.message);
+      });
+
+      return { ok: true };
+    },
+    [scope, vendors, optimisticVendors]
+  );
+
+  const updateVendor = useCallback(
+    (id: string, patch: Partial<Omit<ProviderVendor, "id">>) => {
+      if (scope?.kind !== "provider") return;
+      const existing = vendors.find((v) => v.id === id);
+      if (!existing) return;
+
+      const updated = { ...existing, ...patch, id };
+
+      void optimisticVendors(
+        vendors.map((v) => (v.id === id ? updated : v)),
+        async () => {
+          const supabase = requireSupabase();
+          const row = providerVendorToRow(patch, scope.providerId);
+          delete row.provider_id; // never move a vendor between providers
+          if (Object.keys(row).length === 0) return;
+          const { error } = await supabase
+            .from("pms_vendors")
+            .update(row)
+            .eq("id", id);
+          if (error) throw new Error(error.message);
+        }
+      );
+    },
+    [scope, vendors, optimisticVendors]
+  );
+
+  /** Removes a vendor outright; past work orders keep their `vendor` text label. */
+  const deleteVendor = useCallback(
+    (id: string) => {
+      if (scope?.kind !== "provider") return;
+
+      void optimisticVendors(
+        vendors.filter((v) => v.id !== id),
+        async () => {
+          const supabase = requireSupabase();
+          const { error } = await supabase.from("pms_vendors").delete().eq("id", id);
+          if (error) throw new Error(error.message);
+        }
+      );
+    },
+    [scope, vendors, optimisticVendors]
+  );
+
   /** Whether the current session may edit branding at all — provider-side only. */
   const canEditBranding = scope?.kind === "provider";
 
@@ -1887,5 +2147,11 @@ export function useFleetActions() {
     addServiceTask,
     updateServiceTask,
     deleteServiceTask,
+    addTechnician,
+    updateTechnician,
+    deleteTechnician,
+    addVendor,
+    updateVendor,
+    deleteVendor,
   };
 }

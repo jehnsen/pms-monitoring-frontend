@@ -144,4 +144,34 @@
   .skeleton::after {
     @apply absolute inset-0 animate-shimmer bg-gradient-to-r from-transparent via-surface-3 to-transparent content-[''];
   }
+
+  /*
+   * Print/PDF documents (see components/purchase-orders/purchase-order-print.tsx).
+   * The document renders off-screen at all times so `window.print()` needs no
+   * portal or state change; the print pass swaps which one is visible.
+   */
+  .po-print-root {
+    position: fixed;
+    left: -9999px;
+    top: 0;
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .po-print-root,
+  .po-print-root * {
+    visibility: visible;
+  }
+  .po-print-root {
+    position: static;
+    left: auto;
+  }
+  /* Never printed even inside the visible subtree, e.g. an action bar
+     rendered alongside the document for on-screen preview. */
+  .no-print {
+    display: none !important;
+  }
 }

@@ -21,6 +21,8 @@ import type {
   Part,
   PartLine,
   Provider,
+  ProviderTechnician,
+  ProviderVendor,
   PurchaseOrder,
   PurchaseOrderLine,
   ServiceTask,
@@ -672,6 +674,50 @@ export function serviceTaskToRow(
   if (task.estimatedCost !== undefined) row.estimated_cost = task.estimatedCost;
   if (task.estimatedHours !== undefined) row.estimated_hours = task.estimatedHours;
   if (task.critical !== undefined) row.critical = task.critical;
+  return row;
+}
+
+/* -------------------------------------------------------- provider staff */
+
+export function toProviderTechnician(row: Row): ProviderTechnician {
+  return {
+    id: str(row.id),
+    name: str(row.name),
+    specialty: str(row.specialty, "general"),
+    homeBayId: nullableStr(row.home_bay_id),
+    active: row.active !== false,
+  };
+}
+
+export function providerTechnicianToRow(
+  technician: Partial<ProviderTechnician>,
+  providerId: string
+): Record<string, unknown> {
+  const row: Record<string, unknown> = { provider_id: providerId };
+  if (technician.id !== undefined) row.id = technician.id;
+  if (technician.name !== undefined) row.name = technician.name;
+  if (technician.specialty !== undefined) row.specialty = technician.specialty;
+  if (technician.homeBayId !== undefined) row.home_bay_id = technician.homeBayId;
+  if (technician.active !== undefined) row.active = technician.active;
+  return row;
+}
+
+export function toProviderVendor(row: Row): ProviderVendor {
+  return {
+    id: str(row.id),
+    name: str(row.name),
+    active: row.active !== false,
+  };
+}
+
+export function providerVendorToRow(
+  vendor: Partial<ProviderVendor>,
+  providerId: string
+): Record<string, unknown> {
+  const row: Record<string, unknown> = { provider_id: providerId };
+  if (vendor.id !== undefined) row.id = vendor.id;
+  if (vendor.name !== undefined) row.name = vendor.name;
+  if (vendor.active !== undefined) row.active = vendor.active;
   return row;
 }
 

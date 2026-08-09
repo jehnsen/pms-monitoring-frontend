@@ -200,7 +200,9 @@ export function VehicleFormDialog({ vehicle }: { vehicle?: Vehicle }) {
     };
     const created = addVehicle(draft);
     setOpen(false);
-    if (created) router.push(`/vehicles/${created.id}`);
+    // The confirmation is a query param the detail page reads on mount, since
+    // this dialog's own state does not survive the navigation away from it.
+    if (created) router.push(`/vehicles/${created.id}?created=1`);
   }
 
   const trigger = isEdit ? (

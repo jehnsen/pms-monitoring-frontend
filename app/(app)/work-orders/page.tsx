@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { WorkOrderTable } from "@/components/work-orders/work-order-table";
@@ -8,6 +8,7 @@ import { NewWorkOrderDialog } from "@/components/work-orders/new-work-order-dial
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Pagination } from "@/components/ui/pagination";
 import {
   Select,
   SelectContent,
@@ -29,11 +30,15 @@ const BUCKETS: { value: Bucket; label: string }[] = [
   { value: "all", label: "All" },
 ];
 
+const DEFAULT_PAGE_SIZE = 25;
+
 export default function WorkOrdersPage() {
   const { ready, workOrders, vehicles } = useFleet();
   const [bucket, setBucket] = useState<Bucket>("active");
   const [type, setType] = useState<WorkOrderType | "all">("all");
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const vehiclesById = useMemo(
     () => new Map(vehicles.map((v) => [v.id, v])),
@@ -80,6 +85,20 @@ export default function WorkOrdersPage() {
   const filteredValue = filtered.reduce(
     (total, order) => total + workOrderCost(order),
     0
+  );
+
+  // A changed filter can leave `page` pointing past the new, shorter result
+  // set — jump back to the first page rather than render an empty table with
+  // rows the user knows exist.
+  useEffect(() => {
+    setPage(1);
+  }, [bucket, type, query]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const paginated = useMemo(
+    () => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [filtered, currentPage, pageSize]
   );
 
   return (
@@ -142,11 +161,24 @@ export default function WorkOrdersPage() {
 
           <div className="card-raised">
             <WorkOrderTable
-              orders={filtered}
+              orders={paginated}
               vehiclesById={vehiclesById}
               emptyTitle="No work orders here"
               emptyDescription="Nothing matches this combination of filters."
             />
+            <div className="px-4 pb-3">
+              <Pagination
+                page={currentPage}
+                pageCount={pageCount}
+                pageSize={pageSize}
+                totalItems={filtered.length}
+                onPageChange={setPage}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setPage(1);
+                }}
+              />
+            </div>
           </div>
         </>
       )}
