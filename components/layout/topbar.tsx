@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { ChevronDown, LogOut, Menu, Search, UserCog } from "lucide-react";
+import { ChevronDown, LogOut, Menu, Search, User, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import {
@@ -117,6 +117,12 @@ export function Topbar() {
                 </p>
               ) : null}
               <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/profile">
+                  <User />
+                  My profile
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/settings">
                   <UserCog />

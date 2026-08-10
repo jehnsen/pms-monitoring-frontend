@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
+import { AlertCircle, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Logo } from "@/components/layout/logo";
 import { DEMO_ACCOUNTS, useAuthActions, useSession } from "@/lib/auth";
 import { homeHrefFor } from "@/lib/nav";
@@ -19,7 +20,7 @@ import type { UserRole } from "@/types";
  */
 const PRIMARY_ACCOUNT =
   DEMO_ACCOUNTS.find((account) => account.role === "provider_admin") ??
-  DEMO_ACCOUNTS[0];
+  DEMO_ACCOUNTS[3];
 
 /**
  * Where a bare sign-in drops you. Provider staff land on the shop floor,
@@ -48,7 +49,6 @@ export function LoginForm({ next }: { next?: string }) {
 
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [showPassword, setShowPassword] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
 
@@ -136,31 +136,13 @@ export function LoginForm({ next }: { next?: string }) {
               Forgot password?
             </button>
           </div>
-          <div className="relative">
-            <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground" />
-            <Input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="••••••••"
-              className="pl-9 pr-10"
-              aria-invalid={Boolean(error)}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((value) => !value)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute right-2 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded text-subtle-foreground transition-colors hover:bg-surface-2 hover:text-foreground"
-            >
-              {showPassword ? (
-                <EyeOff className="size-4" />
-              ) : (
-                <Eye className="size-4" />
-              )}
-            </button>
-          </div>
+          <PasswordInput
+            id="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            aria-invalid={Boolean(error)}
+          />
         </div>
 
         {error ? (
@@ -209,14 +191,14 @@ export function LoginForm({ next }: { next?: string }) {
 
         <hr />
 
-        <dl className="mt-2 space-y-1 text-xs">
+         <dl className="mt-2 space-y-1 text-xs">
           <div className="flex items-center justify-between gap-3">
             <dt className="text-subtle-foreground">Email</dt>
-            <dd className="tabular font-medium">purchasing@mekanikomor.ph</dd>
+            <dd className="tabular font-medium">donmiguel@mekanikomor.ph</dd>
           </div>
           <div className="flex items-center justify-between gap-3">
             <dt className="text-subtle-foreground">Password</dt>
-            <dd className="tabular font-medium">{PRIMARY_ACCOUNT.password}</dd>
+            <dd className="tabular font-medium">demo1234</dd>
           </div>
         </dl>
 
@@ -225,11 +207,11 @@ export function LoginForm({ next }: { next?: string }) {
         <dl className="mt-2 space-y-1 text-xs">
           <div className="flex items-center justify-between gap-3">
             <dt className="text-subtle-foreground">Email</dt>
-            <dd className="tabular font-medium">fleet@actimed.ph</dd>
+            <dd className="tabular font-medium">purchasing@mekanikomor.ph</dd>
           </div>
           <div className="flex items-center justify-between gap-3">
             <dt className="text-subtle-foreground">Password</dt>
-            <dd className="tabular font-medium">demo1234</dd>
+            <dd className="tabular font-medium">{PRIMARY_ACCOUNT.password}</dd>
           </div>
         </dl>
 

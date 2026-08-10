@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
+import { AddUserDialog } from "@/components/access/add-user-dialog";
 import { DEMO_ACCOUNTS, useAuthActions, useSession } from "@/lib/auth";
 import {
   ALL_CAPABILITIES,
@@ -19,8 +20,15 @@ import {
   type UserRole,
 } from "@/lib/rbac";
 import { useFleet } from "@/lib/store";
-import { scopeAccounts } from "@/lib/tenancy";
+import { describeError, getSupabase } from "@/lib/supabase";
 import { cn, formatDate } from "@/lib/utils";
+
+interface PersonnelRow {
+  email: string;
+  name: string;
+  title: string;
+  role: UserRole;
+}
 
 /**
  * The two sides of the tenancy boundary, rendered as separate matrices rather
@@ -53,12 +61,45 @@ export default function AccessPage() {
   const { session } = useSession();
   const { switchAccount } = useAuthActions();
   const { can, reason } = useCan();
-  const { scope } = useFleet();
+  const { scope, fleetClients } = useFleet();
 
   // Which account is mid-switch, so the buttons can be held while a real
   // sign-out/sign-in round trip is in flight.
   const [switching, setSwitching] = React.useState<string | null>(null);
   const [switchError, setSwitchError] = React.useState<string | null>(null);
+
+  // The roster itself, unlike the demo switcher below, is a live read: RLS on
+  // `pms_profiles` already scopes it the same way every other read is scoped —
+  // a client sees only its own people, never the provider's staff or a
+  // sibling client's roster — so no client-side filtering is needed here.
+  const [personnel, setPersonnel] = React.useState<PersonnelRow[] | null>(null);
+  const [personnelError, setPersonnelError] = React.useState<string | null>(null);
+
+  const loadPersonnel = React.useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) {
+      setPersonnelError("Supabase is not configured.");
+      return;
+    }
+    const { data, error } = await supabase
+      .from("pms_profiles")
+      .select("email, name, title, role")
+      .order("name");
+
+    if (error) {
+      setPersonnelError(describeError(error));
+      return;
+    }
+    setPersonnelError(null);
+    setPersonnel((data ?? []) as PersonnelRow[]);
+  }, []);
+
+  const canManageAccess = can("access:manage");
+
+  React.useEffect(() => {
+    if (!canManageAccess) return;
+    void loadPersonnel();
+  }, [loadPersonnel, canManageAccess]);
 
   async function onSwitch(email: string) {
     setSwitching(email);
@@ -67,10 +108,6 @@ export default function AccessPage() {
     if (!result.ok) setSwitchError(result.error);
     setSwitching(null);
   }
-
-  // The directory is scoped like any other read: a client sees only its own
-  // people, never the provider's staff or a sibling client's roster.
-  const personnel = scopeAccounts(DEMO_ACCOUNTS, scope);
 
   return (
     <>
@@ -117,76 +154,112 @@ export default function AccessPage() {
       ) : null}
 
       <section className="card-raised mb-5">
-        <header className="px-5 pb-3 pt-4">
-          <h3 className="text-sm font-semibold tracking-tight">Personnel</h3>
-          <p className="mt-0.5 text-xs text-subtle-foreground">
-            {scope?.kind === "provider"
-              ? "Everyone authorised on this provider, across every fleet client beneath it."
-              : "Everyone authorised on your fleet. Provider staff and other clients' people are not listed."}
-          </p>
+        <header className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3 pt-4">
+          <div>
+            <h3 className="text-sm font-semibold tracking-tight">Personnel</h3>
+            <p className="mt-0.5 text-xs text-subtle-foreground">
+              {canManageAccess
+                ? scope?.kind === "provider"
+                  ? "Everyone authorised on this provider, across every fleet client beneath it."
+                  : "Everyone authorised on your fleet. Provider staff and other clients' people are not listed."
+                : "Visible to the provider admin only."}
+            </p>
+          </div>
+          {session && canManageAccess ? (
+            <AddUserDialog
+              session={session}
+              fleetClients={fleetClients}
+              onCreated={() => void loadPersonnel()}
+            />
+          ) : null}
         </header>
 
-        <div className="overflow-x-auto border-t border-border">
-          <table className="w-full min-w-[720px] text-sm">
-            <thead>
-              <tr className="border-b border-border text-left">
-                {["Person", "Email", "Role", "Grants"].map((heading, index) => (
-                  <th
-                    key={heading || index}
-                    className="whitespace-nowrap px-4 py-2.5 text-2xs font-semibold uppercase tracking-wider text-subtle-foreground"
-                  >
-                    {heading}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {personnel.map((account) => {
-                const active = session?.email === account.email;
-                return (
-                  <tr
-                    key={account.email}
-                    className={cn(
-                      "transition-colors hover:bg-surface-2/50",
-                      active && "bg-brand-muted/40"
-                    )}
-                  >
-                    <td className="px-4 py-3">
-                      <span className="flex items-center gap-2.5">
-                        <Avatar name={account.name} size="sm" />
-                        <span>
-                          <span className="block text-xs font-medium">
-                            {account.name}
-                          </span>
-                          <span className="block text-2xs text-subtle-foreground">
-                            {account.title}
-                          </span>
-                        </span>
-                      </span>
-                    </td>
-                    <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                      {account.email}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={active ? "brand" : "neutral"}>
-                        {ROLE_LABEL[account.role]}
-                      </Badge>
-                    </td>
-                    <td className="tabular px-4 py-3 text-xs text-muted-foreground">
-                      {ROLE_CAPABILITIES[account.role].length} of{" "}
-                      {ALL_CAPABILITIES.length}
-                      {active ? (
-                        <span className="ml-2 text-2xs font-medium text-brand">
-                          · current session
-                        </span>
-                      ) : null}
-                    </td>
+        {canManageAccess ? (
+          <>
+            {personnelError ? (
+              <p className="border-t border-border px-5 py-3 text-xs text-critical">
+                {personnelError}
+              </p>
+            ) : null}
+
+            <div className="overflow-x-auto border-t border-border">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    {["Person", "Email", "Role", "Grants"].map((heading, index) => (
+                      <th
+                        key={heading || index}
+                        className="whitespace-nowrap px-4 py-2.5 text-2xs font-semibold uppercase tracking-wider text-subtle-foreground"
+                      >
+                        {heading}
+                      </th>
+                    ))}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {personnel === null ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center text-xs text-subtle-foreground">
+                        Loading…
+                      </td>
+                    </tr>
+                  ) : null}
+                  {personnel?.map((account) => {
+                    const active = session?.email === account.email;
+                    return (
+                      <tr
+                        key={account.email}
+                        className={cn(
+                          "transition-colors hover:bg-surface-2/50",
+                          active && "bg-brand-muted/40"
+                        )}
+                      >
+                        <td className="px-4 py-3">
+                          <span className="flex items-center gap-2.5">
+                            <Avatar name={account.name} size="sm" />
+                            <span>
+                              <span className="block text-xs font-medium">
+                                {account.name}
+                              </span>
+                              <span className="block text-2xs text-subtle-foreground">
+                                {account.title}
+                              </span>
+                            </span>
+                          </span>
+                        </td>
+                        <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
+                          {account.email}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge tone={active ? "brand" : "neutral"}>
+                            {ROLE_LABEL[account.role]}
+                          </Badge>
+                        </td>
+                        <td className="tabular px-4 py-3 text-xs text-muted-foreground">
+                          {ROLE_CAPABILITIES[account.role].length} of{" "}
+                          {ALL_CAPABILITIES.length}
+                          {active ? (
+                            <span className="ml-2 text-2xs font-medium text-brand">
+                              · current session
+                            </span>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-2 border-t border-border px-5 py-14 text-center">
+            <Lock className="size-5 text-subtle-foreground" />
+            <p className="text-sm font-medium">Restricted to the provider admin</p>
+            <p className="max-w-sm text-xs leading-relaxed text-subtle-foreground">
+              {reason("access:manage")}
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Separated from the directory above on purpose. Switching account
@@ -241,7 +314,7 @@ export default function AccessPage() {
             <p className="mt-0.5 text-xs text-subtle-foreground">
               {can("access:manage")
                 ? "Every capability the application checks, and which roles hold it."
-                : "Who holds which capability — visible to the Fleet Manager role only."}
+                : "Who holds which capability — visible to the provider admin only."}
             </p>
           </div>
           {can("access:manage") ? (
@@ -252,7 +325,7 @@ export default function AccessPage() {
           ) : (
             <Badge tone="neutral" size="md">
               <Lock />
-              Fleet Manager only
+              Provider admin only
             </Badge>
           )}
         </header>
@@ -336,7 +409,7 @@ export default function AccessPage() {
         ) : (
           <div className="flex flex-col items-center gap-2 border-t border-border px-5 py-14 text-center">
             <Lock className="size-5 text-subtle-foreground" />
-            <p className="text-sm font-medium">Restricted to the Fleet Manager role</p>
+            <p className="text-sm font-medium">Restricted to the provider admin role</p>
             <p className="max-w-sm text-xs leading-relaxed text-subtle-foreground">
               {reason("access:manage")}
             </p>

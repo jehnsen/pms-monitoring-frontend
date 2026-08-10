@@ -49,7 +49,7 @@ export const ROLE_DESCRIPTION: Record<UserRole, string> = {
   provider_technician:
     "Works assigned jobs across all clients: records findings and parts, and closes jobs. Cannot approve spend.",
   fleet_manager:
-    "Full control of their own fleet: schedules, work orders, documents, settings, and access. Unlimited approval authority within that one client.",
+    "Full control of their own fleet: schedules, work orders, documents, and settings. Unlimited approval authority within that one client. Cannot view or add users — only the provider admin manages accounts.",
   operations:
     "Raises and schedules work, logs readings, files documents, and approves purchases within threshold. Cannot change settings or access.",
   technician:
@@ -107,6 +107,8 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "workorder:approve",
     "document:upload",
   ],
+  // `access:manage` is deliberately absent — user accounts are managed
+  // provider-wide by the provider admin only, even for a client's own fleet.
   fleet_manager: [
     "vehicle:update",
     "vehicle:manage",
@@ -118,7 +120,6 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "document:upload",
     "document:delete",
     "settings:manage",
-    "access:manage",
   ],
 
   // ------------------------------------------------------------ provider side

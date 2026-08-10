@@ -588,7 +588,7 @@ Four roles, eight capabilities:
 | `document:upload` | ● | ● | ● | |
 | `document:delete` | ● | | | |
 | `settings:manage` | ● | | | |
-| `access:manage` | ● | | | |
+| `access:manage` | | | | |
 
 **Gating happens inside the action components**, not at call sites —
 `NewWorkOrderDialog`, `OdometerDialog`, and `UploadDocumentDialog` each check

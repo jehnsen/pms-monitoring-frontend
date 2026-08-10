@@ -114,7 +114,7 @@ export function CommandPalette({
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onKeyDown}
             placeholder="Search plate, model, driver, or a page…"
-            className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-subtle-foreground"
+            className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-subtle-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
         </div>
 

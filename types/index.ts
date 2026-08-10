@@ -106,6 +106,10 @@ export interface Session {
   uid: string;
   email: string;
   name: string;
+  /** Split out of `name` for the profile-edit form; keep both in sync on write. */
+  firstName: string;
+  lastName: string;
+  username: string;
   role: UserRole;
   /** Job title for display; `role` is what permissions key off. */
   title: string;
