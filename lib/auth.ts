@@ -76,9 +76,9 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   },
   // ------------------------------------------- client side · Actimed
   {
-    email: "fleet@actimed.ph",
+    email: "donmiguel@mekanikomor.ph",
     password: DEMO_PASSWORD,
-    name: "Elena Rosales",
+    name: "Don Miguel",
     role: "fleet_manager",
     title: "Fleet Manager",
     providerId: SEED_PROVIDER.id,
@@ -190,7 +190,7 @@ async function loadSession(userId: string, email: string): Promise<Session | nul
 
   const { data, error } = await supabase
     .from("pms_profiles")
-    .select("email, name, role, title, provider_id, fleet_client_id")
+    .select("email, name, first_name, last_name, username, role, title, provider_id, fleet_client_id")
     .eq("id", userId)
     .maybeSingle();
 
@@ -207,6 +207,9 @@ async function loadSession(userId: string, email: string): Promise<Session | nul
     uid: userId,
     email: data.email ?? email,
     name: data.name ?? email,
+    firstName: data.first_name ?? "",
+    lastName: data.last_name ?? "",
+    username: data.username ?? "",
     role: data.role as UserRole,
     title: data.title ?? "",
     signedInAt: new Date().toISOString(),
@@ -361,5 +364,87 @@ export function useAuthActions() {
     setSession(null);
   }, []);
 
-  return { signIn, signOut, switchAccount };
+  /**
+   * Edits the signed-in user's own name/username. `pms_profiles_update_self`
+   * pins role and tenancy, so this can only ever touch identity fields —
+   * nothing here needs a capability check on top of "is signed in".
+   */
+  const updateProfile = useCallback(
+    async (patch: {
+      firstName: string;
+      lastName: string;
+      username: string;
+    }): Promise<SignInResult> => {
+      const current = session;
+      if (!current) return { ok: false, error: "You need to be signed in." };
+
+      const supabase = getSupabase();
+      if (!supabase) return { ok: false, error: "Supabase is not configured." };
+
+      const firstName = patch.firstName.trim();
+      const lastName = patch.lastName.trim();
+      const username = patch.username.trim();
+      if (!firstName || !lastName || !username) {
+        return {
+          ok: false,
+          error: "First name, last name, and username are all required.",
+        };
+      }
+
+      const name = `${firstName} ${lastName}`;
+      setSession({ ...current, firstName, lastName, username, name });
+
+      const { error } = await supabase
+        .from("pms_profiles")
+        .update({ first_name: firstName, last_name: lastName, username, name })
+        .eq("id", current.uid);
+
+      if (error) {
+        setSession(current);
+        return {
+          ok: false,
+          error:
+            error.code === "23505"
+              ? "That username is already taken."
+              : describeError(error),
+        };
+      }
+      return { ok: true };
+    },
+    []
+  );
+
+  /**
+   * Changes the signed-in user's password. Supabase's `updateUser` trusts
+   * whatever session is live and does not itself ask for the current
+   * password, so it's verified here with a fresh sign-in first — otherwise
+   * anyone at an unlocked, already-signed-in browser could change it without
+   * knowing it.
+   */
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string): Promise<SignInResult> => {
+      const current = session;
+      if (!current) return { ok: false, error: "You need to be signed in." };
+
+      const supabase = getSupabase();
+      if (!supabase) return { ok: false, error: "Supabase is not configured." };
+
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email: current.email,
+        password: currentPassword,
+      });
+      if (verifyError) {
+        return { ok: false, error: "Your current password isn't correct." };
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) {
+        return { ok: false, error: describeError(error) || "Could not change your password." };
+      }
+      return { ok: true };
+    },
+    []
+  );
+
+  return { signIn, signOut, switchAccount, updateProfile, changePassword };
 }
