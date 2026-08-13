@@ -31,6 +31,7 @@ import { DeniedAction } from "@/components/auth/denied-action";
 import { useFleet, useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
 import { validateOdometerReading } from "@/lib/odometer-validation";
+import { hydrateCheckInForm, lookupVehicle } from "@/lib/checkin";
 import { BAYS } from "@/lib/bays";
 import { serviceableItems } from "@/lib/shop";
 import { requiredApprover } from "@/lib/approvals";
@@ -38,7 +39,6 @@ import { formatCurrency, formatDate, formatDayDelta, formatKm } from "@/lib/util
 import type { NewWorkOrderLine } from "@/lib/store";
 import type { Vehicle } from "@/types";
 
-const LABOUR_RATE_PER_HOUR = 650;
 const SLOTS = ["08:00", "09:30", "11:00", "13:00", "14:30", "16:00"];
 
 export function CheckInWorkflow() {
@@ -116,6 +116,27 @@ function CheckInPanel() {
       .slice(0, 6);
   }, [health, query]);
 
+  /**
+   * An exact plate or VIN skips the picker entirely — the advisor typed the
+   * whole identifier, so making them then click the single result is asking
+   * for data the system already has. Substring matches still fall through to
+   * the list above, which is what a partial or a driver-name search wants.
+   */
+  const exact = React.useMemo(() => {
+    const result = lookupVehicle(
+      query,
+      health.map((entry) => entry.vehicle),
+      fleetClients
+    );
+    return result.outcome === "existing" ? result : null;
+  }, [query, health, fleetClients]);
+
+  React.useEffect(() => {
+    if (exact && exact.vehicle.id !== selectedId) select(exact.vehicle);
+    // `select` is stable for this purpose — it only sets state from its argument.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exact, selectedId]);
+
   const selected = selectedId ? healthById.get(selectedId) : undefined;
   const vehicle = selected?.vehicle;
   const clientName = vehicle
@@ -136,7 +157,19 @@ function CheckInPanel() {
   function select(next: Vehicle) {
     setSelectedId(next.id);
     setQuery("");
-    setReading("");
+    // Pre-fill the last known reading rather than an empty box — but only when
+    // it is recent. A stale reading pre-filled and accepted unchanged is how a
+    // wrong odometer enters the PMS engine and shifts every due date behind
+    // it, so an old one is deliberately left blank to force a real look at the
+    // dash. `hydrateCheckInForm` decides which case this is.
+    const form = hydrateCheckInForm(
+      lookupVehicle(next.plateNumber, [next], fleetClients)
+    );
+    setReading(
+      form.odometer !== null && !form.odometerNeedsConfirmation
+        ? String(form.odometer)
+        : ""
+    );
     setConfirmed(false);
     // Pre-tick everything already overdue: the advisor is meant to offer it,
     // and starting from "none selected" quietly encourages skipping the
@@ -160,7 +193,9 @@ function CheckInPanel() {
   const chosen = due.filter((item) => taskIds.includes(item.task.id));
   const estimateTotal = chosen.reduce(
     (total, item) =>
-      total + item.task.estimatedCost + item.task.estimatedHours * LABOUR_RATE_PER_HOUR,
+      total +
+      item.task.estimatedCost +
+      item.task.estimatedHours * approvalSettings.defaultLabourRate,
     0
   );
   const band = requiredApprover(estimateTotal, approvalSettings);
@@ -189,8 +224,12 @@ function CheckInPanel() {
         {
           description: item.task.name,
           category: item.task.category,
-          partCost: item.task.estimatedCost,
-          labourCost: item.task.estimatedHours * LABOUR_RATE_PER_HOUR,
+          // The catalogue's estimate is one unit of the job at its own cost;
+          // the store derives the extended amounts from these.
+          quantity: 1,
+          unitPartRate: item.task.estimatedCost,
+          labourHours: item.task.estimatedHours,
+          labourRate: approvalSettings.defaultLabourRate,
           urgency: item.task.critical ? "safety_critical" : "recommended",
           partsSource: approvalSettings.defaultPartsSource,
           photoUrls: [],
@@ -209,9 +248,14 @@ function CheckInPanel() {
           completedOn: null,
           odometerAtService: Math.round(parsed),
           technician,
-          vendor: "In-house Fleet Bay 1",
+          // A vehicle on our own ramp is in-house work, not a subcontract:
+          // an empty vendor is what marks that, and the owning provider is
+          // stamped by the store the moment approval lands. Naming a bay here
+          // put the shop in its own vendor-spend analytics.
+          vendor: "",
+          assignedProviderId: null,
           bayId,
-          laborCost: item.task.estimatedHours * LABOUR_RATE_PER_HOUR,
+          laborCost: item.task.estimatedHours * approvalSettings.defaultLabourRate,
           partsCost: item.task.estimatedCost,
           parts: [],
           findings: "",
@@ -444,7 +488,8 @@ function CheckInPanel() {
                         <span className="tabular shrink-0 text-xs text-muted-foreground">
                           {formatCurrency(
                             item.task.estimatedCost +
-                              item.task.estimatedHours * LABOUR_RATE_PER_HOUR
+                              item.task.estimatedHours *
+                                approvalSettings.defaultLabourRate
                           )}
                         </span>
                         <PmsStatusBadge status={item.status} />

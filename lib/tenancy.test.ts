@@ -119,6 +119,7 @@ function workOrder(id: string, vehicleId: string, laborCost = 1_000): WorkOrder 
     odometerAtService: 50_000,
     technician: "Tech",
     vendor: "In-house Fleet Bay 1",
+    assignedProviderId: "prov-mekanikomore",
     bayId: "bay-1",
     collectedAt: null,
     collectedBy: null,

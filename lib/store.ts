@@ -45,6 +45,13 @@ import {
   requiredApprover,
   varianceExceeds,
 } from "@/lib/approvals";
+import { computeTotals, recalcLine } from "@/lib/billing";
+import {
+  assignOnApproval,
+  checkTransition,
+  hasReference,
+  nextReference,
+} from "@/lib/work-order-machine";
 import {
   EMPTY_STATE,
   fetchAlertInteractions,
@@ -492,10 +499,25 @@ export type NewDocumentDraft = Omit<
   "id" | "uploadedOn" | "fleetClientId"
 >;
 
-/** What a caller supplies for a new line — the approval fields are the store's to set. */
+/**
+ * What a caller supplies for a new line — the approval fields are the store's
+ * to set, and so are the extended amounts.
+ *
+ * A caller gives quantities and rates; `partCost`/`labourCost` are computed
+ * from them by `recalcLine`, never passed in. That is what stops a dialog from
+ * submitting a total that disagrees with the numbers it displayed.
+ */
 export type NewWorkOrderLine = Pick<
   WorkOrderLine,
-  "description" | "category" | "partCost" | "labourCost" | "urgency" | "partsSource" | "photoUrls"
+  | "description"
+  | "category"
+  | "quantity"
+  | "unitPartRate"
+  | "labourHours"
+  | "labourRate"
+  | "urgency"
+  | "partsSource"
+  | "photoUrls"
 >;
 
 type NewWorkOrderDraft = Omit<
@@ -568,6 +590,19 @@ export function useFleetActions() {
   }, [scope]);
 
   /**
+   * The provider that owns a fleet client — one hop up the tenancy tree.
+   *
+   * Read from the client record rather than the session so it is correct for a
+   * provider-side user acting on any of its clients, and so an approval stamps
+   * the provider that actually owns the work rather than whoever clicked.
+   */
+  const providerIdForClient = useCallback(
+    (current: FleetState, fleetClientId: string): string | null =>
+      current.fleetClients.find((c) => c.id === fleetClientId)?.providerId ?? null,
+    []
+  );
+
+  /**
    * Applies a local change immediately, then persists it. On failure the
    * previous state is restored — the optimistic update never silently sticks
    * around after a rejected write.
@@ -609,19 +644,35 @@ export function useFleetActions() {
       const fleetClientId = guards.clientForVehicle(current, draft.vehicleId);
       if (!fleetClientId) return null;
 
-      const seq = current.workOrders.length + 1;
       const now = new Date();
-      const total = lineDrafts.reduce((sum, l) => sum + l.partCost + l.labourCost, 0);
-      const autoApprove = requiredApprover(total, settings) === "auto";
       const orderId = `wo-${Date.now().toString(36)}`;
+      const ownerProviderId = providerIdForClient(current, fleetClientId);
 
-      const lines: WorkOrderLine[] = lineDrafts.map((l, index) => ({
+      // Extended amounts are derived from qty/rate here, once, so the total the
+      // approval band is measured against is the same arithmetic the dialog showed.
+      const priced = lineDrafts.map((l, index) =>
+        recalcLine({
+          ...l,
+          id: `line-${Date.now().toString(36)}-${index}`,
+          partCost: 0,
+          labourCost: 0,
+          approvalStatus: "pending" as const,
+          approvedBy: null,
+          approvedAt: null,
+          declineReason: null,
+        })
+      );
+
+      // The band runs on the pre-tax line value: a threshold is a decision
+      // about the work, and nobody approves VAT.
+      const total = priced.reduce((sum, l) => sum + l.partCost + l.labourCost, 0);
+      const autoApprove = requiredApprover(total, settings) === "auto";
+
+      const lines: WorkOrderLine[] = priced.map((l) => ({
         ...l,
-        id: `line-${Date.now().toString(36)}-${index}`,
         approvalStatus: autoApprove ? "approved" : "pending",
         approvedBy: autoApprove ? "System (auto-approval)" : null,
         approvedAt: autoApprove ? now.toISOString() : null,
-        declineReason: null,
       }));
 
       const approvalLog: ApprovalLogEntry[] = autoApprove
@@ -641,12 +692,25 @@ export function useFleetActions() {
       const status = deriveOrderStatus(lines);
       const event = workOrderEvent(status, actor);
 
+      // This entry point never opens a `draft` — `deriveOrderStatus` only ever
+      // returns an approval-stage status, so an order raised here is already
+      // either with the client or auto-approved. Either way it has left the
+      // shop's scratch space and earns a number now. `current.workOrders` is
+      // the unscoped snapshot, which is what keeps two fleet clients under one
+      // provider off the same sequence.
+      const reference = nextReference(current.workOrders, now.getFullYear());
+
       const created: WorkOrder = {
         ...draft,
         id: orderId,
-        reference: `WO-${new Date().getFullYear()}-${String(seq).padStart(4, "0")}`,
+        reference,
         bayId: draft.bayId ?? null,
         scheduledTime: draft.scheduledTime ?? null,
+        // Auto-approval is still approval: the job is authorised, so it is
+        // assigned to the owning provider on the spot rather than left dangling.
+        assignedProviderId: autoApprove
+          ? assignOnApproval(draft, ownerProviderId ?? "").assignedProviderId || null
+          : null,
         // A job cannot be collected before it has been done.
         collectedAt: null,
         collectedBy: null,
@@ -701,7 +765,7 @@ export function useFleetActions() {
 
       return created;
     },
-    [actor, guards, optimistic]
+    [actor, guards, optimistic, providerIdForClient]
   );
 
   const updateWorkOrder = useCallback(
@@ -817,11 +881,24 @@ export function useFleetActions() {
       const pendingEnteredAt =
         newStatus === "pending_approval" ? order.pendingApprovalEnteredAt : null;
 
+      // The moment approval lands, the job becomes someone's to do: it is
+      // assigned to the provider that owns the vehicle's client, so no
+      // authorised work sits unowned waiting for a human to route it. A
+      // partial approval counts — there is approved work on it either way.
+      // `vendor` is deliberately left alone; see `assignOnApproval`.
+      const assignment =
+        (newStatus === "approved" || newStatus === "partially_approved") &&
+        !order.assignedProviderId
+          ? assignOnApproval(order, providerIdForClient(current, fleetClientId) ?? "")
+          : null;
+
       const updated: WorkOrder = {
         ...order,
         lines,
         approvalLog: [...order.approvalLog, logEntry],
         status: newStatus,
+        assignedProviderId:
+          assignment?.assignedProviderId || order.assignedProviderId,
         pendingApprovalEnteredAt: pendingEnteredAt,
         approvalWaitHours,
         history: event ? [...order.history, event] : order.history,
@@ -854,6 +931,11 @@ export function useFleetActions() {
               status: newStatus,
               pending_approval_entered_at: pendingEnteredAt,
               approval_wait_hours: approvalWaitHours,
+              // Only written when this decision is what assigned it; an
+              // unconditional write would clobber an existing assignment with null.
+              ...(assignment
+                ? { assigned_provider_id: assignment.assignedProviderId || null }
+                : {}),
             })
             .eq("id", orderId);
           if (orderError) throw new Error(orderError.message);
@@ -876,7 +958,7 @@ export function useFleetActions() {
         }
       );
     },
-    [actor, guards, optimistic]
+    [actor, guards, optimistic, providerIdForClient]
   );
 
   /** Approved or partially-approved work moves to the bay's calendar. */
@@ -966,7 +1048,16 @@ export function useFleetActions() {
 
       const parts = detail?.parts ?? order.parts;
       const partsTotal = parts.reduce((t, p) => t + p.quantity * p.unitCost, 0);
-      const actualTotal = order.laborCost + partsTotal;
+
+      // Actual labour comes from the approved lines, not `order.laborCost`.
+      // That field is only the estimate captured at creation; once lines carry
+      // itemised labour it is stale, and comparing a stale estimate against
+      // itemised actual parts measured a variance that was partly fictional.
+      // Both sides of this comparison are pre-tax, matching the approval bands.
+      const actualLabour = computeTotals(order.lines, current.approvalSettings, [
+        "approved",
+      ]).labourTotal;
+      const actualTotal = actualLabour + partsTotal;
       const approvedTotal = approvedValue(order.lines);
       const breachesVariance = varianceExceeds(
         approvedTotal,
@@ -1187,22 +1278,13 @@ export function useFleetActions() {
       const order = current.workOrders.find((o) => o.id === orderId);
       if (!order) return { ok: false, error: "Work order not found." };
 
-      if (order.status !== "draft") {
-        return {
-          ok: false,
-          error:
-            order.status === "pending_approval"
-              ? "This quotation is already with the client."
-              : "Only a draft can be sent for approval.",
-        };
+      // The machine owns which moves are legal, including the "nothing to
+      // approve" case, so this and every other transition give the same answer.
+      if (order.status === "pending_approval") {
+        return { ok: false, error: "This quotation is already with the client." };
       }
-
-      if (order.lines.length === 0) {
-        return {
-          ok: false,
-          error: "Add at least one line before sending this for approval.",
-        };
-      }
+      const allowed = checkTransition(order, "pending_approval");
+      if (!allowed.ok) return { ok: false, error: allowed.reason };
 
       const now = new Date();
       const lines = order.lines.map((line) =>
@@ -1225,9 +1307,18 @@ export function useFleetActions() {
         amountAtTime: lines.reduce((t, l) => t + lineCost(l), 0),
       };
 
+      // This is the moment the order stops being the shop's scratch space, so
+      // this is where it earns its number. A re-sent order (declined, revised)
+      // keeps the one it already has — reissuing would orphan the number the
+      // client has already been quoted.
+      const reference = hasReference(order)
+        ? order.reference
+        : nextReference(current.workOrders, now.getFullYear());
+
       const event = workOrderEvent("pending_approval", actor);
       const updated: WorkOrder = {
         ...order,
+        reference,
         lines,
         status: "pending_approval",
         pendingApprovalEnteredAt: now.toISOString(),
@@ -1250,6 +1341,7 @@ export function useFleetActions() {
             .from("pms_work_orders")
             .update({
               status: "pending_approval",
+              reference,
               pending_approval_entered_at: now.toISOString(),
               approval_wait_hours: null,
             })

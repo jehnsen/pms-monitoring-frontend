@@ -14,6 +14,11 @@ export const DEFAULT_APPROVAL_SETTINGS: ApprovalSettings = {
   varianceThresholdPct: 15,
   defaultPartsSource: "supplier_provided",
   monthlyBudget: 150_000,
+  // Philippine standard rate. Set to 0 for a non-VAT-registered provider —
+  // that is a real configuration, not an unset value.
+  vatRatePct: 12,
+  miscFeeFlat: 0,
+  defaultLabourRate: 650,
 };
 
 const BUSINESS_START_HOUR = 8;

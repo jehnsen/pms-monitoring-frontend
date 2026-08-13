@@ -18,6 +18,7 @@ import { PmsStatusBadge } from "@/components/status";
 import { useFleet, useFleetActions } from "@/lib/store";
 import { validateOdometerReading } from "@/lib/odometer-validation";
 import { approvedValue, varianceExceeds } from "@/lib/approvals";
+import { computeTotals } from "@/lib/billing";
 import { formatCurrency, formatKm, formatRelative } from "@/lib/utils";
 import type { PartLine, Vehicle, WorkOrder } from "@/types";
 
@@ -87,7 +88,15 @@ export function CompleteWorkOrderDialog({
     (total, part) => total + part.quantity * part.unitCost,
     0
   );
-  const actualTotal = order.laborCost + (parts.length ? partsTotal : order.partsCost);
+  // Labour comes from the approved lines, matching what `completeWorkOrder`
+  // checks on submit. `order.laborCost` is only the estimate captured at
+  // creation, so using it here showed the user a variance the store would then
+  // disagree with. Falls back to the estimate for orders with no lines.
+  const actualLabour =
+    order.lines.length > 0
+      ? computeTotals(order.lines, approvalSettings, ["approved"]).labourTotal
+      : order.laborCost;
+  const actualTotal = actualLabour + (parts.length ? partsTotal : order.partsCost);
   const approvedTotal = approvedValue(order.lines);
   const breachesVariance = varianceExceeds(
     approvedTotal,
@@ -329,7 +338,7 @@ export function CompleteWorkOrderDialog({
             <div>
               <dt className="text-subtle-foreground">Labour</dt>
               <dd className="tabular mt-0.5 font-medium">
-                {formatCurrency(order.laborCost)}
+                {formatCurrency(actualLabour)}
               </dd>
             </div>
             <div>

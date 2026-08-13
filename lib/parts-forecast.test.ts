@@ -86,6 +86,7 @@ function workOrder(overrides: Partial<WorkOrder> = {}): WorkOrder {
     odometerAtService: 0,
     technician: "Tester",
     vendor: "In-house Fleet Bay 1",
+    assignedProviderId: "prov-mekanikomore",
     bayId: "bay-1",
     collectedAt: null,
     collectedBy: null,

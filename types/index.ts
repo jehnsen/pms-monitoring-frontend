@@ -293,7 +293,29 @@ export interface WorkOrderLine {
   serviceTaskId?: string | null;
   description: string;
   category: TaskCategory | "other";
+  /**
+   * How many of the part this line fits. Always at least 1 — a line that
+   * bills only labour still counts as one of itself, so `quantity * unitPartRate`
+   * stays meaningful at a zero rate.
+   */
+  quantity: number;
+  /** Price of one unit of the part. `partCost` is `quantity * unitPartRate`. */
+  unitPartRate: number;
+  /** Billable hours on this line. `labourCost` is `labourHours * labourRate`. */
+  labourHours: number;
+  /** Shop rate applied to `labourHours`, per hour. */
+  labourRate: number;
+  /**
+   * Extended part total, always `quantity * unitPartRate`.
+   *
+   * Stored rather than derived at read time because it is the historical
+   * price: re-deriving it would let a later rate change rewrite what a client
+   * already approved. `lib/billing.ts`'s `recalcLine` is the only thing that
+   * should write it — never set it directly beside a qty/rate change, or the
+   * two drift apart.
+   */
   partCost: number;
+  /** Extended labour total, always `labourHours * labourRate`. Same rule as `partCost`. */
   labourCost: number;
   urgency: LineUrgency;
   partsSource: PartsSource;
@@ -349,6 +371,19 @@ export interface ApprovalSettings {
   defaultPartsSource: PartsSource;
   /** Maintenance spend ceiling per month, for the purchasing landing page's budget tile. */
   monthlyBudget: number;
+  /**
+   * VAT applied to the subtotal, as a percentage. 12 is the Philippine
+   * standard rate; configurable because a provider may be non-VAT registered,
+   * in which case 0 is a legitimate setting rather than a missing value.
+   */
+  vatRatePct: number;
+  /**
+   * Flat shop/miscellaneous charge added to every order before VAT — consumables,
+   * disposal, and the like. Zero by default; a provider opts into it.
+   */
+  miscFeeFlat: number;
+  /** Default hourly labour rate quoted on new lines, in PHP. */
+  defaultLabourRate: number;
 }
 
 /* --------------------------------------------------------- parts & demand */
@@ -425,6 +460,13 @@ export interface TenantSettings {
 
 export interface WorkOrder {
   id: string;
+  /**
+   * The sequential order number, e.g. "WO-2026-0007". Empty string while the
+   * order is still a `draft` — a number is only burned once the job becomes
+   * real to someone outside the shop, which is the `draft -> pending_approval`
+   * shift. Read it through `displayReference` in `lib/work-order-machine.ts`
+   * rather than testing for `""` at call sites.
+   */
   reference: string;
   vehicleId: string;
   title: string;
@@ -441,7 +483,21 @@ export interface WorkOrder {
   completedOn: string | null;
   odometerAtService: number;
   technician: string;
+  /**
+   * A third-party repair vendor the work is sent out to. Empty string means the
+   * job is in-house — see `assignedProviderId`. The provider's own name never
+   * belongs here, or it lands in the vendor-spend analytics beside real
+   * subcontractors.
+   */
   vendor: string;
+  /**
+   * The provider that owns the work once it is authorised. Stamped
+   * automatically on approval (see `assignOnApproval` in
+   * `lib/work-order-machine.ts`) from the vehicle's owning client, so an
+   * approved job is never unassigned. Null while the order is still a draft or
+   * awaiting a decision.
+   */
+  assignedProviderId: string | null;
   /** Bay the job is assigned to. Null for work sent out to a third-party vendor. */
   bayId: string | null;
   /**

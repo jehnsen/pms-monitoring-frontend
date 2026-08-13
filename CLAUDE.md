@@ -48,6 +48,55 @@ an interval does not retroactively touch any vehicle's `taskState`.
 due-soon critical −8, due-soon −4). A vehicle with two breached safety intervals
 must not read as a 90-something — that was a real bug, don't soften it back.
 
+## Work order lifecycle, billing, and check-in
+
+- **`lib/work-order-machine.ts`** is the one place transitions are legal or
+  not. Before, each store action guarded its own status and a new screen
+  calling a different action could move an order anywhere. `checkTransition`
+  is the gate; it returns the `Capability` needed rather than resolving it, so
+  the module stays pure. The brief's five-stage workflow (Draft → Pending
+  Approval → Approved/In Progress → Ready for Billing → Completed) is a
+  *projection* over the nine stored statuses via `lifecycleStage` — the extra
+  ones carry real distinctions (`partially_approved` is a genuine answer;
+  `declined` ≠ `cancelled`) and must not be collapsed. `closed` splits on
+  `collectedAt`: unset is "ready for billing", set is "completed", which
+  matches revenue being recognised on collection.
+- **Order numbers are issued at `draft → pending_approval`**, not at creation
+  — a draft that never leaves the shop must not burn a number and leave a gap.
+  `reference` is `""` until then; read it through `displayReference`.
+  `nextReference` scans for the **highest issued** number over the *unscoped*
+  order list. The old generator counted the tenant-**scoped** list, so two
+  clients under one provider both produced `WO-2026-0001`, and a count went
+  backwards when a row was filtered out. The client-side generator can still
+  race, so migration `0007` carries a partial unique index on `reference`
+  (excluding `''`) — the loser's write fails and rolls back.
+- **`lib/billing.ts` owns all money arithmetic.** Lines carry `quantity ×
+  unitPartRate` and `labourHours × labourRate`; `partCost`/`labourCost` are
+  **stored, not derived on read**, because they are the historical price the
+  client approved — re-deriving would let a later rate change rewrite an
+  authorised amount. `recalcLine` is the *only* thing that may write them;
+  never set a cost beside a qty/rate change. `withRates` reconstructs inputs
+  for rows predating the columns (one unit at the stored cost; labour becomes
+  one flat hour) so old lines render and edit without a backfill guess.
+  Rounding happens once per total, never per line.
+- **Approval bands run on the pre-tax subtotal**, VAT never enters a
+  threshold — a band is a decision about the work. `vatRatePct` /
+  `miscFeeFlat` / `defaultLabourRate` live on `ApprovalSettings`; a 0% rate is
+  a real setting (non-VAT-registered provider), not a missing value.
+- **`assignedProviderId` is not `vendor`.** Approval stamps the owning
+  provider automatically (`assignOnApproval`), and `vendor` stays reserved for
+  genuine third-party subcontractors — writing the provider's own name there
+  puts the shop in its own vendor-spend analytics. An in-house job has an
+  assigned provider and an **empty** vendor.
+- **`lib/checkin.ts`** turns a plate or VIN into hydrated form state so the
+  counter never asks for data the fleet already holds. Matching is exact on a
+  normalised form (case/space/dash insensitive) — a prefix match would hydrate
+  the wrong customer. It is pure and takes the candidate vehicles as a
+  parameter; the caller passes the already-scoped list, since a lookup over
+  the raw fleet would confirm a sibling client's vehicle exists. A **stale**
+  odometer is deliberately *not* pre-filled (`odometerNeedsConfirmation`) —
+  accepting an old reading unchallenged shifts every due date behind it.
+
 ## Tenancy — read this before touching anything cross-client
 
 The shape is `provider → fleet_client → vehicles → work orders, PMS

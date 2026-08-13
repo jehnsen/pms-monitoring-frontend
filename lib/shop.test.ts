@@ -17,6 +17,7 @@ import {
   utilisationSeries,
 } from "@/lib/shop";
 import { TOTAL_BAY_CAPACITY_HOURS } from "@/lib/bays";
+import { withRates } from "@/lib/billing";
 
 const TODAY = new Date("2026-08-07T10:00:00.000Z");
 
@@ -36,6 +37,7 @@ function order(overrides: Partial<WorkOrder> = {}): WorkOrder {
     odometerAtService: 10_000,
     technician: "Arnel Pascual",
     vendor: "In-house Fleet Bay 1",
+    assignedProviderId: "prov-mekanikomore",
     bayId: "bay-1",
     collectedAt: null,
     collectedBy: null,
@@ -166,7 +168,7 @@ describe("bay load", () => {
 });
 
 describe("awaiting approval", () => {
-  const line = {
+  const line = withRates({
     id: "l1",
     description: "Brakes",
     category: "brakes" as const,
@@ -179,7 +181,7 @@ describe("awaiting approval", () => {
     approvedAt: null,
     declineReason: null,
     photoUrls: [],
-  };
+  });
 
   it("totals only the pending value", () => {
     const result = awaitingApproval(
@@ -385,7 +387,8 @@ describe("technician load", () => {
 });
 
 describe("parts margin", () => {
-  const makeLine = (partsSource: "own_stock" | "supplier_provided", partCost: number) => ({
+  const makeLine = (partsSource: "own_stock" | "supplier_provided", partCost: number) =>
+    withRates({
     id: `l-${partsSource}`,
     description: "Part",
     category: "engine" as const,

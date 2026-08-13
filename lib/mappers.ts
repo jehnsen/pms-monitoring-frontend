@@ -13,6 +13,7 @@
  *    dates pass through as strings rather than becoming Date objects. The PMS
  *    engine parses them itself.
  */
+import { withRates } from "@/lib/billing";
 import type {
   ApprovalLogEntry,
   ApprovalSettings,
@@ -221,13 +222,21 @@ export function toWorkOrderLine(
   const serviceTaskId = nullableStr(row.service_task_id);
   const catalogueName = serviceTaskId ? taskNames?.get(serviceTaskId) : undefined;
 
-  return {
+  // Rows written before the qty/rate columns existed carry only the extended
+  // amounts. `withRates` reconstructs inputs that reproduce those totals
+  // exactly rather than inventing a rate, so an old line renders and edits
+  // correctly without a backfill guess.
+  return withRates({
     id: str(row.id),
     serviceTaskId,
     // The catalogue is authoritative when the line points at it: renaming a
     // task must rename it everywhere, which was the whole point of the FK.
     description: catalogueName ?? str(row.description),
     category: (row.category as WorkOrderLine["category"]) ?? "other",
+    quantity: row.quantity == null ? undefined : num(row.quantity),
+    unitPartRate: row.unit_part_rate == null ? undefined : num(row.unit_part_rate),
+    labourHours: row.labour_hours == null ? undefined : num(row.labour_hours),
+    labourRate: row.labour_rate == null ? undefined : num(row.labour_rate),
     partCost: num(row.part_cost),
     labourCost: num(row.labour_cost),
     urgency: (row.urgency as WorkOrderLine["urgency"]) ?? "recommended",
@@ -238,7 +247,7 @@ export function toWorkOrderLine(
     approvedAt: nullableStr(row.approved_at),
     declineReason: nullableStr(row.decline_reason),
     photoUrls: arr<string>(row.photo_urls),
-  };
+  });
 }
 
 export function workOrderLineToRow(
@@ -253,6 +262,12 @@ export function workOrderLineToRow(
     // what a line falls back to if its catalogue task is later deleted.
     description: line.description,
     category: line.category,
+    quantity: line.quantity,
+    unit_part_rate: line.unitPartRate,
+    labour_hours: line.labourHours,
+    labour_rate: line.labourRate,
+    // Extended amounts are stored, not derived on read: they are the price the
+    // client approved, and must not shift when a rate later changes.
     part_cost: line.partCost,
     labour_cost: line.labourCost,
     urgency: line.urgency,
@@ -349,6 +364,7 @@ export function toWorkOrder(row: Row, relations: WorkOrderRelations): WorkOrder 
     // historical label for a technician who has since left the shop.
     technician: relations.technicianName ?? str(row.technician),
     vendor: relations.vendorName ?? str(row.vendor),
+    assignedProviderId: nullableStr(row.assigned_provider_id),
     bayId: nullableStr(row.bay_id),
     collectedAt: nullableStr(row.collected_at),
     collectedBy: nullableStr(row.collected_by),
@@ -419,6 +435,9 @@ export function workOrderToRow(
   if (order.vendor !== undefined) {
     row.vendor = order.vendor;
     row.vendor_id = catalogues?.vendors?.get(order.vendor.toLowerCase()) ?? null;
+  }
+  if (order.assignedProviderId !== undefined) {
+    row.assigned_provider_id = order.assignedProviderId;
   }
   if (order.bayId !== undefined) row.bay_id = order.bayId;
   if (order.collectedAt !== undefined) row.collected_at = order.collectedAt;
@@ -739,6 +758,11 @@ export function toApprovalSettings(
       (row.default_parts_source as ApprovalSettings["defaultPartsSource"]) ??
       defaults.defaultPartsSource,
     monthlyBudget: num(row.monthly_budget, defaults.monthlyBudget),
+    // A provider that has set 0% VAT means it; `num` only falls back when the
+    // column is genuinely absent, so a deliberate zero is not overwritten.
+    vatRatePct: num(row.vat_rate_pct, defaults.vatRatePct),
+    miscFeeFlat: num(row.misc_fee_flat, defaults.miscFeeFlat),
+    defaultLabourRate: num(row.default_labour_rate, defaults.defaultLabourRate),
   };
 }
 
@@ -760,5 +784,10 @@ export function approvalSettingsToRow(
     row.default_parts_source = patch.defaultPartsSource;
   }
   if (patch.monthlyBudget !== undefined) row.monthly_budget = patch.monthlyBudget;
+  if (patch.vatRatePct !== undefined) row.vat_rate_pct = patch.vatRatePct;
+  if (patch.miscFeeFlat !== undefined) row.misc_fee_flat = patch.miscFeeFlat;
+  if (patch.defaultLabourRate !== undefined) {
+    row.default_labour_rate = patch.defaultLabourRate;
+  }
   return row;
 }

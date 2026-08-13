@@ -22,6 +22,7 @@ function order(completedOn: string, cost: number): WorkOrder {
     odometerAtService: 1_000,
     technician: "Tester",
     vendor: "In-house Fleet Bay 1",
+    assignedProviderId: "prov-mekanikomore",
     bayId: "bay-1",
     collectedAt: null,
     collectedBy: null,

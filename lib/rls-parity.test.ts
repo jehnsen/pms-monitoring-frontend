@@ -41,7 +41,19 @@ const normalisationSchema = readFileSync(
  * vacuously — the check would simply never see the table it was meant to
  * catch. Adding a migration that creates a table means adding it here.
  */
-const allSchemas = [schema, serviceTasksSchema, normalisationSchema].join("\n");
+const workflowSchema = readFileSync(
+  resolve(__dirname, "../supabase/migrations/0007_pms_workflow.sql"),
+  "utf8"
+);
+
+const allSchemas = [
+  schema,
+  serviceTasksSchema,
+  normalisationSchema,
+  // Creates no tables — it only alters existing ones — but is included so the
+  // check stays honest if a later edit adds one here.
+  workflowSchema,
+].join("\n");
 
 /** Every table the fleet's data actually lives in. */
 const TENANT_TABLES = [

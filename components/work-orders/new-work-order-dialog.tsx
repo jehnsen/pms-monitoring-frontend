@@ -28,12 +28,11 @@ import { SuccessDialog } from "@/components/ui/success-dialog";
 import { CATEGORY_LABEL } from "@/lib/service-tasks";
 import { useFleet, useFleetActions, type NewWorkOrderLine } from "@/lib/store";
 import { requiredApprover } from "@/lib/approvals";
+import { computeTotals, recalcLine } from "@/lib/billing";
 import { useCan } from "@/lib/rbac";
 import { DeniedAction } from "@/components/auth/denied-action";
 import { formatCurrency } from "@/lib/utils";
 import type { LineUrgency, PartsSource, Priority, TaskCategory, WorkOrderType, WorkOrder } from "@/types";
-
-const LABOR_RATE_PER_HOUR = 650;
 
 const URGENCY_LABEL: Record<LineUrgency, string> = {
   safety_critical: "Safety critical",
@@ -54,14 +53,17 @@ const CATEGORY_OPTIONS: { value: TaskCategory | "other"; label: string }[] = [
 ];
 
 let draftLineSeq = 0;
-function blankDraftLine(): NewWorkOrderLine & { key: string } {
+/** @param labourRate the provider's configured shop rate, from settings. */
+function blankDraftLine(labourRate: number): NewWorkOrderLine & { key: string } {
   draftLineSeq += 1;
   return {
     key: `draft-${draftLineSeq}`,
     description: "",
     category: "other",
-    partCost: 0,
-    labourCost: 0,
+    quantity: 1,
+    unitPartRate: 0,
+    labourHours: 0,
+    labourRate,
     urgency: "recommended",
     partsSource: "supplier_provided",
     photoUrls: [],
@@ -110,7 +112,7 @@ export function NewWorkOrderDialog({
 
   const [correctiveLines, setCorrectiveLines] = React.useState<
     (NewWorkOrderLine & { key: string })[]
-  >([blankDraftLine()]);
+  >([blankDraftLine(approvalSettings.defaultLabourRate)]);
 
   // Reopening with different props (e.g. from another vehicle) should not keep
   // the previous draft around.
@@ -124,8 +126,16 @@ export function NewWorkOrderDialog({
       technician: current.technician || activeTechnicians[0]?.name || "",
       vendor: current.vendor || activeVendors[0]?.name || "",
     }));
-    setCorrectiveLines([blankDraftLine()]);
-  }, [open, vehicleId, taskId, serviceTasks, activeTechnicians, activeVendors]);
+    setCorrectiveLines([blankDraftLine(approvalSettings.defaultLabourRate)]);
+  }, [
+    open,
+    vehicleId,
+    taskId,
+    serviceTasks,
+    activeTechnicians,
+    activeVendors,
+    approvalSettings.defaultLabourRate,
+  ]);
 
   const vehicle = vehicles.find((v) => v.id === form.vehicleId);
   const task = serviceTasks.find((t) => t.id === form.taskId);
@@ -143,8 +153,12 @@ export function NewWorkOrderDialog({
         {
           description: estimate.name,
           category: estimate.category,
-          partCost: estimate.estimatedCost,
-          labourCost: estimate.estimatedHours * LABOR_RATE_PER_HOUR,
+          // The catalogue estimate is one unit of the job; the store derives
+          // the extended amounts from these inputs.
+          quantity: 1,
+          unitPartRate: estimate.estimatedCost,
+          labourHours: estimate.estimatedHours,
+          labourRate: approvalSettings.defaultLabourRate,
           urgency: estimate.critical ? "safety_critical" : "recommended",
           partsSource: approvalSettings.defaultPartsSource,
           photoUrls: [],
@@ -154,12 +168,38 @@ export function NewWorkOrderDialog({
     return correctiveLines
       .filter((line) => line.description.trim().length > 0)
       .map(({ key, ...line }) => line);
-  }, [isPreventive, estimate, correctiveLines, approvalSettings.defaultPartsSource]);
+  }, [
+    isPreventive,
+    estimate,
+    correctiveLines,
+    approvalSettings.defaultPartsSource,
+    approvalSettings.defaultLabourRate,
+  ]);
 
-  const partsCost = lineDrafts.reduce((total, line) => total + line.partCost, 0);
-  const laborCost = lineDrafts.reduce((total, line) => total + line.labourCost, 0);
-  const pendingTotal = partsCost + laborCost;
-  const approverBand = requiredApprover(pendingTotal, approvalSettings);
+  // Reactive by construction: these recompute on every keystroke because they
+  // are derived during render from the line drafts, not stored and refreshed.
+  // `lib/billing.ts` is the single definition of the arithmetic, so the
+  // estimate shown here is the same sum the store bills against.
+  const totals = computeTotals(
+    lineDrafts.map((line, index) =>
+      recalcLine({
+        ...line,
+        id: `preview-${index}`,
+        partCost: 0,
+        labourCost: 0,
+        approvalStatus: "pending" as const,
+        approvedBy: null,
+        approvedAt: null,
+        declineReason: null,
+      })
+    ),
+    approvalSettings
+  );
+  const partsCost = totals.partsTotal;
+  const laborCost = totals.labourTotal;
+  // The approval band runs on the pre-tax subtotal: a threshold is a decision
+  // about the work, and nobody approves VAT.
+  const approverBand = requiredApprover(totals.subTotal, approvalSettings);
 
   const title = isPreventive ? (task?.name ?? "") : form.title.trim();
   const correctiveLinesValid =
@@ -192,6 +232,8 @@ export function NewWorkOrderDialog({
         odometerAtService: vehicle.odometer,
         technician: form.technician,
         vendor: form.vendor,
+        // Stamped by the store when approval lands, not chosen here.
+        assignedProviderId: null,
         laborCost,
         partsCost,
         // A new order carries an estimate; the itemised parts and findings are
@@ -207,7 +249,7 @@ export function NewWorkOrderDialog({
 
     setOpen(false);
     setForm((current) => ({ ...current, title: "", notes: "" }));
-    setCorrectiveLines([blankDraftLine()]);
+    setCorrectiveLines([blankDraftLine(approvalSettings.defaultLabourRate)]);
     // Guards inside createWorkOrder (out-of-scope vehicle) return null; the
     // success dialog only appears once there's an actual order to confirm.
     if (order) setCreated(order);
@@ -356,7 +398,10 @@ export function NewWorkOrderDialog({
                       variant="secondary"
                       size="sm"
                       onClick={() =>
-                        setCorrectiveLines((current) => [...current, blankDraftLine()])
+                        setCorrectiveLines((current) => [
+                          ...current,
+                          blankDraftLine(approvalSettings.defaultLabourRate),
+                        ])
                       }
                     >
                       <Plus />
@@ -457,26 +502,33 @@ export function NewWorkOrderDialog({
   
                           <div className="grid grid-cols-2 gap-2">
                             <Input
-                              aria-label="Parts cost"
+                              aria-label="Part unit rate"
                               type="number"
                               min={0}
-                              value={line.partCost}
+                              value={line.unitPartRate}
                               className="tabular text-xs"
                               onChange={(event) =>
                                 patchLine(line.key, {
-                                  partCost: Math.max(0, Number(event.target.value) || 0),
+                                  unitPartRate: Math.max(
+                                    0,
+                                    Number(event.target.value) || 0
+                                  ),
                                 })
                               }
                             />
                             <Input
-                              aria-label="Labour cost"
+                              aria-label="Labour hours"
                               type="number"
                               min={0}
-                              value={line.labourCost}
+                              step={0.5}
+                              value={line.labourHours}
                               className="tabular text-xs"
                               onChange={(event) =>
                                 patchLine(line.key, {
-                                  labourCost: Math.max(0, Number(event.target.value) || 0),
+                                  labourHours: Math.max(
+                                    0,
+                                    Number(event.target.value) || 0
+                                  ),
                                 })
                               }
                             />
@@ -579,12 +631,41 @@ export function NewWorkOrderDialog({
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-subtle-foreground">Total</dt>
+                    <dt className="text-subtle-foreground">Sub total</dt>
                     <dd className="tabular mt-0.5 font-medium">
-                      {formatCurrency(pendingTotal)}
+                      {formatCurrency(totals.subTotal)}
                     </dd>
                   </div>
                 </dl>
+
+                {/* What the client is actually billed. The approval band above
+                    runs on the subtotal — nobody approves VAT — so both figures
+                    have to be visible or the quote reads as the wrong number. */}
+                <dl className="mt-2.5 grid grid-cols-3 gap-3 border-t border-border pt-2.5 text-xs">
+                  {totals.miscTotal > 0 ? (
+                    <div>
+                      <dt className="text-subtle-foreground">Misc</dt>
+                      <dd className="tabular mt-0.5 font-medium">
+                        {formatCurrency(totals.miscTotal)}
+                      </dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt className="text-subtle-foreground">
+                      VAT ({totals.vatRatePct}%)
+                    </dt>
+                    <dd className="tabular mt-0.5 font-medium">
+                      {formatCurrency(totals.taxTotal)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-subtle-foreground">Grand total</dt>
+                    <dd className="tabular mt-0.5 font-semibold">
+                      {formatCurrency(totals.grandTotal)}
+                    </dd>
+                  </div>
+                </dl>
+
                 <p className="mt-2.5 border-t border-border pt-2.5 text-2xs text-subtle-foreground">
                   {approverBand === "auto"
                     ? "Under the auto-approve ceiling — this will approve itself the moment it's raised."

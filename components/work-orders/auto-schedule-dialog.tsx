@@ -22,7 +22,6 @@ import { useCan } from "@/lib/rbac";
 import { formatCurrency, formatDate, formatDayDelta } from "@/lib/utils";
 import type { PmsItem, Priority, Vehicle } from "@/types";
 
-const LABOR_RATE_PER_HOUR = 650;
 /** Bay throughput assumption — jobs are spread rather than dumped on one day. */
 const JOBS_PER_DAY = 3;
 
@@ -83,7 +82,7 @@ export function AutoScheduleDialog() {
     (total, proposal) =>
       total +
       proposal.item.task.estimatedCost +
-      proposal.item.task.estimatedHours * LABOR_RATE_PER_HOUR,
+      proposal.item.task.estimatedHours * approvalSettings.defaultLabourRate,
     0
   );
 
@@ -111,8 +110,12 @@ export function AutoScheduleDialog() {
           completedOn: null,
           odometerAtService: proposal.vehicle.odometer,
           technician: "Unassigned",
-          vendor: "In-house Fleet Bay 1",
-          laborCost: proposal.item.task.estimatedHours * LABOR_RATE_PER_HOUR,
+          // In-house work: an empty vendor is what marks it, and the owning
+          // provider is stamped by the store when approval lands.
+          vendor: "",
+          assignedProviderId: null,
+          laborCost:
+            proposal.item.task.estimatedHours * approvalSettings.defaultLabourRate,
           partsCost: proposal.item.task.estimatedCost,
           parts: [],
           findings: "",
@@ -125,8 +128,10 @@ export function AutoScheduleDialog() {
           {
             description: proposal.item.task.name,
             category: proposal.item.task.category,
-            partCost: proposal.item.task.estimatedCost,
-            labourCost: proposal.item.task.estimatedHours * LABOR_RATE_PER_HOUR,
+            quantity: 1,
+            unitPartRate: proposal.item.task.estimatedCost,
+            labourHours: proposal.item.task.estimatedHours,
+            labourRate: approvalSettings.defaultLabourRate,
             urgency: proposal.item.task.critical ? "safety_critical" : "recommended",
             partsSource: approvalSettings.defaultPartsSource,
             photoUrls: [],

@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/input";
 import { LineApprovalStatusBadge } from "@/components/status";
 import { useFleet, useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
-import { canApprove, pendingValue } from "@/lib/approvals";
+import { canApprove, lineCost, pendingValue } from "@/lib/approvals";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { WorkOrder } from "@/types";
 
@@ -67,7 +67,9 @@ export function ApprovalPanel({ order }: { order: WorkOrder }) {
 
       <div className="divide-y divide-border border-t border-border">
         {order.lines.map((line) => {
-          const total = line.partCost + line.labourCost;
+          // The stored extended amounts — the price actually quoted — rather
+          // than re-multiplying today's rates.
+          const total = lineCost(line);
           const declining = decliningLineId === line.id;
 
           return (
@@ -83,9 +85,28 @@ export function ApprovalPanel({ order }: { order: WorkOrder }) {
                       </Badge>
                     ) : null}
                   </div>
+                  {/* The arithmetic, not just the answer: an approver deciding
+                      on a line should see what makes it that number, so a
+                      wrong quantity or rate is visible before it is authorised
+                      rather than after the invoice. */}
                   <p className="mt-0.5 text-2xs text-subtle-foreground">
-                    {PARTS_SOURCE_LABEL[line.partsSource]} ·{" "}
-                    {formatCurrency(total)}
+                    {PARTS_SOURCE_LABEL[line.partsSource]}
+                    {line.quantity > 0 && line.unitPartRate > 0 ? (
+                      <>
+                        {" · "}
+                        {line.quantity} × {formatCurrency(line.unitPartRate)} parts
+                      </>
+                    ) : null}
+                    {line.labourHours > 0 ? (
+                      <>
+                        {" · "}
+                        {line.labourHours}h × {formatCurrency(line.labourRate)} labour
+                      </>
+                    ) : null}
+                    {" · "}
+                    <span className="font-medium text-muted-foreground">
+                      {formatCurrency(total)}
+                    </span>
                   </p>
                 </div>
                 <LineApprovalStatusBadge status={line.approvalStatus} />

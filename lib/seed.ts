@@ -20,6 +20,7 @@ import type {
 import { SERVICE_TASKS } from "@/lib/service-tasks";
 import { evaluateVehicle } from "@/lib/pms";
 import { DEFAULT_APPROVAL_SETTINGS, requiredApprover } from "@/lib/approvals";
+import { withRates } from "@/lib/billing";
 import { PART_BY_ID, PART_DEFINITIONS, SERVICE_ITEM_PARTS } from "@/lib/parts";
 import { TECHNICIAN_BY_NAME } from "@/lib/technicians";
 import {
@@ -1163,7 +1164,10 @@ function buildWorkOrders(
     const approvedAt = auto ? params.openedOn : addDays(params.openedOn, 0);
 
     const lineId = `line-${counter}-${historySeq}`;
-    const line: WorkOrderLine = {
+    // `withRates` reconstructs qty/rate inputs that reproduce these flat costs
+    // exactly, so the seed keeps stating totals rather than restating the same
+    // arithmetic in two places.
+    const line: WorkOrderLine = withRates({
       id: lineId,
       description: params.description,
       category: params.category,
@@ -1176,7 +1180,7 @@ function buildWorkOrders(
       approvedAt: approvedAt.toISOString(),
       declineReason: null,
       photoUrls: [],
-    };
+    });
 
     return {
       line,
@@ -1258,6 +1262,9 @@ function buildWorkOrders(
         odometerAtService: event.odometer,
         technician,
         vendor: VENDORS[Math.floor(random() * VENDORS.length)],
+        // Seeded history is already authorised work, so it is assigned to
+        // the provider that owns the vehicle's client.
+        assignedProviderId: SEED_PROVIDER.id,
         laborCost,
         partsCost,
         parts,
@@ -1328,6 +1335,9 @@ function buildWorkOrders(
         ),
         technician,
         vendor: VENDORS[Math.floor(random() * VENDORS.length)],
+        // Seeded history is already authorised work, so it is assigned to
+        // the provider that owns the vehicle's client.
+        assignedProviderId: SEED_PROVIDER.id,
         laborCost,
         partsCost,
         parts,
@@ -1423,7 +1433,7 @@ function buildWorkOrders(
         ? new Date(today.getTime() - 3 * 24 * 3_600_000) // several business days back — always breaches
         : new Date(today.getTime() - 60 * 60_000); // one hour ago — comfortably inside the default 4h SLA
       pendingApprovalEnteredAt = enteredAt.toISOString();
-      lines.push({
+      lines.push(withRates({
         id: lineId,
         description: item.task.name,
         category: item.task.category,
@@ -1436,9 +1446,9 @@ function buildWorkOrders(
         approvedAt: null,
         declineReason: null,
         photoUrls: [],
-      });
+      }));
     } else if (plan.status === "declined") {
-      lines.push({
+      lines.push(withRates({
         id: lineId,
         description: item.task.name,
         category: item.task.category,
@@ -1451,7 +1461,7 @@ function buildWorkOrders(
         approvedAt: today.toISOString(),
         declineReason: plan.declineReason ?? "Declined.",
         photoUrls: [],
-      });
+      }));
       approvalLog.push(
         log(lineId, "declined", today, approverFor(band), total, plan.declineReason ?? null)
       );
@@ -1460,7 +1470,7 @@ function buildWorkOrders(
       // Quoted, not yet sent. The lines are priced but nobody has been asked
       // to decide on them, so there is no approval log entry at all — the
       // first one will be written when the shop sends it.
-      lines.push({
+      lines.push(withRates({
         id: lineId,
         description: item.task.name,
         category: item.task.category,
@@ -1473,12 +1483,12 @@ function buildWorkOrders(
         approvedAt: null,
         declineReason: null,
         photoUrls: [],
-      });
+      }));
     } else {
       // approved / partially_approved / scheduled / in_progress all start
       // from at least one approved line.
       const approver = band === "auto" ? "System (auto-approval)" : approverFor(band);
-      lines.push({
+      lines.push(withRates({
         id: lineId,
         description: item.task.name,
         category: item.task.category,
@@ -1491,7 +1501,7 @@ function buildWorkOrders(
         approvedAt: openedOnDate.toISOString(),
         declineReason: null,
         photoUrls: [],
-      });
+      }));
       approvalLog.push(
         log(
           lineId,
@@ -1506,7 +1516,7 @@ function buildWorkOrders(
       if (plan.extraLine) {
         const extraId = `line-${counter}-b`;
         const extraApprover = OPS_SUPERVISOR_NAME;
-        lines.push({
+        lines.push(withRates({
           id: extraId,
           description: "Supplementary inspection line",
           category: "other",
@@ -1519,7 +1529,7 @@ function buildWorkOrders(
           approvedAt: openedOnDate.toISOString(),
           declineReason: "Not required this visit — defer to next scheduled service.",
           photoUrls: [],
-        });
+        }));
         approvalLog.push(
           log(
             extraId,
@@ -1578,6 +1588,7 @@ function buildWorkOrders(
       odometerAtService: vehicle.odometer,
       technician,
       vendor: VENDORS[Math.floor(random() * VENDORS.length)],
+      assignedProviderId: SEED_PROVIDER.id,
       laborCost: linesLabourTotal,
       partsCost: linesPartTotal,
       // Open work carries an estimate, not a record: parts and findings are

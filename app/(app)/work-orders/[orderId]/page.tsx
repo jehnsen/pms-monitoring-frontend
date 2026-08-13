@@ -39,7 +39,8 @@ import { useFleet, useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
 import { isProviderRole } from "@/lib/tenancy";
 import { approvedValue, declinedValue, pendingValue } from "@/lib/approvals";
-import { resolvePartsCost, workOrderCost } from "@/lib/pms";
+import { computeTotals, totalsFromSubtotal } from "@/lib/billing";
+import { resolvePartsCost } from "@/lib/pms";
 import { TASK_BY_ID } from "@/lib/service-tasks";
 import { formatCurrency, formatDate, formatKm, titleCase } from "@/lib/utils";
 import type { ApprovalAction, WorkOrderEvent, ApprovalLogEntry } from "@/types";
@@ -104,6 +105,15 @@ export default function WorkOrderDetailPage({
   const attached = documents.filter((doc) => doc.workOrderId === order.id);
   const closed = order.status === "closed" || order.status === "cancelled";
   const partsCost = resolvePartsCost(order);
+
+  // Billing runs off the lines, which are the source of truth once they exist.
+  // Seeded and pre-approval-workflow orders have none and carry only aggregate
+  // costs, so those roll up from the stored figures instead of reading zero.
+  const billing =
+    order.lines.length > 0
+      ? computeTotals(order.lines, approvalSettings)
+      : totalsFromSubtotal(partsCost, order.laborCost, approvalSettings);
+  const { labourTotal: labourCost, subTotal, taxTotal, grandTotal } = billing;
 
   const canSchedule = order.status === "approved" || order.status === "partially_approved";
 
@@ -342,13 +352,35 @@ export default function WorkOrderDetailPage({
               <div className="flex items-center justify-between gap-3">
                 <dt className="text-muted-foreground">Labour</dt>
                 <dd className="tabular font-medium">
-                  {formatCurrency(order.laborCost)}
+                  {formatCurrency(labourCost)}
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-3 border-t border-border pt-2.5">
-                <dt className="font-medium">Total</dt>
+                <dt className="text-muted-foreground">Sub total</dt>
+                <dd className="tabular font-medium">
+                  {formatCurrency(subTotal)}
+                </dd>
+              </div>
+              {billing.miscTotal > 0 ? (
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Misc / shop fee</dt>
+                  <dd className="tabular font-medium">
+                    {formatCurrency(billing.miscTotal)}
+                  </dd>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between gap-3">
+                <dt className="text-muted-foreground">
+                  VAT ({billing.vatRatePct}%)
+                </dt>
+                <dd className="tabular font-medium">
+                  {formatCurrency(taxTotal)}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t border-border pt-2.5">
+                <dt className="font-medium">Grand total</dt>
                 <dd className="tabular text-base font-semibold">
-                  {formatCurrency(workOrderCost(order))}
+                  {formatCurrency(grandTotal)}
                 </dd>
               </div>
             </dl>
