@@ -1,5 +1,5 @@
 -- =====================================================================
--- MekanikoMoR — demo accounts as real Supabase Auth users
+-- TorqueLane — demo accounts as real Supabase Auth users
 --
 -- These replace lib/auth.ts's DEMO_ACCOUNTS. They must be real auth.users
 -- rows, because RLS keys off auth.uid(): a session the browser invents cannot
@@ -11,8 +11,8 @@
 -- at the bottom of this file.
 --
 -- Idempotent: an account that already exists has its profile re-pointed rather
--- than being duplicated. Existing users of the shared detailing app are not
--- touched — only the eleven emails listed here.
+-- than being duplicated. Runs AFTER 0002_pms_providers_seed.sql — these
+-- profiles reference provider and fleet-client ids that migration seeds.
 -- =====================================================================
 
 do $$
@@ -110,6 +110,5 @@ end $$;
 --
 -- Before exposing this instance, either rotate each password in the Supabase
 -- dashboard (Authentication -> Users) or delete the accounts that are not
--- needed. Note also that this database is shared with another application, so
--- these users exist in the same auth pool as that app's users.
+-- needed.
 -- ---------------------------------------------------------------------

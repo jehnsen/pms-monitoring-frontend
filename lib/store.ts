@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
-import { formatISO, parseISO } from "date-fns";
+import { formatISO } from "date-fns";
 import type {
   AlertInteraction,
-  ApprovalLogEntry,
   ApprovalSettings,
   FleetClient,
   FleetDocument,
@@ -22,7 +21,6 @@ import type {
   TenantSettings,
   Vehicle,
   WorkOrder,
-  WorkOrderEvent,
   WorkOrderLine,
 } from "@/types";
 import { applyCompletion, evaluateFleet, summariseFleet } from "@/lib/pms";
@@ -31,27 +29,36 @@ import { useSession } from "@/lib/auth";
 import { requireSupabase } from "@/lib/supabase";
 import {
   alertsForScope,
+  approvalSettingsForClient,
   explainTenantScope,
   scopeFleetState,
   tenantScopeKey,
   visibleFleetClientIds,
 } from "@/lib/tenancy";
+import { businessDate } from "@/lib/business-date";
 import {
-  DEFAULT_APPROVAL_SETTINGS,
-  approvedValue,
-  businessHoursBetween,
-  deriveOrderStatus,
-  lineCost,
-  requiredApprover,
-  varianceExceeds,
-} from "@/lib/approvals";
-import { computeTotals, recalcLine } from "@/lib/billing";
+  PlanError,
+  applyLineDecisions,
+  isCollectable,
+  planClose,
+  planDraftEdit,
+  planSendForApproval,
+  planTransition,
+  type DraftPatch,
+  type PlanContext,
+} from "@/lib/work-order-plans";
+import type { CommandResult } from "@/server/commands/result";
 import {
-  assignOnApproval,
-  checkTransition,
-  hasReference,
-  nextReference,
-} from "@/lib/work-order-machine";
+  cancelAction,
+  closeAction,
+  createWorkOrderAction,
+  decideLinesAction,
+  markCollectedAction,
+  scheduleAction,
+  sendForApprovalAction,
+  startAction,
+  updateDraftAction,
+} from "@/server/actions/work-orders";
 import {
   EMPTY_STATE,
   fetchAlertInteractions,
@@ -62,7 +69,6 @@ import {
   saveAlertInteraction,
 } from "@/lib/fleet-data";
 import {
-  approvalLogEntryToRow,
   approvalSettingsToRow,
   documentToRow,
   fleetClientToRow,
@@ -74,10 +80,6 @@ import {
   purchaseOrderToRow,
   serviceTaskToRow,
   vehicleToRow,
-  workOrderLineToRow,
-  workOrderPartRows,
-  workOrderTaskRows,
-  workOrderToRow,
 } from "@/lib/mappers";
 
 /**
@@ -96,6 +98,13 @@ import {
  *  - Tenancy is enforced twice. The client-side guards below are unchanged, and
  *    RLS independently rejects anything they would have blocked. The guards are
  *    kept because they give an immediate, local answer without a round trip.
+ *  - **Work orders and approvals are written by server commands**, not here
+ *    (`server/actions/work-orders.ts`; the browser role cannot write those
+ *    tables since migration 0010). The store sends intent, draws an optimistic
+ *    preview with the same pure planners the server runs
+ *    (`lib/work-order-plans.ts`), then swaps in the canonical rows the command
+ *    returns — or restores the previous rows if it refuses. Every other
+ *    entity still writes through PostgREST until Phase 2 moves it.
  *
  * `getServerSnapshot` still returns empty: due dates depend on "now", so the
  * shell renders skeletons until mount. Check `ready` before rendering data.
@@ -403,81 +412,89 @@ export function useAlerts() {
 /** Largest single upload accepted, in bytes. */
 export const MAX_DOCUMENT_BYTES = 1_500_000;
 
-function workOrderEvent(status: WorkOrder["status"], actor: string): WorkOrderEvent {
-  return {
-    id: `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    status,
-    at: new Date().toISOString(),
-    actor,
+/* -------------------------------------------- server-command reconciliation */
+
+interface RecordSet {
+  orders: WorkOrder[];
+  vehicles?: Vehicle[];
+}
+
+/**
+ * Swaps whole records into local state by id; records not held yet are
+ * prepended (lists are newest-first). Used both to adopt a command's
+ * canonical rows and to put back the pre-optimistic ones on refusal.
+ */
+function adopt({ orders, vehicles = [] }: RecordSet) {
+  if (orders.length === 0 && vehicles.length === 0) return;
+  const ordersById = new Map(orders.map((order) => [order.id, order]));
+  const held = new Set(state.workOrders.map((order) => order.id));
+  const vehiclesById = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
+
+  commit({
+    ...state,
+    workOrders: [
+      ...orders.filter((order) => !held.has(order.id)),
+      ...state.workOrders.map((order) => ordersById.get(order.id) ?? order),
+    ],
+    vehicles: state.vehicles.map((vehicle) => vehiclesById.get(vehicle.id) ?? vehicle),
+  });
+}
+
+/**
+ * Runs a server command with an optional optimistic preview.
+ *
+ * The preview is applied first; then, on success, the command's canonical
+ * rows replace it, and on any refusal (or a network failure, which is
+ * reported as one) the exact records the preview touched are restored. Ids
+ * minted for the preview are placeholders: the canonical rows carry the
+ * server's ids and replace them.
+ */
+async function submitCommand<T>(
+  label: string,
+  preview: RecordSet | null,
+  call: () => Promise<CommandResult<T>>,
+  canonicalOf: (data: T) => RecordSet
+): Promise<CommandResult<T>> {
+  const previous: RecordSet = {
+    orders: (preview?.orders ?? [])
+      .map((order) => state.workOrders.find((held) => held.id === order.id))
+      .filter((order): order is WorkOrder => Boolean(order)),
+    vehicles: (preview?.vehicles ?? [])
+      .map((vehicle) => state.vehicles.find((held) => held.id === vehicle.id))
+      .filter((vehicle): vehicle is Vehicle => Boolean(vehicle)),
   };
-}
+  if (preview) adopt(preview);
 
-function approvalLogId() {
-  return `log-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-}
-
-/**
- * Replaces an order's covered-task junction rows.
- *
- * `taskIds` was an array column until migration 0006; it is
- * `pms_work_order_tasks` now, so a write is delete-then-insert rather than an
- * overwrite. Delete-all-then-insert (rather than diffing) keeps the write
- * idempotent and matches how the array column behaved — the set replaces
- * wholesale.
- */
-async function replaceWorkOrderTasks(
-  supabase: ReturnType<typeof requireSupabase>,
-  orderId: string,
-  taskIds: string[]
-) {
-  const { error: clearError } = await supabase
-    .from("pms_work_order_tasks")
-    .delete()
-    .eq("work_order_id", orderId);
-  if (clearError) throw new Error(clearError.message);
-
-  const rows = workOrderTaskRows(taskIds, orderId);
-  if (rows.length === 0) return;
-
-  const { error } = await supabase.from("pms_work_order_tasks").insert(rows);
-  if (error) throw new Error(error.message);
-}
-
-/**
- * Replaces an order's fitted-part rows — same delete-then-insert shape, for
- * what used to be the `parts` jsonb blob.
- *
- * `partsBySku` resolves each line to its catalogue row within the order's own
- * fleet client: SKUs are per-client, so matching a bare SKU across clients
- * would attach one tenant's part to another tenant's job.
- */
-async function replaceWorkOrderParts(
-  supabase: ReturnType<typeof requireSupabase>,
-  orderId: string,
-  parts: PartLine[],
-  partsBySku: ReadonlyMap<string, string>
-) {
-  const { error: clearError } = await supabase
-    .from("pms_work_order_parts")
-    .delete()
-    .eq("work_order_id", orderId);
-  if (clearError) throw new Error(clearError.message);
-
-  const rows = workOrderPartRows(parts, orderId, partsBySku);
-  if (rows.length === 0) return;
-
-  const { error } = await supabase.from("pms_work_order_parts").insert(rows);
-  if (error) throw new Error(error.message);
-}
-
-/** SKU → part id for one fleet client's catalogue. */
-function partsBySkuFor(state: FleetState, fleetClientId: string | null) {
-  const index = new Map<string, string>();
-  for (const part of state.parts) {
-    if (fleetClientId && part.fleetClientId !== fleetClientId) continue;
-    if (part.sku) index.set(part.sku, part.id);
+  let result: CommandResult<T>;
+  try {
+    result = await call();
+  } catch (error) {
+    console.error(`[store] ${label}: request failed`, error);
+    result = {
+      ok: false,
+      code: "conflict",
+      message: "Couldn't reach the server — nothing was changed.",
+    };
   }
-  return index;
+
+  if (result.ok) {
+    adopt(canonicalOf(result.data));
+  } else {
+    adopt(previous);
+    console.error(`[store] ${label} refused (${result.code}): ${result.message}`);
+  }
+  return result;
+}
+
+/** A planner's answer for the preview, or null when it refuses locally — the
+ * server still gets the final say, since local state can be stale. */
+function tryPlan<T>(plan: () => T): T | null {
+  try {
+    return plan();
+  } catch (error) {
+    if (error instanceof PlanError) return null;
+    throw error;
+  }
 }
 
 /**
@@ -538,6 +555,30 @@ type NewWorkOrderDraft = Omit<
   bayId?: string | null;
   scheduledTime?: string | null;
 };
+
+/** The header fields `updateDraft` accepts; everything else is another command's. */
+const DRAFT_FIELDS = [
+  "title",
+  "type",
+  "priority",
+  "scheduledFor",
+  "scheduledTime",
+  "bayId",
+  "technician",
+  "vendor",
+  "notes",
+  "taskIds",
+  "laborCost",
+  "partsCost",
+] as const satisfies readonly (keyof DraftPatch)[];
+
+function pickDraftPatch(patch: Partial<WorkOrder>): DraftPatch {
+  const picked: Record<string, unknown> = {};
+  for (const field of DRAFT_FIELDS) {
+    if (patch[field] !== undefined) picked[field] = patch[field];
+  }
+  return picked as DraftPatch;
+}
 
 export function useFleetActions() {
   const { session } = useSession();
@@ -628,201 +669,100 @@ export function useFleetActions() {
   );
 
   /**
-   * Every job is a purchase before it's a repair: the lines supplied here run
-   * through the approval thresholds immediately. Under the auto-approve
-   * ceiling every line is approved on the spot (system actor, logged) and the
-   * order opens already `approved`; otherwise it opens `pending_approval` and
-   * the wait-time clock starts now.
+   * The preview context for a planner: same actor, client and provider the
+   * server will use. Ids minted here are placeholders the canonical rows
+   * replace.
    */
-  const createWorkOrder = useCallback(
-    (
-      draft: NewWorkOrderDraft,
-      lineDrafts: NewWorkOrderLine[],
-      settings: ApprovalSettings
-    ): WorkOrder | null => {
-      const current = state;
-      const fleetClientId = guards.clientForVehicle(current, draft.vehicleId);
-      if (!fleetClientId) return null;
-
-      const now = new Date();
-      const orderId = `wo-${Date.now().toString(36)}`;
-      const ownerProviderId = providerIdForClient(current, fleetClientId);
-
-      // Extended amounts are derived from qty/rate here, once, so the total the
-      // approval band is measured against is the same arithmetic the dialog showed.
-      const priced = lineDrafts.map((l, index) =>
-        recalcLine({
-          ...l,
-          id: `line-${Date.now().toString(36)}-${index}`,
-          partCost: 0,
-          labourCost: 0,
-          approvalStatus: "pending" as const,
-          approvedBy: null,
-          approvedAt: null,
-          declineReason: null,
-        })
-      );
-
-      // The band runs on the pre-tax line value: a threshold is a decision
-      // about the work, and nobody approves VAT.
-      const total = priced.reduce((sum, l) => sum + l.partCost + l.labourCost, 0);
-      const autoApprove = requiredApprover(total, settings) === "auto";
-
-      const lines: WorkOrderLine[] = priced.map((l) => ({
-        ...l,
-        approvalStatus: autoApprove ? "approved" : "pending",
-        approvedBy: autoApprove ? "System (auto-approval)" : null,
-        approvedAt: autoApprove ? now.toISOString() : null,
-      }));
-
-      const approvalLog: ApprovalLogEntry[] = autoApprove
-        ? lines.map((l) => ({
-            id: approvalLogId(),
-            fleetClientId,
-            lineId: l.id,
-            action: "auto_approved",
-            actorId: "system",
-            actorName: "System (auto-approval)",
-            at: now.toISOString(),
-            note: null,
-            amountAtTime: lineCost(l),
-          }))
-        : [];
-
-      const status = deriveOrderStatus(lines);
-      const event = workOrderEvent(status, actor);
-
-      // This entry point never opens a `draft` — `deriveOrderStatus` only ever
-      // returns an approval-stage status, so an order raised here is already
-      // either with the client or auto-approved. Either way it has left the
-      // shop's scratch space and earns a number now. `current.workOrders` is
-      // the unscoped snapshot, which is what keeps two fleet clients under one
-      // provider off the same sequence.
-      const reference = nextReference(current.workOrders, now.getFullYear());
-
-      const created: WorkOrder = {
-        ...draft,
-        id: orderId,
-        reference,
-        bayId: draft.bayId ?? null,
-        scheduledTime: draft.scheduledTime ?? null,
-        // Auto-approval is still approval: the job is authorised, so it is
-        // assigned to the owning provider on the spot rather than left dangling.
-        assignedProviderId: autoApprove
-          ? assignOnApproval(draft, ownerProviderId ?? "").assignedProviderId || null
-          : null,
-        // A job cannot be collected before it has been done.
-        collectedAt: null,
-        collectedBy: null,
-        status,
-        lines,
-        approvalLog,
-        pendingApprovalEnteredAt:
-          status === "pending_approval" ? now.toISOString() : null,
-        approvalWaitHours: null,
-        history: [event],
-      };
-
-      void optimistic(
-        { ...current, workOrders: [created, ...current.workOrders] },
-        async () => {
-          const supabase = requireSupabase();
-
-          const { error: orderError } = await supabase
-            .from("pms_work_orders")
-            .insert(workOrderToRow(created));
-          if (orderError) throw new Error(orderError.message);
-
-          if (lines.length > 0) {
-            const { error } = await supabase
-              .from("pms_work_order_lines")
-              .insert(lines.map((l) => workOrderLineToRow(l, orderId)));
-            if (error) throw new Error(error.message);
-          }
-
-          // Covered tasks are junction rows, not a column on the order.
-          await replaceWorkOrderTasks(supabase, orderId, created.taskIds);
-
-          const { error: eventError } = await supabase
-            .from("pms_work_order_events")
-            .insert({
-              id: event.id,
-              work_order_id: orderId,
-              status: event.status,
-              at: event.at,
-              actor: event.actor,
-            });
-          if (eventError) throw new Error(eventError.message);
-
-          if (approvalLog.length > 0) {
-            const { error } = await supabase
-              .from("pms_approval_log")
-              .insert(approvalLog.map((e) => approvalLogEntryToRow(e, orderId)));
-            if (error) throw new Error(error.message);
-          }
-        }
-      );
-
-      return created;
-    },
-    [actor, guards, optimistic, providerIdForClient]
-  );
-
-  const updateWorkOrder = useCallback(
-    (id: string, patch: Partial<WorkOrder>) => {
-      const current = state;
-      if (!guards.clientForOrder(current, id)) return;
-
-      const order = current.workOrders.find((o) => o.id === id);
-      if (!order) return;
-
-      const statusChanged = patch.status && patch.status !== order.status;
-      const event = statusChanged ? workOrderEvent(patch.status!, actor) : null;
-
-      const updated: WorkOrder = {
-        ...order,
-        ...patch,
-        // A patch may not re-point an order at another tenant's vehicle, which
-        // would drag it across the boundary.
-        vehicleId: order.vehicleId,
-        history: event ? [...order.history, event] : order.history,
-      };
-
-      void optimistic(
-        {
-          ...current,
-          workOrders: current.workOrders.map((o) => (o.id === id ? updated : o)),
-        },
-        async () => {
-          const supabase = requireSupabase();
-          const row = workOrderToRow({ ...patch, vehicleId: undefined });
-          if (Object.keys(row).length > 0) {
-            const { error } = await supabase
-              .from("pms_work_orders")
-              .update(row)
-              .eq("id", id);
-            if (error) throw new Error(error.message);
-          }
-          if (event) {
-            const { error } = await supabase.from("pms_work_order_events").insert({
-              id: event.id,
-              work_order_id: id,
-              status: event.status,
-              at: event.at,
-              actor: event.actor,
-            });
-            if (error) throw new Error(error.message);
-          }
-        }
-      );
-    },
-    [actor, guards, optimistic]
+  const planContextFor = useCallback(
+    (current: FleetState, fleetClientId: string): PlanContext => ({
+      actor: { id: session?.uid ?? "", name: actor },
+      fleetClientId,
+      providerId: providerIdForClient(current, fleetClientId) ?? "",
+      now: new Date(),
+      newId: () => `pending-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    }),
+    [session, actor, providerIdForClient]
   );
 
   /**
-   * Approves, declines, or defers one line. The order's status is never set
-   * directly — it is always re-derived from the full line set — and exiting
-   * `pending_approval` stamps how long the line actually waited.
+   * Raises a work order through the `createWorkOrder` server command.
+   *
+   * No optimistic preview: the order's id and number are the server's to
+   * issue, so this resolves with the canonical order once the command answers
+   * (or null if it refuses). Every job is still a purchase before it is a
+   * repair — the server prices the lines and decides auto-approval against
+   * the vehicle's client's own effective bands. `settings` is accepted so call
+   * sites keep compiling, and is ignored for that reason.
+   */
+  const createWorkOrder = useCallback(
+    async (
+      draft: NewWorkOrderDraft,
+      lineDrafts: NewWorkOrderLine[],
+      _settings?: ApprovalSettings
+    ): Promise<WorkOrder | null> => {
+      if (!guards.clientForVehicle(state, draft.vehicleId)) return null;
+      const result = await submitCommand(
+        "createWorkOrder",
+        null,
+        () => createWorkOrderAction({ ...draft, lines: lineDrafts }),
+        (data) => ({ orders: [data.order] })
+      );
+      return result.ok ? result.data.order : null;
+    },
+    [guards]
+  );
+
+  /**
+   * Kept for its call sites, which move status (start, cancel, schedule) or
+   * edit a draft's header. Each of those is its own server command. Statuses
+   * that belong to another action — quoting, approval, close — are refused
+   * here rather than written around their rules.
+   */
+  const updateWorkOrder = useCallback(
+    (id: string, patch: Partial<WorkOrder>) => {
+      const current = state;
+      const fleetClientId = guards.clientForOrder(current, id);
+      const order = current.workOrders.find((o) => o.id === id);
+      if (!fleetClientId || !order) return;
+      const ctx = planContextFor(current, fleetClientId);
+      const { status } = patch;
+
+      if (status && status !== order.status) {
+        if (status !== "in_progress" && status !== "cancelled" && status !== "scheduled") {
+          console.warn(`[store] "${status}" is set by its own action, not updateWorkOrder.`);
+          return;
+        }
+        const fields =
+          status === "scheduled" ? { scheduledFor: patch.scheduledFor ?? order.scheduledFor } : {};
+        const preview = tryPlan(() => planTransition(order, status, fields, ctx));
+        const action =
+          status === "in_progress" ? startAction : status === "cancelled" ? cancelAction : scheduleAction;
+        void submitCommand(
+          `transition:${status}`,
+          preview && { orders: [preview.order] },
+          () => action({ orderId: id, ...fields }),
+          (data) => ({ orders: [data.order] })
+        );
+        return;
+      }
+
+      const draftPatch = pickDraftPatch(patch);
+      if (Object.keys(draftPatch).length === 0) return;
+      const preview = tryPlan(() => planDraftEdit(order, draftPatch, ctx));
+      void submitCommand(
+        "updateDraft",
+        preview && { orders: [preview.order] },
+        () => updateDraftAction({ orderId: id, patch: draftPatch }),
+        (data) => ({ orders: [data.order] })
+      );
+    },
+    [guards, planContextFor]
+  );
+
+  /**
+   * Approves, declines, or defers one line via `decideLines`. The preview
+   * re-derives the order's status from its lines exactly as the server will;
+   * the server additionally enforces the approval band for this user.
    */
   const decideLine = useCallback(
     (
@@ -833,198 +773,52 @@ export function useFleetActions() {
     ) => {
       const current = state;
       const fleetClientId = guards.clientForOrder(current, orderId);
-      if (!fleetClientId) return;
-
       const order = current.workOrders.find((o) => o.id === orderId);
-      if (!order) return;
+      if (!fleetClientId || !order) return;
 
-      const now = new Date();
-      const lines = order.lines.map((line) =>
-        line.id === lineId
-          ? {
-              ...line,
-              approvalStatus: decision,
-              approvedBy: actor,
-              approvedAt: now.toISOString(),
-              declineReason: decision === "declined" ? note ?? "" : null,
-            }
-          : line
+      const decisions = [{ lineId, decision, note: note ?? null }];
+      const preview = tryPlan(() =>
+        applyLineDecisions(order, decisions, planContextFor(current, fleetClientId))
       );
-      const decidedLine = lines.find((l) => l.id === lineId);
-      if (!decidedLine) return;
-
-      const logEntry: ApprovalLogEntry = {
-        id: approvalLogId(),
-        fleetClientId,
-        lineId,
-        action: decision,
-        actorId: actor,
-        actorName: actor,
-        at: now.toISOString(),
-        note: note ?? null,
-        amountAtTime: lineCost(decidedLine),
-      };
-
-      const newStatus = deriveOrderStatus(lines);
-      const leavingPending =
-        order.status === "pending_approval" &&
-        newStatus !== "pending_approval" &&
-        order.pendingApprovalEnteredAt;
-
-      const statusChanged = newStatus !== order.status;
-      const event = statusChanged ? workOrderEvent(newStatus, actor) : null;
-
-      const approvalWaitHours = leavingPending
-        ? businessHoursBetween(parseISO(order.pendingApprovalEnteredAt as string), now)
-        : order.approvalWaitHours;
-
-      const pendingEnteredAt =
-        newStatus === "pending_approval" ? order.pendingApprovalEnteredAt : null;
-
-      // The moment approval lands, the job becomes someone's to do: it is
-      // assigned to the provider that owns the vehicle's client, so no
-      // authorised work sits unowned waiting for a human to route it. A
-      // partial approval counts — there is approved work on it either way.
-      // `vendor` is deliberately left alone; see `assignOnApproval`.
-      const assignment =
-        (newStatus === "approved" || newStatus === "partially_approved") &&
-        !order.assignedProviderId
-          ? assignOnApproval(order, providerIdForClient(current, fleetClientId) ?? "")
-          : null;
-
-      const updated: WorkOrder = {
-        ...order,
-        lines,
-        approvalLog: [...order.approvalLog, logEntry],
-        status: newStatus,
-        assignedProviderId:
-          assignment?.assignedProviderId || order.assignedProviderId,
-        pendingApprovalEnteredAt: pendingEnteredAt,
-        approvalWaitHours,
-        history: event ? [...order.history, event] : order.history,
-      };
-
-      void optimistic(
-        {
-          ...current,
-          workOrders: current.workOrders.map((o) =>
-            o.id === orderId ? updated : o
-          ),
-        },
-        async () => {
-          const supabase = requireSupabase();
-
-          const { error: lineError } = await supabase
-            .from("pms_work_order_lines")
-            .update({
-              approval_status: decision,
-              approved_by: actor,
-              approved_at: now.toISOString(),
-              decline_reason: decision === "declined" ? note ?? "" : null,
-            })
-            .eq("id", lineId);
-          if (lineError) throw new Error(lineError.message);
-
-          const { error: orderError } = await supabase
-            .from("pms_work_orders")
-            .update({
-              status: newStatus,
-              pending_approval_entered_at: pendingEnteredAt,
-              approval_wait_hours: approvalWaitHours,
-              // Only written when this decision is what assigned it; an
-              // unconditional write would clobber an existing assignment with null.
-              ...(assignment
-                ? { assigned_provider_id: assignment.assignedProviderId || null }
-                : {}),
-            })
-            .eq("id", orderId);
-          if (orderError) throw new Error(orderError.message);
-
-          const { error: logError } = await supabase
-            .from("pms_approval_log")
-            .insert(approvalLogEntryToRow(logEntry, orderId));
-          if (logError) throw new Error(logError.message);
-
-          if (event) {
-            const { error } = await supabase.from("pms_work_order_events").insert({
-              id: event.id,
-              work_order_id: orderId,
-              status: event.status,
-              at: event.at,
-              actor: event.actor,
-            });
-            if (error) throw new Error(error.message);
-          }
-        }
+      void submitCommand(
+        "decideLines",
+        preview && { orders: [preview.order] },
+        () => decideLinesAction({ orderId, decisions }),
+        (data) => ({ orders: [data.order] })
       );
     },
-    [actor, guards, optimistic, providerIdForClient]
+    [guards, planContextFor]
   );
 
   /** Approved or partially-approved work moves to the bay's calendar. */
   const scheduleWorkOrder = useCallback(
     (orderId: string, scheduledFor: string) => {
       const current = state;
-      if (!guards.clientForOrder(current, orderId)) return;
-
+      const fleetClientId = guards.clientForOrder(current, orderId);
       const order = current.workOrders.find((o) => o.id === orderId);
-      if (
-        !order ||
-        (order.status !== "approved" && order.status !== "partially_approved")
-      ) {
-        return;
-      }
+      if (!fleetClientId || !order) return;
 
-      const event = workOrderEvent("scheduled", actor);
-      const updated: WorkOrder = {
-        ...order,
-        scheduledFor,
-        status: "scheduled",
-        history: [...order.history, event],
-      };
-
-      void optimistic(
-        {
-          ...current,
-          workOrders: current.workOrders.map((o) =>
-            o.id === orderId ? updated : o
-          ),
-        },
-        async () => {
-          const supabase = requireSupabase();
-          const { error } = await supabase
-            .from("pms_work_orders")
-            .update({ scheduled_for: scheduledFor, status: "scheduled" })
-            .eq("id", orderId);
-          if (error) throw new Error(error.message);
-
-          const { error: eventError } = await supabase
-            .from("pms_work_order_events")
-            .insert({
-              id: event.id,
-              work_order_id: orderId,
-              status: event.status,
-              at: event.at,
-              actor: event.actor,
-            });
-          if (eventError) throw new Error(eventError.message);
-        }
+      const preview = tryPlan(() =>
+        planTransition(order, "scheduled", { scheduledFor }, planContextFor(current, fleetClientId))
+      );
+      void submitCommand(
+        "schedule",
+        preview && { orders: [preview.order] },
+        () => scheduleAction({ orderId, scheduledFor }),
+        (data) => ({ orders: [data.order] })
       );
     },
-    [actor, guards, optimistic]
+    [guards, planContextFor]
   );
 
   /**
-   * Closing a work order is what resets the PMS clock: every task the
-   * technician ticked takes the order's odometer and completion date as its new
-   * baseline. Findings and parts are recorded at the same moment — that is what
-   * turns a work order into a service record.
+   * Closes a work order via the `close` command, which records the service
+   * record, resets the vehicle's PMS clock, and logs any variance re-approval
+   * in one transaction.
    *
-   * If actual cost has drifted past the approved amount by more than the
-   * variance threshold, closing is refused unless `varianceApproved` is set.
-   *
-   * Still synchronous in its return: the variance check is local, so the caller
-   * gets its answer immediately and the write settles behind it.
+   * Still synchronous in its return: the variance check runs locally through
+   * the same planner the server uses, so the dialog gets its answer at once;
+   * the write settles behind it and rolls back if the server disagrees.
    */
   const completeWorkOrder = useCallback(
     (
@@ -1042,149 +836,49 @@ export function useFleetActions() {
       if (!fleetClientId) {
         return { ok: false, error: "That work order is not yours to close." };
       }
-
       const order = current.workOrders.find((o) => o.id === id);
       if (!order) return { ok: false, error: "Work order not found." };
 
-      const parts = detail?.parts ?? order.parts;
-      const partsTotal = parts.reduce((t, p) => t + p.quantity * p.unitCost, 0);
+      const client = current.fleetClients.find((c) => c.id === fleetClientId);
+      const settings = client
+        ? approvalSettingsForClient(client, current.approvalSettings)
+        : current.approvalSettings;
+      const completion = {
+        odometer: detail?.odometer,
+        findings: detail?.findings,
+        parts: detail?.parts,
+        taskIds: detail?.taskIds,
+      };
+      const varianceApproved = Boolean(detail?.varianceApproved);
 
-      // Actual labour comes from the approved lines, not `order.laborCost`.
-      // That field is only the estimate captured at creation; once lines carry
-      // itemised labour it is stale, and comparing a stale estimate against
-      // itemised actual parts measured a variance that was partly fictional.
-      // Both sides of this comparison are pre-tax, matching the approval bands.
-      const actualLabour = computeTotals(order.lines, current.approvalSettings, [
-        "approved",
-      ]).labourTotal;
-      const actualTotal = actualLabour + partsTotal;
-      const approvedTotal = approvedValue(order.lines);
-      const breachesVariance = varianceExceeds(
-        approvedTotal,
-        actualTotal,
-        current.approvalSettings.varianceThresholdPct
-      );
-
-      if (breachesVariance && !detail?.varianceApproved) {
-        return {
-          ok: false,
-          error: `Actual cost (₱${actualTotal.toLocaleString()}) exceeds the approved ₱${approvedTotal.toLocaleString()} by more than ${
-            current.approvalSettings.varianceThresholdPct
-          }% — re-approve the variance before closing.`,
-        };
+      let plan: ReturnType<typeof planClose>;
+      try {
+        plan = planClose(
+          order,
+          completion,
+          settings,
+          { varianceApproved, completedOn: businessDate(new Date()) },
+          planContextFor(current, fleetClientId)
+        );
+      } catch (error) {
+        if (error instanceof PlanError) return { ok: false, error: error.message };
+        throw error;
       }
 
-      const now = new Date();
-      const varianceEntry: ApprovalLogEntry | null =
-        breachesVariance && detail?.varianceApproved
-          ? {
-              id: approvalLogId(),
-              fleetClientId,
-              lineId: null,
-              action: "variance_approved",
-              actorId: actor,
-              actorName: actor,
-              at: now.toISOString(),
-              note: `Actual ₱${actualTotal.toLocaleString()} vs approved ₱${approvedTotal.toLocaleString()}.`,
-              amountAtTime: actualTotal,
-            }
-          : null;
-
-      const event = workOrderEvent("closed", actor);
-      const completed: WorkOrder = {
-        ...order,
-        status: "closed",
-        completedOn: formatISO(now, { representation: "date" }),
-        odometerAtService: detail?.odometer ?? order.odometerAtService,
-        findings: detail?.findings ?? order.findings,
-        parts,
-        taskIds: detail?.taskIds ?? order.taskIds,
-        approvalLog: varianceEntry
-          ? [...order.approvalLog, varianceEntry]
-          : order.approvalLog,
-        history: [...order.history, event],
-      };
-
-      // Closing resets the PMS clock on the vehicle — the whole point of the
-      // operation, and why the vehicle is written alongside the order.
-      const updatedVehicle = current.vehicles.find(
-        (v) => v.id === completed.vehicleId
-      );
-      const nextVehicle = updatedVehicle
-        ? applyCompletion(updatedVehicle, completed)
-        : null;
-
-      void optimistic(
+      const vehicle = current.vehicles.find((v) => v.id === order.vehicleId);
+      void submitCommand(
+        "close",
         {
-          ...current,
-          vehicles: current.vehicles.map((vehicle) =>
-            vehicle.id === completed.vehicleId && nextVehicle
-              ? nextVehicle
-              : vehicle
-          ),
-          workOrders: current.workOrders.map((o) => (o.id === id ? completed : o)),
+          orders: [plan.order],
+          vehicles: vehicle ? [applyCompletion(vehicle, plan.order)] : [],
         },
-        async () => {
-          const supabase = requireSupabase();
-
-          const { error: orderError } = await supabase
-            .from("pms_work_orders")
-            .update(
-              workOrderToRow({
-                status: "closed",
-                completedOn: completed.completedOn,
-                odometerAtService: completed.odometerAtService,
-                findings: completed.findings,
-              })
-            )
-            .eq("id", id);
-          if (orderError) throw new Error(orderError.message);
-
-          // Fitted parts and covered tasks are child rows now — written after
-          // the order so their foreign key always has a parent to point at.
-          await replaceWorkOrderTasks(supabase, id, completed.taskIds);
-          await replaceWorkOrderParts(
-            supabase,
-            id,
-            completed.parts,
-            partsBySkuFor(current, guards.clientForOrder(current, id))
-          );
-
-          const { error: eventError } = await supabase
-            .from("pms_work_order_events")
-            .insert({
-              id: event.id,
-              work_order_id: id,
-              status: event.status,
-              at: event.at,
-              actor: event.actor,
-            });
-          if (eventError) throw new Error(eventError.message);
-
-          if (varianceEntry) {
-            const { error } = await supabase
-              .from("pms_approval_log")
-              .insert(approvalLogEntryToRow(varianceEntry, id));
-            if (error) throw new Error(error.message);
-          }
-
-          if (nextVehicle) {
-            const { error } = await supabase
-              .from("pms_vehicles")
-              .update({
-                task_state: nextVehicle.taskState,
-                odometer: nextVehicle.odometer,
-                odometer_read_at: nextVehicle.odometerReadAt,
-              })
-              .eq("id", nextVehicle.id);
-            if (error) throw new Error(error.message);
-          }
-        }
+        () => closeAction({ orderId: id, ...completion, varianceApproved }),
+        (data) => ({ orders: [data.order], vehicles: [data.vehicle] })
       );
 
       return { ok: true };
     },
-    [actor, guards, optimistic]
+    [guards, planContextFor]
   );
 
   const updateVehicle = useCallback(
@@ -1262,10 +956,10 @@ export function useFleetActions() {
   );
 
   /**
-   * Sends a quotation to the client for approval — the provider's half of the
-   * line-item approval loop. A draft sits with the shop; sending it starts the
-   * client's clock, and the send is written into the append-only approval log
-   * so "when did you actually send this" has an answer.
+   * Sends a quotation to the client for approval via `sendForApproval` — the
+   * provider's half of the approval loop. The server issues the order number
+   * (a re-sent order keeps the one it has) and logs the send; until it
+   * answers, the preview shows the order unnumbered rather than guessing.
    */
   const sendForApproval = useCallback(
     (orderId: string): { ok: true } | { ok: false; error: string } => {
@@ -1274,110 +968,26 @@ export function useFleetActions() {
       if (!fleetClientId) {
         return { ok: false, error: "That work order is not yours to send." };
       }
-
       const order = current.workOrders.find((o) => o.id === orderId);
       if (!order) return { ok: false, error: "Work order not found." };
 
-      // The machine owns which moves are legal, including the "nothing to
-      // approve" case, so this and every other transition give the same answer.
-      if (order.status === "pending_approval") {
-        return { ok: false, error: "This quotation is already with the client." };
+      let preview: ReturnType<typeof planSendForApproval>;
+      try {
+        preview = planSendForApproval(order, () => "", planContextFor(current, fleetClientId));
+      } catch (error) {
+        if (error instanceof PlanError) return { ok: false, error: error.message };
+        throw error;
       }
-      const allowed = checkTransition(order, "pending_approval");
-      if (!allowed.ok) return { ok: false, error: allowed.reason };
 
-      const now = new Date();
-      const lines = order.lines.map((line) =>
-        line.approvalStatus === "pending"
-          ? line
-          : { ...line, approvalStatus: "pending" as const }
+      void submitCommand(
+        "sendForApproval",
+        { orders: [preview.order] },
+        () => sendForApprovalAction({ orderId }),
+        (data) => ({ orders: [data.order] })
       );
-
-      const logEntry: ApprovalLogEntry = {
-        id: approvalLogId(),
-        fleetClientId,
-        lineId: null,
-        action: "sent_for_approval",
-        actorId: actor,
-        actorName: actor,
-        at: now.toISOString(),
-        note: `Quotation sent for ${lines.length} ${
-          lines.length === 1 ? "line" : "lines"
-        }.`,
-        amountAtTime: lines.reduce((t, l) => t + lineCost(l), 0),
-      };
-
-      // This is the moment the order stops being the shop's scratch space, so
-      // this is where it earns its number. A re-sent order (declined, revised)
-      // keeps the one it already has — reissuing would orphan the number the
-      // client has already been quoted.
-      const reference = hasReference(order)
-        ? order.reference
-        : nextReference(current.workOrders, now.getFullYear());
-
-      const event = workOrderEvent("pending_approval", actor);
-      const updated: WorkOrder = {
-        ...order,
-        reference,
-        lines,
-        status: "pending_approval",
-        pendingApprovalEnteredAt: now.toISOString(),
-        approvalWaitHours: null,
-        approvalLog: [...order.approvalLog, logEntry],
-        history: [...order.history, event],
-      };
-
-      void optimistic(
-        {
-          ...current,
-          workOrders: current.workOrders.map((o) =>
-            o.id === orderId ? updated : o
-          ),
-        },
-        async () => {
-          const supabase = requireSupabase();
-
-          const { error: orderError } = await supabase
-            .from("pms_work_orders")
-            .update({
-              status: "pending_approval",
-              reference,
-              pending_approval_entered_at: now.toISOString(),
-              approval_wait_hours: null,
-            })
-            .eq("id", orderId);
-          if (orderError) throw new Error(orderError.message);
-
-          // Any line not already pending is reset, so the client decides on
-          // the full set rather than inheriting a stale approval.
-          const { error: lineError } = await supabase
-            .from("pms_work_order_lines")
-            .update({ approval_status: "pending" })
-            .eq("work_order_id", orderId)
-            .neq("approval_status", "pending");
-          if (lineError) throw new Error(lineError.message);
-
-          const { error: logError } = await supabase
-            .from("pms_approval_log")
-            .insert(approvalLogEntryToRow(logEntry, orderId));
-          if (logError) throw new Error(logError.message);
-
-          const { error: eventError } = await supabase
-            .from("pms_work_order_events")
-            .insert({
-              id: event.id,
-              work_order_id: orderId,
-              status: event.status,
-              at: event.at,
-              actor: event.actor,
-            });
-          if (eventError) throw new Error(eventError.message);
-        }
-      );
-
       return { ok: true };
     },
-    [actor, guards, optimistic]
+    [guards, planContextFor]
   );
 
   /**
@@ -1457,43 +1067,33 @@ export function useFleetActions() {
   );
 
   /**
-   * Releases a vehicle at the counter. Only closed work orders can be
-   * collected — an open job means the vehicle is not finished — and the release
-   * is stamped with who let it go and when.
+   * Releases vehicles at the counter via `markCollected`. Only closed,
+   * not-yet-collected orders are collected — an open job means the vehicle is
+   * not finished — and the server stamps who let it go and when.
    */
   const collectWorkOrders = useCallback(
     (orderIds: string[]): { collected: number } => {
       const current = state;
-      const wanted = new Set(orderIds);
-      const at = new Date().toISOString();
       const ids = guards.clientIds(current);
       const clientOf = new Map(current.vehicles.map((v) => [v.id, v.fleetClientId]));
+      const at = new Date().toISOString();
 
-      const collectedIds: string[] = [];
-      const workOrders = current.workOrders.map((order) => {
-        if (!wanted.has(order.id)) return order;
-        if (order.status !== "closed" || order.collectedAt) return order;
-        const owner = clientOf.get(order.vehicleId);
-        if (!owner || !ids.has(owner)) return order;
+      const preview = current.workOrders
+        .filter((order) => orderIds.includes(order.id) && isCollectable(order))
+        .filter((order) => ids.has(clientOf.get(order.vehicleId) ?? ""))
+        .map((order) => ({ ...order, collectedAt: at, collectedBy: actor }));
 
-        collectedIds.push(order.id);
-        return { ...order, collectedAt: at, collectedBy: actor };
-      });
+      if (preview.length === 0) return { collected: 0 };
 
-      if (collectedIds.length === 0) return { collected: 0 };
-
-      void optimistic({ ...current, workOrders }, async () => {
-        const supabase = requireSupabase();
-        const { error } = await supabase
-          .from("pms_work_orders")
-          .update({ collected_at: at, collected_by: actor })
-          .in("id", collectedIds);
-        if (error) throw new Error(error.message);
-      });
-
-      return { collected: collectedIds.length };
+      void submitCommand(
+        "markCollected",
+        { orders: preview },
+        () => markCollectedAction({ orderIds: preview.map((order) => order.id) }),
+        (data) => ({ orders: data.orders })
+      );
+      return { collected: preview.length };
     },
-    [actor, guards, optimistic]
+    [actor, guards]
   );
 
   /**

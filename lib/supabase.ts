@@ -1,17 +1,28 @@
 "use client";
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * The Supabase browser client.
  *
- * This database is **shared with an unrelated application**, so everything this
- * app owns is prefixed `pms_`. Never query an unprefixed table from here.
+ * Every table this app owns is prefixed `pms_` — the platform namespace, not
+ * a sharing workaround (this project is dedicated to TorqueLane). Never query
+ * an unprefixed table from here.
  *
  * Only the anon key is used. Row Level Security is what constrains which rows
  * a session can see (see `supabase/migrations/0001_pms_schema.sql`), so the key
  * being public is expected — it grants nothing on its own, and `anon` has no
  * table grants at all. The service_role key must never reach the browser.
+ *
+ * **The session lives in cookies**, not localStorage, via `@supabase/ssr`.
+ * That is what lets server commands (`server/actions/`) identify the caller:
+ * the browser's cookie travels with every server action, `middleware.ts`
+ * refreshes it, and `server/supabase-server.ts` verifies it against GoTrue.
+ *
+ * The browser only *reads* through this client. Work orders and approvals are
+ * written by server commands; the `authenticated` role has no INSERT/UPDATE/
+ * DELETE on those tables any more (migration 0010).
  */
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -29,25 +40,14 @@ let client: SupabaseClient | null = null;
 /**
  * The shared client instance, or null when unconfigured.
  *
- * Created lazily and memoised: a module-level `createClient` would run during
- * the server render pass, where `window` does not exist and the auth storage
- * adapter has nothing to bind to.
+ * Created lazily and memoised: a module-level client would be constructed
+ * during the server render pass, where there is no `document.cookie` to bind to.
  */
 export function getSupabase(): SupabaseClient | null {
   if (!isSupabaseConfigured) return null;
   if (client) return client;
 
-  client = createClient(url as string, anonKey as string, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      // The session lives in localStorage under this key. Namespaced because
-      // the shared project may host another app's client on the same origin.
-      storageKey: "pms.supabase.auth",
-      detectSessionInUrl: false,
-    },
-  });
-
+  client = createBrowserClient(url as string, anonKey as string);
   return client;
 }
 

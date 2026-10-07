@@ -8,8 +8,20 @@
  * therefore starts with byte-identical data to what the app produced from
  * localStorage.
  *
+ * Writes **two** migrations, not one, because of a real dependency split:
+ *
+ *   0002_pms_providers_seed.sql  providers, fleet clients, approval settings
+ *   0006_pms_seed.sql            everything else (vehicles, work orders, …)
+ *
+ * The provider row has to exist before `0004_pms_service_tasks_seed.sql` can
+ * insert a catalogue row for it, and before `0005_pms_normalisation.sql`'s
+ * own-tenant catalogues apply — both run long before the rest of the fleet
+ * seed, which itself depends on tables `0003`/`0004`/`0005` create
+ * (service_task_id, pms_technicians, pms_vendors, the junction tables).
+ * Splitting the provider/client rows out of the big seed is what makes the
+ * whole migration set applicable, in numeric order, to an empty project.
+ *
  * Run via: npx vitest run scripts/emit-seed-sql.ts
- * Writes:  supabase/migrations/0003_pms_seed.sql
  *
  * This is a build-time authoring tool, not part of the app.
  */
@@ -73,10 +85,97 @@ function insert(
 
 test("emit seed sql", () => {
   const state = createSeedState();
+  const today = new Date().toISOString().slice(0, 10);
+
+  /* ======================================================================
+   * File 1 — providers_seed: the rows 0003/0005 need to already exist.
+   * ====================================================================== */
+  const providersOut: string[] = [];
+
+  providersOut.push(`-- =====================================================================
+-- TorqueLane — demo provider & fleet client seed
+--
+-- GENERATED FILE — do not edit by hand.
+-- Produced by scripts/emit-seed-sql.ts from lib/seed.ts's createSeedState(),
+-- split out from the rest of the demo fleet (0006_pms_seed.sql) because this
+-- part has to exist first: 0003_pms_service_tasks_seed.sql inserts a
+-- catalogue row owned by this provider, and 0005_pms_normalisation.sql's
+-- own-tenant backfills assume it too. The rest of the fleet (vehicles, work
+-- orders, …) depends on tables 0003/0004/0005 create, so it has to come
+-- after them — hence the split.
+--
+-- To regenerate:  npx vitest run scripts/emit-seed-sql.ts
+--
+-- Every statement is ON CONFLICT DO NOTHING, so re-running will not duplicate
+-- rows. Run AFTER 0001_pms_schema.sql.
+-- =====================================================================
+`);
+
+  providersOut.push("-- ------------------------------------------------- providers");
+  providersOut.push(
+    insert(
+      "pms_providers",
+      ["id", "name", "slug", "logo_url", "brand_color", "support_email", "created_at"],
+      state.providers.map((p) => [
+        lit(p.id), lit(p.name), lit(p.slug), lit(p.logoUrl),
+        lit(p.brandColor), lit(p.supportEmail), lit(p.createdAt),
+      ])
+    )
+  );
+
+  providersOut.push("-- ------------------------------------------------- fleet clients");
+  providersOut.push(
+    insert(
+      "pms_fleet_clients",
+      [
+        "id", "provider_id", "name", "slug", "contact_name", "contact_email",
+        "contract_terms", "payment_terms_days", "approval_threshold_overrides",
+        "logo_url", "brand_color", "status", "created_at",
+      ],
+      state.fleetClients.map((c) => [
+        lit(c.id), lit(c.providerId), lit(c.name), lit(c.slug),
+        lit(c.contactName), lit(c.contactEmail), lit(c.contractTerms),
+        lit(c.paymentTermsDays),
+        // NULL (inherit everything) is deliberately distinct from '{}'.
+        c.approvalThresholdOverrides ? json(c.approvalThresholdOverrides) : "null",
+        lit(c.logoUrl), lit(c.brandColor), lit(c.status), lit(c.createdAt),
+      ])
+    )
+  );
+
+  providersOut.push("-- --------------------------------------------- approval settings");
+  const settingsDefaults = state.approvalSettings ?? DEFAULT_APPROVAL_SETTINGS;
+  providersOut.push(
+    insert(
+      "pms_approval_settings",
+      [
+        "provider_id", "auto_approve_under", "ops_approval_under", "sla_hours",
+        "variance_threshold_pct", "default_parts_source", "monthly_budget",
+      ],
+      state.providers.map((p) => [
+        lit(p.id), lit(settingsDefaults.autoApproveUnder), lit(settingsDefaults.opsApprovalUnder),
+        lit(settingsDefaults.slaHours), lit(settingsDefaults.varianceThresholdPct),
+        lit(settingsDefaults.defaultPartsSource), lit(settingsDefaults.monthlyBudget),
+      ]),
+      "provider_id"
+    )
+  );
+
+  const providersDir = resolve(__dirname, "../supabase/migrations");
+  mkdirSync(providersDir, { recursive: true });
+  writeFileSync(
+    resolve(providersDir, "0002_pms_providers_seed.sql"),
+    providersOut.join("\n"),
+    "utf8"
+  );
+
+  /* ======================================================================
+   * File 2 — seed: everything else, which depends on 0003/0004/0005.
+   * ====================================================================== */
   const out: string[] = [];
 
   out.push(`-- =====================================================================
--- MekanikoMoR — demo fleet seed data
+-- TorqueLane — demo fleet seed data
 --
 -- GENERATED FILE — do not edit by hand.
 -- Produced by scripts/emit-seed-sql.ts from lib/seed.ts's createSeedState(),
@@ -89,33 +188,21 @@ test("emit seed sql", () => {
 --
 -- Every statement is ON CONFLICT DO NOTHING, so re-running will not duplicate
 -- rows. Note that seeded dates were computed relative to the date this file
--- was generated (${new Date().toISOString().slice(0, 10)}); regenerate if the
--- demo should look "current" again.
+-- was generated (${today}); regenerate if the demo should look "current"
+-- again.
 --
--- Run AFTER 0001_pms_schema.sql. Order matters: providers -> clients ->
--- vehicles -> work orders -> children.
+-- Run AFTER 0001, 0002 (providers/clients), 0003+0004 (service tasks), and
+-- 0005 (normalisation) — this is where the FKs those add come from.
 -- =====================================================================
 `);
-
-  /* ------------------------------------------------------------ providers */
-  out.push("-- ------------------------------------------------- providers");
-  out.push(
-    insert(
-      "pms_providers",
-      ["id", "name", "slug", "logo_url", "brand_color", "support_email", "created_at"],
-      state.providers.map((p) => [
-        lit(p.id), lit(p.name), lit(p.slug), lit(p.logoUrl),
-        lit(p.brandColor), lit(p.supportEmail), lit(p.createdAt),
-      ])
-    )
-  );
 
   /* ------------------------------------------- technician & vendor catalogues
    *
    * Derived from the work orders the generator produced rather than declared
    * separately: the seed is the authority on which names exist, and deriving
    * them keeps the FK targets and the referencing rows from ever disagreeing.
-   * Mirrors the backfill in 0006 — same slug rule, same derived ids.
+   * Mirrors the backfill in 0005_pms_normalisation.sql — same slug rule,
+   * same derived ids.
    */
   const slug = (input: string) =>
     input
@@ -164,45 +251,8 @@ test("emit seed sql", () => {
     )
   );
 
-  /* --------------------------------------------------------- fleet clients */
-  out.push("-- ------------------------------------------------- fleet clients");
-  out.push(
-    insert(
-      "pms_fleet_clients",
-      [
-        "id", "provider_id", "name", "slug", "contact_name", "contact_email",
-        "contract_terms", "payment_terms_days", "approval_threshold_overrides",
-        "logo_url", "brand_color", "status", "created_at",
-      ],
-      state.fleetClients.map((c) => [
-        lit(c.id), lit(c.providerId), lit(c.name), lit(c.slug),
-        lit(c.contactName), lit(c.contactEmail), lit(c.contractTerms),
-        lit(c.paymentTermsDays),
-        // NULL (inherit everything) is deliberately distinct from '{}'.
-        c.approvalThresholdOverrides ? json(c.approvalThresholdOverrides) : "null",
-        lit(c.logoUrl), lit(c.brandColor), lit(c.status), lit(c.createdAt),
-      ])
-    )
-  );
-
-  /* ------------------------------------------------------ approval settings */
-  out.push("-- --------------------------------------------- approval settings");
-  const s = state.approvalSettings ?? DEFAULT_APPROVAL_SETTINGS;
-  out.push(
-    insert(
-      "pms_approval_settings",
-      [
-        "provider_id", "auto_approve_under", "ops_approval_under", "sla_hours",
-        "variance_threshold_pct", "default_parts_source", "monthly_budget",
-      ],
-      state.providers.map((p) => [
-        lit(p.id), lit(s.autoApproveUnder), lit(s.opsApprovalUnder),
-        lit(s.slaHours), lit(s.varianceThresholdPct),
-        lit(s.defaultPartsSource), lit(s.monthlyBudget),
-      ]),
-      "provider_id"
-    )
-  );
+  // Fleet clients and approval settings are emitted in
+  // 0002_pms_providers_seed.sql, above, along with the provider row.
 
   /* ------------------------------------------------------------- vehicles */
   out.push("-- -------------------------------------------------- vehicles");
@@ -485,9 +535,7 @@ test("emit seed sql", () => {
     )
   );
 
-  const dir = resolve(__dirname, "../supabase/migrations");
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(resolve(dir, "0003_pms_seed.sql"), out.join("\n"), "utf8");
+  writeFileSync(resolve(providersDir, "0006_pms_seed.sql"), out.join("\n"), "utf8");
 
   // Surfaced so the generated volume is visible at author time rather than
   // discovered when the migration is run.

@@ -24,12 +24,12 @@ const schema = readFileSync(
 );
 
 const serviceTasksSchema = readFileSync(
-  resolve(__dirname, "../supabase/migrations/0004_pms_service_tasks.sql"),
+  resolve(__dirname, "../supabase/migrations/0003_pms_service_tasks.sql"),
   "utf8"
 );
 
 const normalisationSchema = readFileSync(
-  resolve(__dirname, "../supabase/migrations/0006_pms_normalisation.sql"),
+  resolve(__dirname, "../supabase/migrations/0005_pms_normalisation.sql"),
   "utf8"
 );
 
@@ -41,8 +41,18 @@ const normalisationSchema = readFileSync(
  * vacuously — the check would simply never see the table it was meant to
  * catch. Adding a migration that creates a table means adding it here.
  */
+const profileFieldsSchema = readFileSync(
+  resolve(__dirname, "../supabase/migrations/0008_pms_profile_fields.sql"),
+  "utf8"
+);
+
 const workflowSchema = readFileSync(
-  resolve(__dirname, "../supabase/migrations/0007_pms_workflow.sql"),
+  resolve(__dirname, "../supabase/migrations/0009_pms_workflow.sql"),
+  "utf8"
+);
+
+const writeChannelSchema = readFileSync(
+  resolve(__dirname, "../supabase/migrations/0010_pms_server_write_channel.sql"),
   "utf8"
 );
 
@@ -52,7 +62,9 @@ const allSchemas = [
   normalisationSchema,
   // Creates no tables — it only alters existing ones — but is included so the
   // check stays honest if a later edit adds one here.
+  profileFieldsSchema,
   workflowSchema,
+  writeChannelSchema,
 ].join("\n");
 
 /** Every table the fleet's data actually lives in. */
@@ -105,8 +117,8 @@ describe("row level security is enabled everywhere", () => {
     ].map((m) => m[1]);
 
     expect(created.length).toBeGreaterThan(0);
-    // A created-but-unprotected table is readable by every authenticated user
-    // of the shared project, including the unrelated app's users.
+    // A created-but-unprotected table is readable by every authenticated
+    // user of the project.
     expect(created.filter((t) => !enabled.includes(t))).toEqual([]);
   });
 
@@ -378,5 +390,97 @@ describe("the service-task catalogue is provider-global, not tenant-writable", (
 
   it("grants nothing to anon", () => {
     expect(serviceTasksSchema).not.toMatch(/grant[^;]*\bto\s+anon\b/);
+  });
+});
+
+describe("the server write channel (0010)", () => {
+  /** Tables only server commands may write, as of Phase 1. */
+  const SERVER_WRITTEN = [
+    "pms_work_orders",
+    "pms_work_order_lines",
+    "pms_work_order_tasks",
+    "pms_work_order_parts",
+    "pms_work_order_events",
+    "pms_approval_log",
+  ];
+
+  it("creates pms_server as a NOLOGIN role that cannot bypass RLS", () => {
+    expect(writeChannelSchema).toMatch(/create role pms_server nologin noinherit nobypassrls/);
+  });
+
+  it("never lets PostgREST's login role assume pms_server", () => {
+    // Only the server's own connection user is a member. A grant to
+    // `authenticator` would let a crafted JWT role claim become pms_server.
+    expect(allSchemas).not.toMatch(/grant\s+pms_server\s+to\s+[^;]*\bauthenticator\b/);
+    expect(writeChannelSchema).toMatch(/grant pms_server to postgres;/);
+  });
+
+  it.each(SERVER_WRITTEN)("revokes browser writes on %s", (table) => {
+    const revoke = writeChannelSchema.slice(
+      writeChannelSchema.indexOf("revoke insert, update, delete on"),
+      writeChannelSchema.indexOf("from authenticated;")
+    );
+    expect(revoke).toContain(table);
+  });
+
+  it.each(SERVER_WRITTEN)("drops every browser write policy on %s", (table) => {
+    // Each table's browser write policies from 0001/0005 must be dropped here;
+    // a surviving one would be dead (no grant) but misleading.
+    const browserWritePolicies = [
+      ...`${schema}\n${normalisationSchema}`.matchAll(
+        new RegExp(`create policy (\\w+) on ${table}\\s+for (?:insert|update|delete) to authenticated`, "g")
+      ),
+    ].map((m) => m[1]);
+    for (const policy of browserWritePolicies) {
+      expect(writeChannelSchema).toContain(`drop policy if exists ${policy} `);
+    }
+  });
+
+  it("gates every pms_server write policy on a tenancy helper", () => {
+    const policies = [
+      ...writeChannelSchema.matchAll(
+        /create policy (\w+) on (\w+)\s+for (insert|update|delete) to pms_server([\s\S]*?);/g
+      ),
+    ];
+    expect(policies.length).toBeGreaterThanOrEqual(12);
+    for (const [, name, , , body] of policies) {
+      expect(body, name).toContain("pms_can_access_client(");
+    }
+  });
+
+  it("keeps the append-only tables append-only for pms_server too", () => {
+    for (const table of ["pms_work_order_events", "pms_approval_log"]) {
+      const grants = [...allSchemas.matchAll(/grant ([^;]+?) on ([^;]+?) to ([^;]+);/g)].filter(
+        ([, , on]) => on.split(",").map((t) => t.trim()).includes(table)
+      );
+      for (const [, privileges] of grants) {
+        expect(privileges).not.toMatch(/\b(update|delete)\b/);
+      }
+      expect(writeChannelSchema).not.toMatch(
+        new RegExp(`create policy \\w+ on ${table}\\s+for (update|delete)`)
+      );
+    }
+  });
+
+  it("reads the caller's profile through a SECURITY DEFINER uid, not schema auth", () => {
+    // Supabase does not let `postgres` grant USAGE on schema auth, so any
+    // policy applying to pms_server that called auth.uid() inline would fail.
+    expect(writeChannelSchema).not.toMatch(/^\s*grant usage on schema auth/m);
+    expect(writeChannelSchema).not.toMatch(/alter policy pms_profiles_read/);
+    const fn = writeChannelSchema.slice(writeChannelSchema.indexOf("create or replace function pms_auth_uid"));
+    expect(fn).toContain("security definer");
+    expect(fn).toContain("set search_path = public, pg_temp");
+    expect(writeChannelSchema).toMatch(
+      /create policy pms_profiles_server_read on pms_profiles\s+for select to pms_server\s+using \(id = pms_auth_uid\(\)\)/
+    );
+  });
+
+  it("exposes the reference helper to pms_server only", () => {
+    const fn = writeChannelSchema.slice(
+      writeChannelSchema.indexOf("create or replace function pms_highest_work_order_reference")
+    );
+    expect(fn).toContain("security definer");
+    expect(fn).toContain("set search_path = public, pg_temp");
+    expect(fn).toContain("revoke all on function pms_highest_work_order_reference(int) from public");
   });
 });

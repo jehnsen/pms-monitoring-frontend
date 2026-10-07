@@ -1,5 +1,5 @@
 -- =====================================================================
--- MekanikoMoR — PMS service-task catalogue seed
+-- TorqueLane — PMS service-task catalogue seed
 --
 -- GENERATED FILE — do not edit by hand.
 -- Produced by scripts/emit-service-tasks-sql.ts from lib/service-tasks.ts's
@@ -8,7 +8,9 @@
 --
 -- To regenerate:  npx vitest run scripts/emit-service-tasks-sql.ts
 --
--- Run AFTER 0004_pms_service_tasks.sql. Idempotent: ON CONFLICT DO NOTHING.
+-- Run AFTER 0002_pms_providers_seed.sql (needs the provider row) and
+-- 0003_pms_service_tasks.sql (needs the table). Idempotent: ON CONFLICT DO
+-- NOTHING.
 -- =====================================================================
 
 insert into pms_service_tasks (

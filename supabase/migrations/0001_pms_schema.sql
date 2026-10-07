@@ -1,9 +1,9 @@
 -- =====================================================================
--- MekanikoMoR Fleet PMS — schema, tenancy, and RLS
+-- TorqueLane Fleet PMS — schema, tenancy, and RLS
 --
--- This database is SHARED with an unrelated detailing/POS application, so
--- every object created here is prefixed `pms_`. Nothing in this file touches
--- a table it does not own, and no existing table is altered.
+-- Every object created here is prefixed `pms_` — the platform namespace.
+-- Nothing in this file touches a table it does not own, and no existing
+-- table is altered.
 --
 -- The tenancy shape mirrors lib/tenancy.ts verbatim:
 --

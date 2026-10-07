@@ -1,5 +1,5 @@
 -- =====================================================================
--- MekanikoMoR — work order workflow: itemised billing, order numbering,
+-- TorqueLane — work order workflow: itemised billing, order numbering,
 -- and approval assignment
 --
 -- Three changes, all to existing tables. No new tables, so no new RLS

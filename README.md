@@ -97,7 +97,13 @@ lib/approvals.ts         Approval bands, SLA, variance thresholds
 lib/billing.ts           Line amounts, subtotal, VAT, grand total
 lib/checkin.ts           Plate/VIN lookup and form hydration
 lib/tenancy.ts           The scoping chokepoint — fails closed
-lib/rbac.ts              Roles and capabilities
+lib/rbac-core.ts         Roles and capabilities (pure; lib/rbac.ts adds the useCan() hook)
+lib/work-order-plans.ts  What each work-order command does, as pure functions
+
+server/actions/          "use server" entry points — verify the user, call a command
+server/commands/         The only writers of work orders and approvals (one tx each)
+server/db.ts             postgres.js over the pooler, acting as pms_server under RLS
+middleware.ts            Refreshes the cookie session on every request
 lib/alerts.ts            Alerts, derived on every read
 lib/parts-forecast.ts    Projected parts demand and lead-time risk
 lib/shop.ts              Bay load, floor utilisation, revenue
@@ -125,32 +131,71 @@ TypeScript so the two copies cannot drift.
 
 ## Database setup
 
-The app needs a Supabase project. Note that all its tables are prefixed `pms_`
-so it can share a project with an unrelated application.
+The app needs a Supabase project, dedicated to this app — every table it owns
+is prefixed `pms_`, which is the platform namespace, not a sharing convention.
 
-1. `cp .env.example .env` and fill in the project URL and **anon** key
-   (Settings -> API). The service_role key is not used by the app and must
-   never reach the browser.
-2. Run the migrations in order, via the Supabase SQL editor or `psql`:
+### Local development (Supabase CLI)
+
+```bash
+npx supabase start      # boots local Postgres, Studio, Auth — needs Docker running
+npx supabase db reset   # applies every migration in supabase/migrations/, in order, to a clean db
+```
+
+`db reset` must always apply cleanly to an **empty** project. Demo accounts
+and the demo fleet ship as ordinary migrations (`0002`, `0004`, `0006`,
+`0007`), so nothing further to seed. Point the app at the local stack (these
+override `.env`):
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321 \
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY from `npx supabase status -o json`> \
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres \
+TZ=Asia/Manila npm run dev
+```
+
+and sign in as `owner@mekanikomore.ph` (provider side) or `fleet@actimed.ph`
+(client side), password `demo1234`. `npx supabase stop` tears it down.
+
+### Hosted project
+
+1. In `.env`, set the project URL and **anon** key (Settings -> API) as
+   `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and
+   `DATABASE_URL` to the **transaction pooler** connection string (Settings ->
+   Database -> Connection pooling, port **6543**). Server commands write over
+   `DATABASE_URL`; without it every work-order write is refused. Run the
+   server with `TZ=Asia/Manila`. The service_role key is used only by the
+   admin users route and must never reach the browser.
+2. Run the migrations in order, via the Supabase CLI (`npx supabase db push`),
+   the SQL editor, or `psql`:
 
    ```
    supabase/migrations/0001_pms_schema.sql             tables, RLS policies, grants
-   supabase/migrations/0002_pms_auth_users.sql         the demo accounts
-   supabase/migrations/0003_pms_seed.sql               the demo fleet
-   supabase/migrations/0004_pms_service_tasks.sql      the PMS interval catalogue table
-   supabase/migrations/0005_pms_service_tasks_seed.sql the default 12 service items
-   supabase/migrations/0006_pms_normalisation.sql      junction tables, catalogue FKs
-   supabase/migrations/0007_pms_workflow.sql           line qty/rate, order numbering, VAT
+   supabase/migrations/0002_pms_providers_seed.sql     the provider & fleet clients
+   supabase/migrations/0003_pms_service_tasks.sql      the PMS interval catalogue table
+   supabase/migrations/0004_pms_service_tasks_seed.sql the default 12 service items
+   supabase/migrations/0005_pms_normalisation.sql      junction tables, catalogue FKs
+   supabase/migrations/0006_pms_seed.sql               the rest of the demo fleet
+   supabase/migrations/0007_pms_auth_users.sql         the demo accounts
+   supabase/migrations/0008_pms_profile_fields.sql     first/last name, username
+   supabase/migrations/0009_pms_workflow.sql           line qty/rate, order numbering, VAT
+   supabase/migrations/0010_pms_server_write_channel.sql  pms_server role; browser loses work-order writes
    ```
 
-   All seven are idempotent — re-running them will not duplicate anything.
+   Numbering follows real dependency order, not narrative order: the provider
+   and fleet-client rows (`0002`) have to exist before the service-task
+   catalogue (`0003`/`0004`) can seed a row owned by that provider, and the
+   rest of the demo fleet (`0006`) depends on tables `0003`–`0005` create. The
+   demo accounts (`0007`) reference the provider/client ids `0002` seeds, so
+   they run after all of it. All ten are idempotent — re-running them will
+   not duplicate anything.
 3. Sign in as `owner@mekanikomore.ph` (provider side) or `fleet@actimed.ph`
    (client side), password `demo1234`.
 
-The seed is one provider (MekanikoMoR) with four fleet clients — Actimed
-(16 vehicles), Northwind Logistics, Sagrada Medical Transport, and Bayani
-Construction. Bayani is seeded `suspended` on purpose, so its demo account
-demonstrates the fail-closed tenancy path against real data.
+The seed is one provider (MekanikoMoR, a tenant of the platform) with four
+fleet clients — Actimed (16 vehicles), Northwind Logistics, Sagrada Medical
+Transport, and Bayani Construction. Bayani is seeded `suspended` on purpose,
+so its demo account demonstrates the fail-closed tenancy path against real
+data.
 
 **Before exposing this instance to anyone**, rotate the demo passwords (they are
 all `demo1234`) or delete the accounts you do not need. These are now real
@@ -160,6 +205,33 @@ To regenerate the demo fleet so its dates read as current:
 `npx vitest run scripts/emit-seed-sql.ts`. To regenerate the service-task seed
 from `lib/service-tasks.ts`: `npx vitest run scripts/emit-service-tasks-sql.ts`.
 Both need a config whose `include` covers `scripts/` (see the file headers).
+The seed emitter writes two migrations — `0002_pms_providers_seed.sql` and
+`0006_pms_seed.sql` — because the provider/fleet-client rows have to exist
+before the service-task catalogue and normalisation migrations that sit
+between them.
+
+## Testing
+
+```bash
+npm test        # vitest run — lib/ and server/ unit tests, no database
+npm run test:db # tests/integration/*.test.ts — needs supabase start + db reset
+```
+
+`npm test` never touches a database. It includes the work-order command tests,
+which run against an in-memory fake of the database port
+(`server/testing/fake-db.ts`), and `lib/rls-parity.test.ts`, a **static**
+check that every RLS policy and grant exists in the migration SQL. `npm run
+test:db` is the **live** counterpart: it signs in as each demo account against
+a real local Supabase and asserts what rows actually come back — provider-side
+roles see every active client under their provider, client-side roles see
+exactly their own client and never a sibling, Bayani's (suspended) account
+sees nothing, anon sees nothing, and the append-only tables
+(`pms_work_order_events`, `pms_approval_log`) refuse UPDATE/DELETE. It also
+covers the server write channel: the browser role cannot write work orders,
+server writes still pass RLS, a failure mid-command leaves no partial rows,
+and a full create → approve → close → collect lifecycle runs on Postgres. Run
+`supabase start` then `supabase db reset` first; the suite skips itself with a
+warning (not a failure) if the local stack isn't reachable.
 
 **Theming.** Light and dark are driven by CSS custom properties in
 `app/globals.css`, stamped onto `<html>` before first paint so there is no

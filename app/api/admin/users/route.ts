@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import type { UserRole } from "@/types";
+import { can, PROVIDER_ROLES, CLIENT_ROLES } from "@/lib/rbac-core";
 
 /**
  * Creates a user: a real Supabase Auth account plus its `pms_profiles` row,
@@ -19,24 +20,12 @@ import type { UserRole } from "@/types";
  * building this endpoint in the first place (see `lib/auth.ts`'s
  * `loadSession`, which fails closed on that state).
  *
- * `lib/rbac.ts` and `lib/tenancy.ts` are `"use client"` modules, so they
- * can't be imported into a Route Handler — Next fails the build on it. The
- * handful of constants this route needs are mirrored below instead; keep
- * them in step with `ROLE_CAPABILITIES` / `PROVIDER_ROLES` / `CLIENT_ROLES`
- * in `lib/rbac.ts` by hand.
+ * `lib/rbac-core.ts` has no "use client" and no React import, so it is safe
+ * to pull straight into a Route Handler — the roles and capabilities below
+ * are the same matrix the UI reads, not a hand-kept mirror of it.
  */
 
-const PROVIDER_ROLES: UserRole[] = ["provider_admin", "service_advisor", "provider_technician"];
-const CLIENT_ROLES: UserRole[] = [
-  "fleet_manager",
-  "operations",
-  "technician",
-  "purchasing_officer",
-  "viewer",
-];
 const ALL_ROLES: UserRole[] = [...PROVIDER_ROLES, ...CLIENT_ROLES];
-/** Mirrors `ROLE_CAPABILITIES`: only the provider admin holds `access:manage`. */
-const ROLES_WITH_ACCESS_MANAGE: UserRole[] = ["provider_admin"];
 
 function isProviderRole(role: UserRole): boolean {
   return (PROVIDER_ROLES as string[]).includes(role);
@@ -94,7 +83,7 @@ export async function POST(request: NextRequest) {
   }
 
   const callerRole = callerProfile.role as UserRole;
-  if (!ROLES_WITH_ACCESS_MANAGE.includes(callerRole)) {
+  if (!can(callerRole, "access:manage")) {
     return NextResponse.json(
       { error: "You don't have permission to manage access." },
       { status: 403 }

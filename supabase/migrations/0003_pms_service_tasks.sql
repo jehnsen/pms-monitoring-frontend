@@ -1,5 +1,5 @@
 -- =====================================================================
--- MekanikoMoR — dynamic PMS service-task catalogue
+-- TorqueLane — dynamic PMS service-task catalogue
 --
 -- The interval catalogue (`SERVICE_TASKS` in lib/service-tasks.ts) was a
 -- static, hardcoded list — the same pattern as bays and technicians. This

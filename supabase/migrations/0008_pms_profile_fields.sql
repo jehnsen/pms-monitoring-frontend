@@ -1,5 +1,5 @@
 -- =====================================================================
--- MekanikoMoR — profile self-service: first/last name and username
+-- TorqueLane — profile self-service: first/last name and username
 --
 -- pms_profiles carried only a single `name` field. The new "My profile"
 -- page lets a signed-in user edit first name, last name, and username

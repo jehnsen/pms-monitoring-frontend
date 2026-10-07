@@ -7,7 +7,7 @@
  * hardcoded list.
  *
  * Run via: npx vitest run scripts/emit-service-tasks-sql.ts
- * Writes:  supabase/migrations/0005_pms_service_tasks_seed.sql
+ * Writes:  supabase/migrations/0004_pms_service_tasks_seed.sql
  *
  * This is a build-time authoring tool, not part of the app.
  */
@@ -38,7 +38,7 @@ test("emit service tasks sql", () => {
   ]);
 
   const sql = `-- =====================================================================
--- MekanikoMoR — PMS service-task catalogue seed
+-- TorqueLane — PMS service-task catalogue seed
 --
 -- GENERATED FILE — do not edit by hand.
 -- Produced by scripts/emit-service-tasks-sql.ts from lib/service-tasks.ts's
@@ -47,7 +47,9 @@ test("emit service tasks sql", () => {
 --
 -- To regenerate:  npx vitest run scripts/emit-service-tasks-sql.ts
 --
--- Run AFTER 0004_pms_service_tasks.sql. Idempotent: ON CONFLICT DO NOTHING.
+-- Run AFTER 0002_pms_providers_seed.sql (needs the provider row) and
+-- 0003_pms_service_tasks.sql (needs the table). Idempotent: ON CONFLICT DO
+-- NOTHING.
 -- =====================================================================
 
 insert into pms_service_tasks (
@@ -60,6 +62,6 @@ on conflict (id) do nothing;
 
   const dir = resolve(__dirname, "../supabase/migrations");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(resolve(dir, "0005_pms_service_tasks_seed.sql"), sql, "utf8");
+  writeFileSync(resolve(dir, "0004_pms_service_tasks_seed.sql"), sql, "utf8");
   console.log(`service tasks: ${rows.length} rows`);
 });

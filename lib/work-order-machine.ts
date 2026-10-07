@@ -1,6 +1,4 @@
-import type {
-  Capability,
-} from "@/lib/rbac";
+import type { Capability } from "@/lib/rbac-core";
 import type { UserRole, WorkOrder, WorkOrderStatus } from "@/types";
 
 /**
@@ -145,7 +143,7 @@ export type TransitionCheck =
 /**
  * The single gate for "may this actor move this order there".
  *
- * Capability is checked by the caller against `lib/rbac.ts` — this returns
+ * Capability is checked by the caller against `lib/rbac-core.ts` — this returns
  * which capability is needed rather than resolving it, so the module stays a
  * pure function of the machine and doesn't need a session. As with everything
  * else on the client, this is a UI affordance: RLS and the store's tenancy

@@ -217,10 +217,10 @@ export function NewWorkOrderDialog({
     );
   }
 
-  function submit() {
+  async function submit() {
     if (!canSubmit || !vehicle) return;
 
-    const order = createWorkOrder(
+    const pending = createWorkOrder(
       {
         vehicleId: vehicle.id,
         title,
@@ -250,8 +250,10 @@ export function NewWorkOrderDialog({
     setOpen(false);
     setForm((current) => ({ ...current, title: "", notes: "" }));
     setCorrectiveLines([blankDraftLine(approvalSettings.defaultLabourRate)]);
-    // Guards inside createWorkOrder (out-of-scope vehicle) return null; the
-    // success dialog only appears once there's an actual order to confirm.
+    // The server issues the order's id and number, so the confirmation waits
+    // for the canonical order; a refused command (out of scope, forbidden)
+    // resolves null and no success dialog appears.
+    const order = await pending;
     if (order) setCreated(order);
   }
 

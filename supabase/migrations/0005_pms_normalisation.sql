@@ -1,5 +1,5 @@
 -- =====================================================================
--- MekanikoMoR — referential normalisation of the pms_ tables
+-- TorqueLane — referential normalisation of the pms_ tables
 --
 -- Three denormalisations are removed here, all of the same shape: a value
 -- that already has an authoritative row somewhere was being stored as
@@ -321,8 +321,7 @@ on conflict (id) do nothing;
 --
 -- Every new table needs policies AND grants or lib/rls-parity.test.ts fails
 -- — and, far more to the point, an unprotected pms_ table is readable by
--- every authenticated user of the shared project, including the unrelated
--- application's users.
+-- every authenticated user of the project.
 --
 -- Two shapes here:
 --   - Provider-scoped catalogues (technicians, vendors): readable by every

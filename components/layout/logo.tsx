@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { PLATFORM_NAME } from "@/lib/platform";
 
 /**
  * Wordmark. The glyph is an axle: two hubs on a shaft, with the upper arc
@@ -6,11 +7,15 @@ import { cn } from "@/lib/utils";
  *
  * `tone="inverted"` is for placement on the brand surface itself, where the
  * default mark would be brand-on-brand and disappear.
+ *
+ * The default `name` is the platform identity (TorqueLane), not a tenant's —
+ * callers rendering a specific provider or fleet client pass their own
+ * resolved branding (see `lib/tenancy.ts`'s `providerBranding`).
  */
 export function Logo({
   className,
   tone = "default",
-  name = "MekanikoMoR",
+  name = PLATFORM_NAME,
   tagline = "Fleet PMS",
   logoUrl = null,
 }: {
