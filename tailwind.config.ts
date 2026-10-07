@@ -15,6 +15,14 @@ const config: Config = {
     },
     extend: {
       colors: {
+        chrome: {
+          DEFAULT: "hsl(var(--chrome))",
+          foreground: "hsl(var(--chrome-foreground))",
+          muted: "hsl(var(--chrome-muted))",
+          border: "hsl(var(--chrome-border))",
+          active: "hsl(var(--chrome-active))",
+          alert: "hsl(var(--chrome-alert))",
+        },
         page: "hsl(var(--page))",
         surface: {
           DEFAULT: "hsl(var(--surface))",
@@ -37,6 +45,7 @@ const config: Config = {
         warning: "hsl(var(--warning))",
         serious: "hsl(var(--serious))",
         critical: "hsl(var(--critical))",
+        "critical-foreground": "hsl(var(--critical-foreground))",
         // Chart series slots (fixed order, never cycled).
         series: {
           1: "hsl(var(--series-1))",

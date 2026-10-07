@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useFleet } from "@/lib/store";
+import { useTheme } from "@/components/theme-provider";
 import { brandForegroundTriplet, hexToHslTriplet } from "@/lib/tenant";
 
 /**
@@ -13,20 +14,35 @@ import { brandForegroundTriplet, hexToHslTriplet } from "@/lib/tenant";
  */
 export function TenantBranding() {
   const { ready, tenant } = useFleet();
+  const { theme } = useTheme();
 
   useEffect(() => {
     if (!ready) return;
-    document.title = `${tenant.displayName} — Fleet PMS & Maintenance`;
+    const previousTitle = document.title;
+    document.title = `${tenant.displayName} — Automotive Service Management`;
 
     const brandTriplet = hexToHslTriplet(tenant.brandColor);
     if (brandTriplet) {
-      document.documentElement.style.setProperty("--brand", brandTriplet);
+      const [hue, saturation, lightness] = brandTriplet.split(" ");
+      const darkBrand = `${hue} ${saturation} ${Math.max(68, parseFloat(lightness))}%`;
+      document.documentElement.style.setProperty("--brand", theme === "dark" ? darkBrand : brandTriplet);
       document.documentElement.style.setProperty(
         "--brand-foreground",
-        brandForegroundTriplet(tenant.brandColor)
+        theme === "dark" ? "222 39% 12%" : brandForegroundTriplet(tenant.brandColor)
+      );
+      document.documentElement.style.setProperty(
+        "--brand-muted",
+        `${hue} ${saturation} ${theme === "dark" ? "18%" : "96%"}`
       );
     }
-  }, [ready, tenant.displayName, tenant.brandColor]);
+
+    return () => {
+      document.title = previousTitle;
+      for (const token of ["--brand", "--brand-foreground", "--brand-muted"]) {
+        document.documentElement.style.removeProperty(token);
+      }
+    };
+  }, [ready, tenant.displayName, tenant.brandColor, theme]);
 
   return null;
 }

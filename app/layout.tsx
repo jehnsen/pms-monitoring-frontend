@@ -12,11 +12,11 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "MekanikoMoR — Fleet PMS & Maintenance",
+    default: "MekanikoMoR — Automotive Service Management",
     template: "%s · MekanikoMoR",
   },
   description:
-    "Preventive maintenance scheduling, compliance monitoring, and work-order management for vehicle fleets.",
+    "A connected automotive service platform for workshop operations, fleet maintenance, and work-order management.",
 };
 
 export default function RootLayout({

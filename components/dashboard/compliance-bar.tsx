@@ -1,111 +1,55 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, Clock, OctagonAlert } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, Clock, OctagonAlert, ShieldCheck } from "lucide-react";
 import type { FleetSummary } from "@/lib/pms";
 import { cn } from "@/lib/utils";
 
 const BANDS = [
-  {
-    key: "ok" as const,
-    label: "On schedule",
-    icon: CheckCircle2,
-    fill: "bg-ok",
-    text: "text-ok",
-    href: "/vehicles?pms=ok",
-  },
-  {
-    key: "due_soon" as const,
-    label: "Due soon",
-    icon: Clock,
-    fill: "bg-warning",
-    text: "text-foreground",
-    href: "/vehicles?pms=due_soon",
-  },
-  {
-    key: "overdue" as const,
-    label: "Overdue",
-    icon: OctagonAlert,
-    fill: "bg-critical",
-    text: "text-critical",
-    href: "/vehicles?pms=overdue",
-  },
+  { key: "ok" as const, label: "On schedule", icon: CheckCircle2, fill: "bg-ok", text: "text-ok", href: "/vehicles?pms=ok" },
+  { key: "due_soon" as const, label: "Due soon", icon: Clock, fill: "bg-warning", text: "text-muted-foreground", href: "/vehicles?pms=due_soon" },
+  { key: "overdue" as const, label: "Overdue", icon: OctagonAlert, fill: "bg-critical", text: "text-critical", href: "/vehicles?pms=overdue" },
 ];
 
-/**
- * Part-to-whole across three service states. A segmented meter rather than a
- * donut: the three values are close enough that arc lengths would be guesswork,
- * and every segment is spelled out underneath anyway.
- */
 export function ComplianceBar({ summary }: { summary: FleetSummary }) {
-  const counts = {
-    ok: summary.compliant,
-    due_soon: summary.dueSoon,
-    overdue: summary.overdue,
-  };
+  const counts = { ok: summary.compliant, due_soon: summary.dueSoon, overdue: summary.overdue };
   const total = Math.max(summary.total, 1);
 
   return (
-    <div className="card-raised p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="card p-5">
+      <header className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold tracking-tight">
-            Fleet PMS compliance
-          </h3>
-          <p className="mt-0.5 text-xs text-subtle-foreground">
-            Every vehicle, graded by its most urgent open interval.
-          </p>
+          <h2 className="text-sm font-semibold tracking-tight">Fleet health</h2>
+          <p className="mt-1 text-xs text-subtle-foreground">PMS compliance across {summary.total} vehicles</p>
         </div>
-        <div className="text-right">
-          <p className="text-[28px] font-semibold leading-none tracking-tight">
-            {summary.complianceRate}%
-          </p>
-          <p className="mt-1 text-2xs text-subtle-foreground">
-            no overdue items
-          </p>
+        <ShieldCheck className="size-5 text-brand" strokeWidth={1.5} />
+      </header>
+      <div className="mt-5 flex items-end justify-between gap-3">
+        <div>
+          <p className="text-[40px] font-semibold leading-none tracking-[-0.05em]">{summary.total ? summary.complianceRate : "—"}{summary.total ? <span className="ml-0.5 text-2xl text-subtle-foreground">%</span> : null}</p>
+          <p className="mt-2 text-[11px] text-subtle-foreground">{summary.total ? "of vehicles have no overdue items" : "No vehicles to assess yet"}</p>
         </div>
+        <span className={cn("mb-0.5 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-medium", summary.overdue ? "bg-critical/10 text-critical" : "bg-surface-2 text-muted-foreground")}>
+          {summary.overdue ? <OctagonAlert className="size-3" /> : <ShieldCheck className="size-3" />}
+          {summary.overdue ? "Action needed" : summary.total ? "On track" : "No data"}
+        </span>
       </div>
-
-      {/* 2px surface gaps do the separating between segments — no borders. */}
-      <div className="mt-5 flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-surface-3">
-        {BANDS.map((band) => {
-          const count = counts[band.key];
-          if (count === 0) return null;
-          return (
-            <div
-              key={band.key}
-              className={cn("h-full rounded-full transition-all duration-500", band.fill)}
-              style={{ width: `${(count / total) * 100}%` }}
-              title={`${band.label}: ${count}`}
-            />
-          );
-        })}
+      <div aria-hidden className="mt-4 flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-surface-3">
+        {BANDS.map((band) => counts[band.key] ? <div key={band.key} className={cn("h-full", band.fill)} style={{ flex: counts[band.key] }} /> : null)}
       </div>
-
-      <dl className="mt-5 grid grid-cols-3 gap-3">
-        {BANDS.map((band) => {
-          const count = counts[band.key];
-          const Icon = band.icon;
-          return (
-            <Link
-              key={band.key}
-              href={band.href}
-              className="group rounded-md border border-border bg-surface-2/50 p-3 transition-colors hover:border-border-strong hover:bg-surface-2"
-            >
-              <dt className="flex items-center gap-1.5 text-2xs font-medium text-muted-foreground">
-                <Icon className={cn("size-3.5 shrink-0", band.text)} />
-                {band.label}
-              </dt>
-              <dd className="mt-1.5 text-xl font-semibold leading-none tracking-tight">
-                {count}
-                <span className="ml-1 text-xs font-normal text-subtle-foreground">
-                  / {summary.total}
-                </span>
-              </dd>
+      <ul className="mt-4 divide-y divide-border/70">
+        {BANDS.map(({ key, label, icon: Icon, text, href }) => (
+          <li key={key}>
+            <Link href={href} className="group flex items-center gap-2.5 rounded py-2.5 text-xs transition-colors hover:text-brand">
+              <Icon className={cn("size-3.5 shrink-0", text)} />
+              <span className="flex-1 text-muted-foreground">{label}</span>
+              <span className="tabular font-semibold">{counts[key]}</span>
+              <span className="tabular w-9 text-right text-[11px] text-subtle-foreground">{Math.round(counts[key] / total * 100)}%</span>
+              <ArrowUpRight className="size-3 text-subtle-foreground group-hover:text-brand" />
             </Link>
-          );
-        })}
-      </dl>
-    </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

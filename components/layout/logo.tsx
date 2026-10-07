@@ -25,7 +25,7 @@ export function Logo({
   const inverted = tone === "inverted";
 
   return (
-    <span className={cn("flex items-center gap-2.5", className)}>
+    <span className={cn("flex items-center gap-3", className)}>
       {logoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- tenant-supplied URL, not a local asset Next can optimise.
         <img
@@ -36,9 +36,9 @@ export function Logo({
       ) : (
         <span
           className={cn(
-            "flex size-8 items-center justify-center rounded-lg",
+            "flex size-9 shrink-0 items-center justify-center rounded-lg",
             inverted
-              ? "bg-white/15 text-white ring-1 ring-inset ring-white/25"
+              ? "bg-chrome-active/15 text-chrome-active ring-1 ring-inset ring-chrome-active/30"
               : "bg-brand text-brand-foreground shadow-xs"
           )}
         >

@@ -101,25 +101,25 @@ export function StatTile({
     : true;
 
   return (
-    <div className={cn("card-raised p-5", className)}>
+    <div className={cn("card-raised h-full p-5", className)}>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
+        <p className="pt-1 text-xs font-medium leading-relaxed text-muted-foreground">{label}</p>
         <span
           className={cn(
-            "flex size-7 shrink-0 items-center justify-center rounded-md",
+            "flex size-10 shrink-0 items-center justify-center rounded-xl",
             iconClass
           )}
         >
-          <Icon className="size-3.5" />
+          <Icon className="size-[18px]" strokeWidth={1.75} />
         </span>
       </div>
 
       {/* Proportional figures — tabular-nums makes a display-size number look loose. */}
-      <p className="mt-3 text-[28px] font-semibold leading-none tracking-tight">
+      <p className="mt-3 break-words text-[30px] font-semibold leading-tight tracking-[-0.04em]">
         {value}
       </p>
 
-      <div className="mt-4 flex items-end justify-between gap-3">
+      <div className="mt-4 flex items-end justify-between gap-3 border-t border-border/70 pt-3">
         <div className="min-w-0">
           {delta ? (
             <span
@@ -140,7 +140,7 @@ export function StatTile({
             </span>
           ) : null}
           {hint ? (
-            <p className="truncate text-xs text-subtle-foreground">{hint}</p>
+            <p className="text-[11px] leading-relaxed text-subtle-foreground">{hint}</p>
           ) : null}
         </div>
         {trend ? <Sparkline values={trend} tone={accent} /> : null}

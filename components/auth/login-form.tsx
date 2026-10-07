@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Loader2, Mail } from "lucide-react";
+import { AlertCircle, ArrowRight, Loader2, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -92,14 +92,15 @@ export function LoginForm({ next }: { next?: string }) {
   return (
     <div className="w-full max-w-sm">
       <div className="lg:hidden">
-        <Logo />
+        <Logo tagline="Service management" />
       </div>
 
-      <h1 className="mt-8 text-2xl font-semibold tracking-tight lg:mt-0">
-        Sign in
+      <p className="mt-10 text-[10px] font-semibold uppercase tracking-[0.18em] text-brand lg:mt-0">Your service workspace</p>
+      <h1 className="mt-3 text-[32px] font-semibold tracking-[-0.04em]">
+        Welcome back
       </h1>
       <p className="mt-1.5 text-sm text-muted-foreground">
-        Access the fleet maintenance console.
+        Sign in to manage your workshop and fleet.
       </p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4" noValidate>
@@ -115,7 +116,7 @@ export function LoginForm({ next }: { next?: string }) {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@mekanikomore.ph"
-              className="pl-9"
+              className="h-11 pl-9"
               aria-invalid={Boolean(error)}
             />
           </div>
@@ -137,6 +138,7 @@ export function LoginForm({ next }: { next?: string }) {
             </button>
           </div>
           <PasswordInput
+            className="h-11"
             id="password"
             autoComplete="current-password"
             value={password}
@@ -168,13 +170,15 @@ export function LoginForm({ next }: { next?: string }) {
               Signing in…
             </>
           ) : (
-            "Sign in"
+            <>Sign in to workspace <ArrowRight /></>
           )}
         </Button>
       </form>
 
       {/* Nobody should be able to get locked out of a demo. */}
-      <div className="mt-6 rounded-lg border border-border bg-surface-2/60 p-4">
+      <details className="mt-6 rounded-lg border border-border bg-surface-2/60 p-4">
+        <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Explore with a demo account</summary>
+        <div className="mt-4">
         <p className="text-2xs font-semibold uppercase tracking-wider text-subtle-foreground">
           Demo credentials
         </p>
@@ -189,7 +193,7 @@ export function LoginForm({ next }: { next?: string }) {
           </div>
         </dl>
 
-        <hr />
+        <hr className="my-3" />
 
          <dl className="mt-2 space-y-1 text-xs">
           <div className="flex items-center justify-between gap-3">
@@ -202,7 +206,7 @@ export function LoginForm({ next }: { next?: string }) {
           </div>
         </dl>
 
-        <hr />
+        <hr className="my-3" />
 
         <dl className="mt-2 space-y-1 text-xs">
           <div className="flex items-center justify-between gap-3">
@@ -223,11 +227,12 @@ export function LoginForm({ next }: { next?: string }) {
         >
           Fill demo credentials
         </Button>
-      </div>
+        </div>
+      </details>
 
-      <p className={cn("mt-6 text-center text-2xs text-subtle-foreground")}>
-        Demonstration build. Credentials are checked in the browser and no data
-        leaves this device.
+      <p className={cn("mt-7 flex items-center justify-center gap-2 text-center text-[11px] text-subtle-foreground")}>
+        <ShieldCheck className="size-3.5 shrink-0" />
+        Secure access for your service team.
       </p>
     </div>
   );

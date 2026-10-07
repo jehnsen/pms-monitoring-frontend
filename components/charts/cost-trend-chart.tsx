@@ -35,7 +35,7 @@ export function CostTrendChart({
   return (
     <ChartFrame
       title="Maintenance spend"
-      description="Closed work orders by month, split into parts and labour."
+      description="Monthly parts and labour costs from completed services."
       series={series}
       className={className}
       table={
@@ -55,6 +55,7 @@ export function CostTrendChart({
           <CartesianGrid
             stroke={colors.grid}
             strokeWidth={1}
+            strokeDasharray="3 4"
             vertical={false}
           />
           <XAxis dataKey="month" {...axisProps(colors)} />

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatTile } from "@/components/dashboard/stat-tile";
+import { WorkspaceBanner } from "@/components/dashboard/workspace-banner";
 import { StatSkeletonRow, Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -47,9 +48,10 @@ export default function ShopDashboardPage() {
       <>
         <PageHeader
           title="Shop today"
-          description="What is in the bays, who is waiting on you, and what it is worth."
+          description="Your daily overview of workshop activity and service performance."
         />
-        <StatSkeletonRow />
+        <WorkspaceBanner provider />
+        <StatSkeletonRow count={6} className="xl:grid-cols-3" />
         <Skeleton className="mt-5 h-96" />
       </>
     );
@@ -87,13 +89,15 @@ export default function ShopDashboardPage() {
     <>
       <PageHeader
         title="Shop today"
-        description="What is in the bays, who is waiting on you, and what it is worth."
+        description="Your daily overview of workshop activity and service performance."
         actions={
           <Button asChild variant="primary">
-            <Link href="/shop/check-in">Check a vehicle in</Link>
+            <Link href="/shop/check-in"><Wrench />Check in vehicle</Link>
           </Button>
         }
       />
+
+      <WorkspaceBanner provider />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatTile

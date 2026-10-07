@@ -141,7 +141,7 @@ function DetectPanel() {
           <BellRing className="size-4 text-muted-foreground" />
           <span
             className={cn(
-              "absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full bg-critical text-[9px] font-semibold text-white transition-opacity duration-500",
+              "absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full bg-critical text-[9px] font-semibold text-critical-foreground transition-opacity duration-500",
               revealed ? "opacity-100" : "opacity-0"
             )}
           >

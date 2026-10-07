@@ -122,7 +122,7 @@ export function AlertsPanel() {
         >
           <Bell className="size-4" />
           {ready && unreadCount > 0 ? (
-            <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-critical px-1 text-[9px] font-semibold leading-4 text-white ring-2 ring-page">
+            <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-critical px-1 text-[9px] font-semibold leading-4 text-critical-foreground ring-2 ring-page">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           ) : null}

@@ -36,7 +36,7 @@ export function UpcomingLoadChart({
   return (
     <ChartFrame
       title="Six-week service load"
-      description="PMS items falling due, by week. Anything past its limit sits in the first bar."
+      description="Service items due each week, including overdue work."
       series={series}
       className={className}
       table={
@@ -53,7 +53,7 @@ export function UpcomingLoadChart({
     >
       <ResponsiveContainer width="100%" height={252}>
         <BarChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 4 }}>
-          <CartesianGrid stroke={colors.grid} strokeWidth={1} vertical={false} />
+          <CartesianGrid stroke={colors.grid} strokeWidth={1} strokeDasharray="3 4" vertical={false} />
           <XAxis dataKey="label" {...axisProps(colors)} />
           <YAxis {...axisProps(colors)} width={28} allowDecimals={false} />
           <Tooltip

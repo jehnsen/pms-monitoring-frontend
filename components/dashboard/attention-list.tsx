@@ -24,12 +24,12 @@ export function AttentionList({
   const shown = items.slice(0, limit);
 
   return (
-    <section className="card-raised flex flex-col">
+    <section className="card flex flex-col overflow-hidden">
       <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
         <div>
-          <h3 className="text-sm font-semibold tracking-tight">Needs attention</h3>
+          <h3 className="text-sm font-semibold tracking-tight">Maintenance priorities</h3>
           <p className="mt-0.5 text-xs text-subtle-foreground">
-            Intervals already breached or closing in.
+            Your most urgent service items, ranked first.
           </p>
         </div>
         <Link
@@ -53,28 +53,28 @@ export function AttentionList({
             <li key={`${vehicle.id}-${item.task.id}`}>
               <Link
                 href={`/vehicles/${vehicle.id}`}
-                className="block px-5 py-3 transition-colors hover:bg-surface-2/60"
+                className="block px-5 py-3.5 transition-colors hover:bg-surface-2/60"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
+                    <p className="truncate text-xs font-semibold" title={item.task.name}>
                       {item.task.name}
                     </p>
-                    <p className="mt-0.5 truncate text-xs text-subtle-foreground">
+                    <p className="mt-1 truncate text-[11px] text-subtle-foreground">
                       {vehicle.plateNumber} · {vehicle.make} {vehicle.model}
                     </p>
                   </div>
                   <PmsStatusBadge status={item.status} />
                 </div>
 
-                <div className="mt-2.5 flex items-center gap-3">
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   <Meter
                     value={item.progress}
                     tone={item.status === "overdue" ? "critical" : "warning"}
                     label={`${item.task.name} interval progress`}
-                    className="flex-1"
+                    className="min-w-10 flex-1"
                   />
-                  <p className="tabular shrink-0 text-2xs text-muted-foreground">
+                  <p className="tabular text-[10px] text-muted-foreground">
                     {item.kmRemaining <= 0
                       ? `${formatKm(Math.abs(item.kmRemaining))} past`
                       : `${formatKm(item.kmRemaining)} left`}

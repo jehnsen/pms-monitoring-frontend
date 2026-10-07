@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { ChevronDown, LogOut, Menu, Search, User, UserCog } from "lucide-react";
+import { CalendarDays, ChevronDown, LogOut, Menu, Search, User, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import {
@@ -53,7 +53,7 @@ export function Topbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-page/85 px-4 backdrop-blur-md lg:px-8">
+      <header className="sticky top-0 z-20 flex h-[76px] items-center gap-2 border-b border-border bg-surface/95 px-4 backdrop-blur-md sm:gap-3 lg:px-8">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -64,7 +64,7 @@ export function Topbar() {
           <Menu />
         </Button>
 
-        <Link href={homeHrefFor(user.role)} className="lg:hidden">
+        <Link href={homeHrefFor(user.role)} className="min-w-0 [&>span>span:last-child]:hidden sm:[&>span>span:last-child]:flex lg:hidden">
           <Logo
             name={tenant.displayName}
             logoUrl={tenant.logoUrl}
@@ -75,27 +75,29 @@ export function Topbar() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="ml-auto flex h-9 items-center gap-2 rounded-md border border-border bg-surface px-3 text-sm text-subtle-foreground shadow-xs transition-colors hover:border-border-strong hover:text-muted-foreground lg:ml-0 lg:w-72"
+          aria-label="Search vehicles, work orders, and pages"
+          className="ml-auto flex h-10 items-center gap-2.5 rounded-md border border-border bg-surface-2/60 px-3 text-sm text-subtle-foreground transition-colors hover:border-border-strong hover:text-muted-foreground lg:ml-0 lg:w-80"
         >
           <Search className="size-4 shrink-0" />
-          <span className="hidden lg:inline">Search fleet…</span>
+          <span className="hidden text-xs lg:inline">Search vehicles, work orders…</span>
           <kbd className="ml-auto hidden items-center gap-0.5 rounded border border-border bg-surface-2 px-1.5 py-0.5 font-sans text-[10px] font-medium text-subtle-foreground lg:flex">
-            ⌘K
+            Ctrl K
           </kbd>
         </button>
 
-        <p className="ml-auto hidden text-xs text-subtle-foreground xl:block">
+        <p className="ml-auto hidden items-center gap-2 text-[11px] text-muted-foreground xl:flex">
+          <CalendarDays className="size-3.5 text-subtle-foreground" />
           {today ?? ""}
         </p>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 lg:ml-auto xl:ml-2">
           <AlertsPanel />
 
           <ThemeToggle />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="ml-1 flex items-center gap-2 rounded-md py-1 pl-1 pr-2 transition-colors hover:bg-surface-2">
+              <button aria-label={`Account menu for ${user.name}`} className="ml-1 flex items-center gap-2.5 rounded-md py-1.5 pl-1 pr-2 transition-colors hover:bg-surface-2 sm:ml-2">
                 <Avatar name={user.name} />
                 <span className="hidden text-left leading-tight md:block">
                   <span className="block text-xs font-medium">{user.name}</span>
@@ -148,13 +150,13 @@ export function Topbar() {
       <CommandPalette open={open} onOpenChange={setOpen} />
 
       <Dialog open={mobileNav} onOpenChange={setMobileNav}>
-        <DialogContent className="left-0 top-0 h-full max-w-[280px] translate-x-0 translate-y-0 grid-rows-[auto_minmax(0,1fr)] rounded-none rounded-r-xl">
+        <DialogContent className="left-0 top-0 h-dvh max-h-dvh max-w-[280px] translate-x-0 translate-y-0 grid-rows-[auto_minmax(0,1fr)] gap-0 rounded-none rounded-r-xl border-chrome-border bg-chrome text-chrome-foreground [&>button]:text-chrome-muted">
           <DialogTitle className="sr-only">Navigation</DialogTitle>
           <DialogDescription className="sr-only">
             Move between the monitoring, maintenance, and configuration areas.
           </DialogDescription>
-          <div className="flex h-14 items-center border-b border-border px-5">
-            <Logo name={tenant.displayName} logoUrl={tenant.logoUrl} />
+          <div className="flex h-[76px] items-center border-b border-chrome-border px-5">
+            <Logo tone="inverted" name={tenant.displayName} logoUrl={tenant.logoUrl} tagline={isProviderRole(user.role) ? "Service Centre" : "Fleet PMS"} />
           </div>
           <div className="overflow-y-auto">
             <SidebarNav onNavigate={() => setMobileNav(false)} />
