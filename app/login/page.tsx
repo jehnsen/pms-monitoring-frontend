@@ -4,6 +4,7 @@ import { ArrowRight, Car, Check, ClipboardCheck, Wrench } from "lucide-react";
 import { Logo } from "@/components/layout/logo";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { LoginForm } from "@/components/auth/login-form";
+import { PLATFORM } from "@/lib/platform";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -57,7 +58,7 @@ export default function LoginPage({ searchParams }: { searchParams: { next?: str
             Explore the service workflow <ArrowRight className="size-3.5" />
           </Link>
         </div>
-        <p className="relative text-[10px] tracking-wide text-chrome-muted">MekanikoMoR &middot; Automotive Service Management Platform</p>
+        <p className="relative text-[10px] tracking-wide text-chrome-muted">{PLATFORM.productName} &middot; {PLATFORM.productDescription} Platform</p>
       </aside>
 
       <main className="relative flex items-center justify-center bg-surface px-6 py-16 sm:px-10">

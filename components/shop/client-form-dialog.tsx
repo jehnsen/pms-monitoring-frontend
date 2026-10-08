@@ -26,6 +26,7 @@ import { DeniedAction } from "@/components/auth/denied-action";
 import { useFleet, useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
 import { hexToHslTriplet } from "@/lib/tenant";
+import { PLATFORM_THEME } from "@/lib/platform";
 import { formatCurrency } from "@/lib/utils";
 import type { ApprovalSettings, FleetClient, FleetClientStatus } from "@/types";
 
@@ -300,7 +301,7 @@ export function ClientFormDialog({ client }: { client?: FleetClient }) {
                 <input
                   type="color"
                   aria-label="Pick a brand colour"
-                  value={form.brandColor || "#1d5ba6"}
+                  value={form.brandColor || PLATFORM_THEME.brandColor}
                   onChange={(event) => patch({ brandColor: event.target.value })}
                   className="h-9 w-11 shrink-0 cursor-pointer rounded-md border border-border bg-surface p-1"
                 />

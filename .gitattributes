@@ -1,0 +1,5 @@
+# Fixtures are generated (scripts/emit-*.ts) and compared byte-for-byte across
+# regenerations and by the Laravel API. LF everywhere, whatever core.autocrlf says.
+fixtures/** text eol=lf
+fixtures/**/*.json linguist-generated=true
+fixtures/golden/COVERAGE.md linguist-generated=true

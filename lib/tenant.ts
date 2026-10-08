@@ -1,11 +1,16 @@
 import type { FleetClient, Provider, TenantSettings } from "@/types";
+import { PLATFORM, PLATFORM_THEME } from "@/lib/platform";
 
-/** Current hardcoded values, kept as the default so branding is opt-in, not a breaking change. */
+/**
+ * Branding when no provider resolves — before sign-in, or a fail-closed
+ * scope. With no tenant to show, the platform's own identity is the honest
+ * answer; a tenant's mark replaces it once `providerBranding` has a scope.
+ */
 export const DEFAULT_TENANT_SETTINGS: TenantSettings = {
-  displayName: "MekanikoMoR",
+  displayName: PLATFORM.productName,
   logoUrl: null,
-  brandColor: "#1d5ba6", // matches --brand: 213 72% 39% in light mode
-  supportEmail: "support@mekanikomore.ph",
+  brandColor: PLATFORM_THEME.brandColor,
+  supportEmail: PLATFORM.supportEmail,
 };
 
 /**

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { PLATFORM } from "@/lib/platform";
 
 /**
  * Wordmark. The glyph is an axle: two hubs on a shaft, with the upper arc
@@ -10,13 +11,13 @@ import { cn } from "@/lib/utils";
 export function Logo({
   className,
   tone = "default",
-  name = "MekanikoMoR",
+  name = PLATFORM.productName,
   tagline = "Fleet PMS",
   logoUrl = null,
 }: {
   className?: string;
   tone?: "default" | "inverted";
-  /** Tenant display name — defaults to the built-in wordmark. */
+  /** Tenant display name — defaults to the platform's own product name. */
   name?: string;
   tagline?: string;
   /** A tenant's own mark, shown instead of the built-in axle glyph when set. */

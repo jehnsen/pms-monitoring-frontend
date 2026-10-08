@@ -6,11 +6,12 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { HeroStats, WorkflowExperience } from "@/components/workflow/workflow-experience";
 import { ShopWorkflowExperience } from "@/components/workflow/shop-experience";
+import { PLATFORM } from "@/lib/platform";
 
 export const metadata: Metadata = {
   title: "How it works",
   description:
-    "An interactive walkthrough of MekanikoMoR from both sides of the counter — a fleet client's due interval through approval and compliance, and the shop's own board across every client it runs.",
+    `An interactive walkthrough of ${PLATFORM.productName} from both sides of the counter — a fleet client's due interval through approval and compliance, and the shop's own board across every client it runs.`,
 };
 
 export default function WorkflowPage() {
@@ -51,7 +52,7 @@ export default function WorkflowPage() {
             </h1>
             <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">
               One continuous loop, not six disconnected screens — this is the
-              fleet client&rsquo;s side of MekanikoMoR. Play the six-step
+              fleet client&rsquo;s side of {PLATFORM.productName}. Play the six-step
               walkthrough below to see a single overdue interval move through
               detection, approval, close-out, parts supply, and compliance,
               using the same data model the app runs on. There&rsquo;s a

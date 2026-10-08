@@ -115,7 +115,7 @@ export function LoginForm({ next }: { next?: string }) {
               autoFocus
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@mekanikomore.ph"
+              placeholder="you@company.ph"
               className="h-11 pl-9"
               aria-invalid={Boolean(error)}
             />

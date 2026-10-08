@@ -16,6 +16,10 @@ npm run build   # production build (run before calling work done)
 npm run lint
 npx tsc --noEmit
 npm test        # vitest run — lib/*.test.ts, no watch
+
+# Authoring scripts (vitest files that WRITE; never part of npm test):
+npx vitest run scripts/emit-seed-json.ts        # fixtures/seed/demo-seed.json
+npx vitest run scripts/emit-golden-fixtures.ts  # fixtures/golden/*.json (needs the seed above to be current)
 ```
 
 ## Domain model — read this before touching maintenance logic
@@ -257,6 +261,46 @@ Rules that bite:
 - **Read parts cost via `resolvePartsCost`**, never `order.partsCost`.
   Estimates carry only the aggregate; itemised lines win once a technician
   records them.
+
+## Backend migration
+
+The Laravel API in `../api` (on this machine, the sibling directory
+`../torquelane-api`) is replacing Supabase. **From Phase 5 it is the only
+writer**: every mutation goes through it, and it is the source of truth for
+every business rule.
+
+- **Until then, the `lib/` domain modules are frozen reference
+  implementations.** They are what the PHP port is proven against: `pms`,
+  `interval-status`, `odometer-validation`, `compliance`,
+  `work-order-machine`, `approvals`, `billing`, `checkin`, `parts-forecast`,
+  `parts`, `shop`, `analytics`, `alerts`, `tenancy`, `rbac`. A change to any
+  of them, or to `lib/seed.ts`, **must regenerate the fixtures in the same
+  commit**: `emit-seed-json`, then `emit-golden-fixtures` (see Commands). A
+  fixture diff is the behaviour change, made reviewable. A commit that changes
+  behaviour without one leaves the port proving the wrong thing.
+- **`fixtures/golden/`** records every top-level call the existing unit tests
+  make, plus sweeps (whole seed fleet, every transition × role, every demo
+  account). The format, references and money encoding are in
+  `fixtures/golden/README.md`; per-module counts are in `COVERAGE.md`. The
+  clock is frozen to `2026-10-08T10:00:00+08:00` in Asia/Manila
+  (`scripts/golden/clock.ts`). The emitter pins the timezone itself, because
+  date-fns runs in the process's local zone.
+- **`fixtures/seed/demo-seed.json`** is `createSeedState()` under that clock,
+  plus `SERVICE_TASKS` and `DEFAULT_APPROVAL_SETTINGS`. The API seeder loads
+  it, so both sides start from byte-identical demo data. Golden `$seed`
+  references point into it, and the golden emitter refuses to run if it is
+  stale.
+- **After Phase 5, the frontend renders values the API returns.** It never
+  computes an authoritative total, status, due date or permission. The
+  `lib/` copies may still drive optimistic UI and previews, but whatever the
+  API says wins. `lib/rbac.ts` and `lib/tenancy.ts` become hints, exactly as
+  their own comments already describe.
+- **Product vs tenant naming.** The product is TorqueLane (`lib/platform.ts`:
+  name, platform support email, default theme tokens). It shows where no
+  tenant resolves: sign-in, metadata, the loading mark, the fail-closed
+  fallback (`DEFAULT_TENANT_SETTINGS`). Inside the app, branding is the
+  tenant's (`providerBranding`). The demo *provider* is still called
+  MekanikoMoR, because that is tenant data in the seed, not the product name.
 
 ## Styling
 
