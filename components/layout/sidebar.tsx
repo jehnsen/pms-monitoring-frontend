@@ -4,36 +4,24 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowUpRight, OctagonAlert, Wrench } from "lucide-react";
 import { homeHrefFor, navSectionsFor } from "@/lib/nav";
-import { useFleet } from "@/lib/store";
+import { useBranding, useFleetSummary, useRequests } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
-import { isProviderRole } from "@/lib/tenancy";
-import { canApprove, pendingValue } from "@/lib/approvals";
 import { Logo } from "@/components/layout/logo";
 import { cn } from "@/lib/utils";
 
-/** Pending lines the signed-in user is actually authorised to approve. */
+/** Pending lines the signed-in user may decide: the API's count (`GET /requests`). */
 function useRequestsForMeCount() {
-  const { ready, workOrders, approvalSettings } = useFleet();
-  const { role } = useCan();
-
-  if (!ready || !role) return 0;
-
-  let count = 0;
-  for (const order of workOrders) {
-    if (order.status !== "pending_approval") continue;
-    const orderPendingValue = pendingValue(order.lines);
-    if (!canApprove(role, orderPendingValue, approvalSettings)) continue;
-    count += order.lines.filter((line) => line.approvalStatus === "pending").length;
-  }
-  return count;
+  const { side } = useCan();
+  const { data } = useRequests({ enabled: side === "portal" });
+  return data?.myPending.lineCount ?? 0;
 }
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const requestsForMe = useRequestsForMeCount();
-  const { role } = useCan();
+  const { side } = useCan();
   // The two sides get different section lists, not one list with items hidden.
-  const sections = navSectionsFor(role);
+  const sections = navSectionsFor(side);
 
   return (
     <nav aria-label="Main navigation" className="flex flex-1 flex-col gap-6 px-4 py-6">
@@ -96,14 +84,14 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 
 /** Standing alert at the foot of the rail — the number that should never be ignored. */
 function OverdueCallout() {
-  const { ready, summary } = useFleet();
-  const { role } = useCan();
+  const { side } = useCan();
+  const { data: summary } = useFleetSummary();
 
   // Provider-side, "vehicles overdue" is every client's problem at once and
   // links into a fleet screen that side does not have. The shop's equivalent
   // standing number is the approval queue, which lives on its own dashboard.
-  if (isProviderRole(role)) return null;
-  if (!ready || summary.overdue === 0) return null;
+  if (side !== "portal") return null;
+  if (!summary || summary.overdue === 0) return null;
 
   return (
     <Link
@@ -122,14 +110,14 @@ function OverdueCallout() {
 }
 
 export function Sidebar() {
-  const { tenant } = useFleet();
-  const { role } = useCan();
-  const providerSide = isProviderRole(role);
+  const tenant = useBranding();
+  const { role, side } = useCan();
+  const providerSide = side === "staff";
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[256px] flex-col border-r border-chrome-border bg-chrome text-chrome-foreground lg:flex">
       <div className="flex h-[76px] shrink-0 items-center border-b border-chrome-border px-6">
-        <Link href={homeHrefFor(role)} className="rounded-md">
+        <Link href={homeHrefFor(side, role)} className="rounded-md">
           <Logo
             tone="inverted"
             name={tenant.displayName}

@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider, themeScript } from "@/components/theme-provider";
 import { PLATFORM, PLATFORM_TITLE } from "@/lib/platform";
+import { ApiProvider } from "@/lib/api/query";
 import "./globals.css";
 
 const inter = Inter({
@@ -31,9 +32,11 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className={`${inter.variable} font-sans`}>
-        <ThemeProvider>
-          <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
-        </ThemeProvider>
+        <ApiProvider>
+          <ThemeProvider>
+            <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+          </ThemeProvider>
+        </ApiProvider>
       </body>
     </html>
   );

@@ -1,4 +1,24 @@
-import type { ApprovalSettings, LineApprovalStatus, WorkOrderLine } from "@/types";
+import type { ApprovalSettings, LineApprovalStatus } from "@/types";
+
+/**
+ * PREVIEW ONLY (Phase 5). The API prices every line and total, in exact
+ * centavos, and its figures are the ones saved and shown everywhere else.
+ * This copy survives for one job: the live estimate in the new-work-order
+ * dialog while someone types, labelled as a preview. It stays golden-tested
+ * against fixtures/golden/billing.json (lib/billing.golden.test.ts) so the
+ * preview cannot drift from what the server will compute.
+ */
+
+/** The fields of a priced line the arithmetic reads. */
+export interface BillingLine {
+  quantity: number;
+  unitPartRate: number;
+  labourHours: number;
+  labourRate: number;
+  partCost: number;
+  labourCost: number;
+  approvalStatus: LineApprovalStatus;
+}
 
 /**
  * The money layer for a work order.
@@ -25,10 +45,7 @@ export function roundMoney(value: number): number {
  * A line's inputs, before the extended amounts are computed. This is what a
  * caller supplies; the extended `partCost`/`labourCost` are ours to write.
  */
-export type LineRateInput = Pick<
-  WorkOrderLine,
-  "quantity" | "unitPartRate" | "labourHours" | "labourRate"
->;
+export type LineRateInput = Pick<BillingLine, "quantity" | "unitPartRate" | "labourHours" | "labourRate">;
 
 /** Extended part total for one line: `quantity * unitPartRate`. */
 export function linePartAmount(line: LineRateInput): number {
@@ -57,7 +74,7 @@ export function lineAmount(line: LineRateInput): number {
  * changing a quantity — so `partCost`/`labourCost` can never disagree with the
  * numbers they are supposed to be the product of.
  */
-export function recalcLine<T extends WorkOrderLine>(line: T): T {
+export function recalcLine<T extends BillingLine>(line: T): T {
   return {
     ...line,
     partCost: linePartAmount(line),
@@ -74,10 +91,9 @@ export function recalcLine<T extends WorkOrderLine>(line: T): T {
  * stored cost", which reproduces the original total exactly and leaves the
  * line editable from there. `lib/mappers.ts` leans on this for old rows.
  */
-export function withRates(
-  line: Omit<WorkOrderLine, "quantity" | "unitPartRate" | "labourHours" | "labourRate"> &
-    Partial<LineRateInput>
-): WorkOrderLine {
+export function withRates<T extends Omit<BillingLine, keyof LineRateInput>>(
+  line: T & Partial<LineRateInput>
+): T & LineRateInput {
   const quantity = line.quantity ?? 1;
   const labourRate = line.labourRate ?? 0;
 
@@ -86,7 +102,7 @@ export function withRates(
   // total survives, which is the only property that actually matters here.
   const labourHours = line.labourHours ?? (line.labourCost > 0 ? 1 : 0);
 
-  const resolved: WorkOrderLine = {
+  const resolved: T & LineRateInput = {
     ...line,
     quantity,
     unitPartRate:
@@ -139,7 +155,7 @@ const ZERO_TOTALS: Omit<BillingTotals, "vatRatePct"> = {
  * no VAT, since a flat fee on an empty order is a charge for no work.
  */
 export function computeTotals(
-  lines: WorkOrderLine[],
+  lines: BillingLine[],
   settings: Pick<ApprovalSettings, "vatRatePct" | "miscFeeFlat">,
   statuses?: LineApprovalStatus[]
 ): BillingTotals {
@@ -208,13 +224,13 @@ export function totalsFromSubtotal(
 /**
  * What the client authorised, tax inclusive.
  *
- * The approval bands in `lib/approvals.ts` deliberately run on the pre-tax
+ * The API's approval bands deliberately run on the pre-tax
  * line value — a threshold is a decision about the work, and VAT is not a
  * thing anyone approves. This is the separate question of what the invoice
  * comes to, so it is the number to compare an actual against.
  */
 export function approvedGrandTotal(
-  lines: WorkOrderLine[],
+  lines: BillingLine[],
   settings: Pick<ApprovalSettings, "vatRatePct" | "miscFeeFlat">
 ): number {
   return computeTotals(lines, settings, ["approved"]).grandTotal;

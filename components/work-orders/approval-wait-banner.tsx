@@ -1,9 +1,6 @@
 "use client";
 
-import * as React from "react";
-import { parseISO } from "date-fns";
 import { Hourglass } from "lucide-react";
-import { businessHoursBetween } from "@/lib/approvals";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -12,26 +9,20 @@ import { cn } from "@/lib/utils";
  *
  * Counted in *working* hours, so a quote sent at 5pm on Friday does not read
  * as three days late on Monday morning — that would train people to ignore
- * the number. Ticks every minute; a wait measured in hours does not need a
- * second hand.
+ * the number. The wait and the breach are the API's (`approval.waiting_hours`,
+ * `approval.sla_breached`), as of the last read.
  */
 export function ApprovalWaitBanner({
   since,
+  waited,
   slaHours,
+  breached,
 }: {
   since: string;
+  waited: number;
   slaHours: number;
+  breached: boolean;
 }) {
-  const [now, setNow] = React.useState(() => new Date());
-
-  React.useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const waited = businessHoursBetween(parseISO(since), now);
-  const breached = waited > slaHours;
-
   return (
     <div
       className={cn(

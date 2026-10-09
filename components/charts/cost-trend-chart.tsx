@@ -12,7 +12,7 @@ import {
 import { ChartFrame, ChartTable, TooltipShell } from "@/components/charts/chart-frame";
 import { axisProps, useChartColors } from "@/lib/chart-theme";
 import { formatCurrency, formatCurrencyCompact } from "@/lib/utils";
-import type { MonthlyCostPoint } from "@/lib/analytics";
+import type { MonthlyCostPoint } from "@/lib/api/views";
 
 /**
  * Part-to-whole over time: what the fleet spent each month, split into the two

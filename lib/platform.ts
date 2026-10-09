@@ -7,7 +7,7 @@
  *     in play yet or at all — the sign-in screen, page metadata, the loading
  *     mark, the marketing walkthrough, and the fail-closed fallback when a
  *     session resolves to no provider.
- *   - **Tenant** (`providerBranding` in `lib/tenancy.ts`): the service centre
+ *   - **Tenant** (`branding` from `/me`): the service centre
  *     running an instance, or the fleet client signed into it. Shown inside
  *     the app once a scope resolves. The demo provider happens to be called
  *     MekanikoMoR; that is tenant data in the seed, not the product name.

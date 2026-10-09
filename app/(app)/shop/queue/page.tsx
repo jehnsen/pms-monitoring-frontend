@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { differenceInMinutes, parseISO } from "date-fns";
 import Link from "next/link";
 import { ClipboardList, Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
@@ -16,16 +17,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFleet } from "@/lib/store";
-import { BAYS, bayName } from "@/lib/bays";
-import {
-  elapsedMinutes,
-  formatDuration,
-  isActiveJob,
-  authorisedValue,
-} from "@/lib/shop";
+import { QueryError } from "@/components/ui/query-error";
+import { useAllVehicles, useBays, useFleetClients, useTechnicians, useWorkOrderPage, useWorkOrderSummary, type WorkOrderQuery } from "@/lib/store";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { WorkOrder, WorkOrderStatus } from "@/types";
+
+/** Time on the job since its start event — wording only ("2h 15m"). */
+function elapsed(order: WorkOrder, now: Date): string {
+  if (order.status !== "in_progress") return "—";
+  const started = [...order.history].reverse().find((event) => event.status === "in_progress");
+  if (!started) return "—";
+  const minutes = Math.max(0, differenceInMinutes(now, parseISO(started.at)));
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+
+/** What the customer authorised: the approved lines, or the job total when it has none. */
+function authorised(order: WorkOrder): number {
+  return order.lines.length > 0 ? order.approval.approvedValue : order.totals.subTotal;
+}
 
 type GroupBy = "none" | "technician" | "bay";
 
@@ -40,7 +50,10 @@ const STATUS_OPTIONS: { value: WorkOrderStatus | "all"; label: string }[] = [
 ];
 
 export default function ShopQueuePage() {
-  const { ready, workOrders, vehiclesById, fleetClients, technicians } = useFleet();
+  const { fleetClients, clientName } = useFleetClients();
+  const { technicians } = useTechnicians();
+  const { bays, bayName } = useBays();
+  const { vehiclesById } = useAllVehicles();
 
   const [query, setQuery] = useState("");
   const [technician, setTechnician] = useState("all");
@@ -51,50 +64,29 @@ export default function ShopQueuePage() {
 
   const now = new Date();
 
-  const clientNameFor = useMemo(() => {
-    const byId = new Map(fleetClients.map((c) => [c.id, c.name]));
-    return (vehicleId: string) => {
-      const vehicle = vehiclesById.get(vehicleId);
-      return vehicle ? (byId.get(vehicle.fleetClientId) ?? "—") : "—";
-    };
-  }, [fleetClients, vehiclesById]);
-
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-
-    return workOrders
-      .filter((order) => {
-        if (!isActiveJob(order)) return false;
-        if (status !== "all" && order.status !== status) return false;
-        if (technician !== "all" && order.technician !== technician) return false;
-        if (bay !== "all" && (order.bayId ?? "none") !== bay) return false;
-        if (client !== "all") {
-          const vehicle = vehiclesById.get(order.vehicleId);
-          if (!vehicle || vehicle.fleetClientId !== client) return false;
-        }
-        if (!q) return true;
-        const vehicle = vehiclesById.get(order.vehicleId);
-        return `${order.reference} ${order.title} ${vehicle?.plateNumber ?? ""} ${clientNameFor(order.vehicleId)} ${order.technician}`
-          .toLowerCase()
-          .includes(q);
-      })
-      // Started jobs first, then whatever is booked soonest — the order the
-      // floor actually works in.
-      .sort((a, b) => {
-        const aRunning = a.status === "in_progress" ? 0 : 1;
-        const bRunning = b.status === "in_progress" ? 0 : 1;
-        if (aRunning !== bRunning) return aRunning - bRunning;
-        return a.scheduledFor.localeCompare(b.scheduledFor);
-      });
-  }, [workOrders, vehiclesById, query, technician, bay, client, status, clientNameFor]);
+  // Active jobs, filtered and in floor order (running first, then soonest
+  // booked) by the API: `GET /work-orders?stage=active&sort=queue`.
+  const filters: WorkOrderQuery = {
+    stage: "active",
+    sort: "queue",
+    q: query.trim() || undefined,
+    technician_id: technician === "all" ? undefined : technician,
+    bay_id: bay === "all" ? undefined : bay,
+    customer_account_id: client === "all" ? undefined : client,
+    status: status === "all" ? undefined : [status],
+  };
+  const { data, error, refetch } = useWorkOrderPage({ ...filters, per_page: 100 });
+  const { data: summary } = useWorkOrderSummary(filters);
+  const rows = useMemo(() => data?.data ?? [], [data]);
+  const ready = Boolean(data);
+  const clientNameFor = (order: WorkOrder) => order.customerName ?? clientName(order.fleetClientId);
 
   const groups = useMemo(() => {
     if (groupBy === "none") return [{ key: "all", label: "", orders: rows }];
 
     const map = new Map<string, WorkOrder[]>();
     for (const order of rows) {
-      const key =
-        groupBy === "technician" ? order.technician : bayName(order.bayId);
+      const key = groupBy === "technician" ? order.technician || "Unassigned" : bayName(order.bayId);
       const list = map.get(key) ?? [];
       list.push(order);
       map.set(key, list);
@@ -102,7 +94,9 @@ export default function ShopQueuePage() {
     return [...map.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([key, orders]) => ({ key, label: key, orders }));
-  }, [rows, groupBy]);
+  }, [rows, groupBy, bayName]);
+
+  if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
 
   if (!ready) {
     return (
@@ -116,7 +110,6 @@ export default function ShopQueuePage() {
     );
   }
 
-  const totalValue = rows.reduce((total, order) => total + authorisedValue(order), 0);
 
   return (
     <>
@@ -161,7 +154,7 @@ export default function ShopQueuePage() {
             {technicians
               .filter((tech) => tech.active)
               .map((tech) => (
-                <SelectItem key={tech.id} value={tech.name}>
+                <SelectItem key={tech.id} value={tech.id}>
                   {tech.name}
                 </SelectItem>
               ))}
@@ -174,12 +167,11 @@ export default function ShopQueuePage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All bays</SelectItem>
-            {BAYS.map((entry) => (
+            {bays.map((entry) => (
               <SelectItem key={entry.id} value={entry.id}>
                 {entry.name}
               </SelectItem>
             ))}
-            <SelectItem value="none">Out-sourced</SelectItem>
           </SelectContent>
         </Select>
 
@@ -225,8 +217,8 @@ export default function ShopQueuePage() {
       </div>
 
       <p className="mb-4 text-xs text-subtle-foreground">
-        {rows.length} active {rows.length === 1 ? "job" : "jobs"} ·{" "}
-        {formatCurrency(totalValue)} of authorised work on the floor.
+        {data?.meta.total ?? rows.length} active {(data?.meta.total ?? rows.length) === 1 ? "job" : "jobs"} ·{" "}
+        {formatCurrency(summary?.filtered.value ?? 0)} of work in the queue.
       </p>
 
       {rows.length === 0 ? (
@@ -297,8 +289,7 @@ export default function ShopQueuePage() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {group.orders.map((order) => {
-                      const vehicle = vehiclesById.get(order.vehicleId);
-                      const minutes = elapsedMinutes(order, now);
+                      const vehicle = order.vehicle ?? vehiclesById.get(order.vehicleId);
                       return (
                         <tr
                           key={order.id}
@@ -309,11 +300,11 @@ export default function ShopQueuePage() {
                               href={`/work-orders/${order.id}`}
                               className="text-xs font-medium transition-colors hover:text-brand"
                             >
-                              {order.reference}
+                              {order.displayReference}
                             </Link>
                           </td>
                           <td className="max-w-[160px] truncate px-4 py-3 text-xs text-muted-foreground">
-                            {clientNameFor(order.vehicleId)}
+                            {clientNameFor(order)}
                           </td>
                           <td className="tabular whitespace-nowrap px-4 py-3 text-xs">
                             {vehicle?.plateNumber ?? "—"}
@@ -322,7 +313,7 @@ export default function ShopQueuePage() {
                             {order.title}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                            {order.technician}
+                            {order.technician || "—"}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
                             {bayName(order.bayId)}
@@ -331,10 +322,10 @@ export default function ShopQueuePage() {
                             <WorkOrderStatusBadge status={order.status} />
                           </td>
                           <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                            {formatDuration(minutes)}
+                            {elapsed(order, now)}
                           </td>
                           <td className="tabular whitespace-nowrap px-4 py-3 text-right text-xs font-medium">
-                            {formatCurrency(authorisedValue(order))}
+                            {formatCurrency(authorised(order))}
                           </td>
                         </tr>
                       );

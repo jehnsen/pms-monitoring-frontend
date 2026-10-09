@@ -99,7 +99,7 @@ function AlertRow({
 
 export function AlertsPanel() {
   const [open, setOpen] = React.useState(false);
-  const { ready, visible, unread, unreadCount, dismissedCount } = useAlerts();
+  const { ready, visible, unread, unreadCount, dismissed, dismissedCount } = useAlerts();
   const { markAlertsRead, dismissAlert, restoreAlerts } = useFleetActions();
 
   const readIds = React.useMemo(
@@ -182,7 +182,7 @@ export function AlertsPanel() {
               : "Generated from live fleet data"}
           </span>
           {dismissedCount > 0 ? (
-            <Button variant="ghost" size="sm" onClick={restoreAlerts}>
+            <Button variant="ghost" size="sm" onClick={() => void restoreAlerts(dismissed.map((alert) => alert.id))}>
               <RotateCcw />
               Restore {dismissedCount} dismissed
             </Button>

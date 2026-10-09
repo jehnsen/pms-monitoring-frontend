@@ -6,6 +6,13 @@ the software does on its own, and where each rule lives in the code.
 This is the behavioural companion to `README.md` (what the app is) and
 `CLAUDE.md` (the invariants you must not break while changing it).
 
+> **Since the Phase 5 cutover every rule below is enforced by the TorqueLane
+> API** (`../torquelane-api`), not by modules in this repo. Where the text names
+> a `lib/*.ts` module, read it as the rule's origin: the module was the
+> reference the API was ported from (and golden-tested against), and was
+> deleted once no screen needed it. "Where the rules live" below gives today's
+> locations.
+
 ---
 
 ## 1. The two sides
@@ -434,19 +441,19 @@ Following one real job through every stage above:
 
 ## Where the rules live
 
-| Concern | Module |
+| Concern | Where (API paths are under `../torquelane-api/app/`) |
 |---|---|
-| Due dates, health scores | `lib/pms.ts` |
-| Tenancy scoping | `lib/tenancy.ts` |
-| Roles and capabilities | `lib/rbac.ts` |
-| Transitions, order numbers | `lib/work-order-machine.ts` |
-| Approval bands, SLA, variance | `lib/approvals.ts` |
-| All money arithmetic | `lib/billing.ts` |
-| Plate/VIN hydration | `lib/checkin.ts` |
-| Derived alerts | `lib/alerts.ts` |
-| Roadworthiness documents | `lib/compliance.ts` |
-| Parts demand and lead time | `lib/parts-forecast.ts` |
-| Bays, revenue, floor load | `lib/shop.ts` |
-| State, scoped mutations | `lib/store.ts` |
-| Row ↔ domain mapping | `lib/mappers.ts` |
-| Schema, RLS, grants | `supabase/migrations/` |
+| Due dates, health scores | `Domain/Maintenance` |
+| Tenancy scoping | `Tenancy/`, `Domain/Tenancy` |
+| Roles and capabilities | `Domain/Access` (AccessMatrix); the UI reads `GET /me` |
+| Transitions, order numbers | `Domain/WorkOrders`, `Domain/Numbering` |
+| Approval bands, SLA, variance | `Domain/Approvals` |
+| All money arithmetic | `Domain/Billing` (`lib/billing.ts` here is a labelled preview) |
+| Plate/VIN hydration | `Domain/CheckIn` |
+| Derived alerts | `Domain/Alerts` |
+| Roadworthiness documents | `Domain/Documents` |
+| Parts demand and lead time | `Domain/Parts` |
+| Bays, revenue, floor load | `Domain/Shop` |
+| Queries and mutations (web) | `lib/store.ts` |
+| API resource ↔ domain mapping (web) | `lib/mappers.ts`, `lib/api/views.ts` |
+| Schema, constraints, grants | `../torquelane-api/database/migrations/` |

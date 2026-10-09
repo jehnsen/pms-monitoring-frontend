@@ -23,8 +23,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { DUE_SOON_DAYS, DUE_SOON_KM } from "@/lib/pms";
-import { useFleetActions, useFleet } from "@/lib/store";
+import {
+  useAccountApprovalSettings,
+  useApprovalSettings,
+  useBranding,
+  useFleetActions,
+  useFleetSummary,
+  useOrganization,
+} from "@/lib/store";
+import { useSession } from "@/lib/auth";
 import { useCan } from "@/lib/rbac";
 import { DeniedAction } from "@/components/auth/denied-action";
 import { useTheme } from "@/components/theme-provider";
@@ -37,20 +44,58 @@ const PARTS_SOURCE_LABEL: Record<PartsSource, string> = {
   supplier_provided: "Supplier provided",
 };
 
+/**
+ * Approval bands. Staff with organization rights edit the organization's
+ * defaults (`PUT /approval-settings`); a client's Fleet Manager edits their
+ * own account's bands (`PATCH /customer-accounts/{id}/approval-settings`) —
+ * only the keys they change are sent, so the rest keep inheriting.
+ */
 function ApprovalThresholdsCard() {
-  const { ready, approvalSettings } = useFleet();
-  const { updateApprovalSettings } = useFleetActions();
-  const { can, reason } = useCan();
+  const { session } = useSession();
+  const portal = session?.side === "portal";
+  const staffSettings = useApprovalSettings({ enabled: session?.side === "staff" });
+  const accountSettings = useAccountApprovalSettings(portal ? session?.fleetClientId : null);
+  const { updateApprovalSettings, updateAccountApprovalSettings } = useFleetActions();
+  const { can, reason, side } = useCan();
 
-  const [draft, setDraft] = useState<ApprovalSettings>(approvalSettings);
+  const approvalSettings: ApprovalSettings | undefined = portal
+    ? accountSettings.data?.effective
+    : staffSettings.data?.organization;
+  const ready = Boolean(approvalSettings);
+  // Portal: settings:manage on their own account. Staff: the organization's defaults.
+  const editable = portal ? can("settings:manage") : side === "staff" && can("organization:manage");
+  const denial = portal ? reason("settings:manage") : reason("organization:manage");
 
-  // Keep the draft in sync when the underlying settings change from outside
-  // this card (e.g. a demo-data reset).
+  const [draft, setDraft] = useState<ApprovalSettings | null>(approvalSettings ?? null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  // Keep the draft in sync with what the API says the settings are.
   useEffect(() => {
-    setDraft(approvalSettings);
+    if (approvalSettings) setDraft(approvalSettings);
   }, [approvalSettings]);
 
-  const dirty = ready && JSON.stringify(draft) !== JSON.stringify(approvalSettings);
+  const dirty = ready && draft !== null && JSON.stringify(draft) !== JSON.stringify(approvalSettings);
+
+  async function save() {
+    if (!draft || !approvalSettings) return;
+    setError(null);
+    setSaved(false);
+    const changed = Object.fromEntries(
+      (Object.keys(draft) as (keyof ApprovalSettings)[])
+        .filter((key) => draft[key] !== approvalSettings[key])
+        .map((key) => [key, draft[key]])
+    ) as Partial<ApprovalSettings>;
+    const result =
+      portal && session?.fleetClientId
+        ? await updateAccountApprovalSettings(session.fleetClientId, changed)
+        : await updateApprovalSettings(changed);
+    if (!result.ok) {
+      setError(result.fields ? Object.values(result.fields)[0]?.[0] ?? result.error : result.error);
+      return;
+    }
+    setSaved(true);
+  }
 
   const fields: {
     key: keyof Pick<
@@ -79,13 +124,12 @@ function ApprovalThresholdsCard() {
                 type="number"
                 min={0}
                 className="tabular"
-                value={draft[field.key]}
-                disabled={!can("settings:manage")}
+                value={draft?.[field.key] ?? ""}
+                disabled={!editable || !draft}
                 onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    [field.key]: Math.max(0, Number(event.target.value) || 0),
-                  }))
+                  setDraft((current) =>
+                    current ? { ...current, [field.key]: Math.max(0, Number(event.target.value) || 0) } : current
+                  )
                 }
               />
               {field.suffix ? (
@@ -100,14 +144,11 @@ function ApprovalThresholdsCard() {
         <div className="space-y-1.5">
           <Label htmlFor="approval-parts-source">Default parts source</Label>
           <Select
-            value={draft.defaultPartsSource}
+            value={draft?.defaultPartsSource ?? "supplier_provided"}
             onValueChange={(value) =>
-              setDraft((current) => ({
-                ...current,
-                defaultPartsSource: value as PartsSource,
-              }))
+              setDraft((current) => (current ? { ...current, defaultPartsSource: value as PartsSource } : current))
             }
-            disabled={!can("settings:manage")}
+            disabled={!editable || !draft}
           >
             <SelectTrigger id="approval-parts-source">
               <SelectValue />
@@ -125,18 +166,17 @@ function ApprovalThresholdsCard() {
         </div>
       </div>
 
-      {can("settings:manage") ? (
+      {error ? <p className="text-xs text-critical">{error}</p> : null}
+      {saved && !dirty ? <p className="text-xs text-ok">Saved.</p> : null}
+
+      {editable ? (
         <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
           <p className="text-2xs text-subtle-foreground">
-            Above the operations ceiling, only the Fleet Manager can approve —
-            regardless of role.
+            {portal
+              ? "Your account's own bands. A value you don't change keeps following the service centre's default."
+              : "The organization's defaults; a client's own bands override them per account."}
           </p>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={!dirty}
-            onClick={() => updateApprovalSettings(draft)}
-          >
+          <Button variant="primary" size="sm" disabled={!dirty} onClick={() => void save()}>
             Save changes
           </Button>
         </div>
@@ -155,10 +195,10 @@ function ApprovalThresholdsCard() {
           wait before it escalates.
         </p>
       </header>
-      {can("settings:manage") ? (
+      {editable ? (
         body
       ) : (
-        <DeniedAction reason={reason("settings:manage")}>
+        <DeniedAction reason={denial}>
           <div className="block w-full">{body}</div>
         </DeniedAction>
       )}
@@ -167,25 +207,37 @@ function ApprovalThresholdsCard() {
 }
 
 function BrandingCard() {
-  const { ready, tenant } = useFleet();
-  const { updateTenantSettings, canEditBranding } = useFleetActions();
-  const { can, reason } = useCan();
+  const { updateTenantSettings } = useFleetActions();
+  const { can, reason, side } = useCan();
+  const sessionBranding = useBranding();
+  const staff = side === "staff";
+  const organization = useOrganization({ enabled: staff });
 
-  // Two independent gates: the capability, and which side of the tenancy
-  // boundary you sit on. A client's Fleet Manager holds `settings:manage` but
-  // still may not rebrand the service centre's instance for everyone else.
-  const editable = can("settings:manage") && canEditBranding;
-  const denial = !can("settings:manage")
-    ? reason("settings:manage")
-    : "Branding belongs to the service provider. A fleet client can't change how the provider's application is presented.";
+  // Two independent gates: organization rights, and the staff side. A client's
+  // Fleet Manager sees their branding (from /me) but may not rebrand the
+  // service centre's application for everyone else.
+  const editable = staff && can("organization:manage");
+  const denial = !staff
+    ? "Branding belongs to the service provider. A fleet client can't change how the provider's application is presented."
+    : reason("organization:manage");
 
+  const tenant: TenantSettings = (staff ? organization.data : null) ?? sessionBranding;
+  const ready = staff ? organization.isSuccess : true;
   const [draft, setDraft] = useState<TenantSettings>(tenant);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setDraft(tenant);
-  }, [tenant]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when the saved values change, not on every new object
+  }, [tenant.displayName, tenant.brandColor, tenant.logoUrl, tenant.supportEmail]);
 
   const dirty = ready && JSON.stringify(draft) !== JSON.stringify(tenant);
+
+  async function save() {
+    setError(null);
+    const result = await updateTenantSettings(draft);
+    if (!result.ok) setError(result.fields ? Object.values(result.fields)[0]?.[0] ?? result.error : result.error);
+  }
   const validColor = hexToHslTriplet(draft.brandColor) !== null;
 
   const body = (
@@ -272,12 +324,13 @@ function BrandingCard() {
             variant="primary"
             size="sm"
             disabled={!dirty || !validColor}
-            onClick={() => updateTenantSettings(draft)}
+            onClick={() => void save()}
           >
             Save changes
           </Button>
         </div>
       ) : null}
+      {error ? <p className="text-xs text-critical">{error}</p> : null}
     </div>
   );
 
@@ -356,86 +409,41 @@ function ThemeCard() {
   );
 }
 
+/** The data lives on the server now: "reset" is a reload of every screen's reads. */
 function ResetCard() {
   const { resetFleet } = useFleetActions();
-  const { can, reason } = useCan();
-  const [open, setOpen] = useState(false);
-
-  if (!can("settings:manage")) {
-    return (
-      <section className="card-raised">
-        <header className="px-5 pb-3 pt-4">
-          <h3 className="text-sm font-semibold tracking-tight">Demo data</h3>
-          <p className="mt-0.5 text-xs text-subtle-foreground">
-            The fleet lives in this browser&apos;s local storage.
-          </p>
-        </header>
-        <div className="border-t border-border px-5 py-5">
-          <DeniedAction reason={reason("settings:manage")}>
-            <Button variant="secondary">
-              <RotateCcw />
-              Reset fleet data
-            </Button>
-          </DeniedAction>
-        </div>
-      </section>
-    );
-  }
+  const [done, setDone] = useState(false);
 
   return (
     <section className="card-raised">
       <header className="px-5 pb-3 pt-4">
-        <h3 className="text-sm font-semibold tracking-tight">Demo data</h3>
+        <h3 className="text-sm font-semibold tracking-tight">Data</h3>
         <p className="mt-0.5 text-xs text-subtle-foreground">
-          The fleet lives in this browser&apos;s local storage. Resetting rebuilds
-          it from the seed and discards everything you have logged.
+          Everything on these screens is read from the TorqueLane server. Reloading fetches it fresh; it changes
+          nothing.
         </p>
       </header>
-      <div className="border-t border-border px-5 py-5">
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button variant="secondary">
-              <RotateCcw />
-              Reset fleet data
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Reset the demo fleet?</DialogTitle>
-              <DialogDescription>
-                Work orders you raised, odometer readings you logged, and every
-                completion will be discarded.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogBody>
-              <p className="text-sm text-muted-foreground">
-                The fleet will be rebuilt from the original sixteen vehicles with
-                twelve months of generated service history.
-              </p>
-            </DialogBody>
-            <DialogFooter>
-              <Button variant="secondary" onClick={() => setOpen(false)}>
-                Keep my data
-              </Button>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  resetFleet();
-                  setOpen(false);
-                }}
-              >
-                Reset everything
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      <div className="flex items-center gap-3 border-t border-border px-5 py-5">
+        <Button
+          variant="secondary"
+          onClick={async () => {
+            setDone(false);
+            await resetFleet();
+            setDone(true);
+          }}
+        >
+          <RotateCcw />
+          Reload from the server
+        </Button>
+        {done ? <span className="text-xs text-subtle-foreground">Up to date.</span> : null}
       </div>
     </section>
   );
 }
 
 export default function SettingsPage() {
-  const { ready, summary } = useFleet();
+  const { data: summary } = useFleetSummary();
+  const ready = Boolean(summary);
 
   return (
     <>
@@ -462,7 +470,7 @@ export default function SettingsPage() {
                 Distance ahead
               </dt>
               <dd className="mt-1.5 text-xl font-semibold tracking-tight">
-                {formatKm(DUE_SOON_KM)}
+                {summary ? formatKm(summary.thresholds.dueSoonKm) : "—"}
               </dd>
             </div>
             <div className="rounded-lg border border-border bg-surface-2/50 p-4">
@@ -470,11 +478,11 @@ export default function SettingsPage() {
                 Time ahead
               </dt>
               <dd className="mt-1.5 text-xl font-semibold tracking-tight">
-                {DUE_SOON_DAYS} days
+                {summary ? `${summary.thresholds.dueSoonDays} days` : "—"}
               </dd>
             </div>
           </dl>
-          {ready ? (
+          {ready && summary ? (
             <p className="border-t border-border px-5 py-3 text-xs text-subtle-foreground">
               At these thresholds {summary.dueSoon} of {summary.total} vehicles are
               currently in the warning band.
@@ -500,10 +508,9 @@ export default function SettingsPage() {
           <div className="space-y-3 border-t border-border px-5 py-5 text-xs text-muted-foreground">
             <p className="flex items-start gap-2">
               <Monitor className="mt-0.5 size-4 shrink-0 text-subtle-foreground" />
-              A front-end demonstration: the PMS engine, work-order lifecycle, and
-              analytics all run in the browser against seeded data. Swapping the
-              store in <code className="rounded bg-surface-2 px-1">lib/store.ts</code>{" "}
-              for an API is the only change needed to point it at a backend.
+              Connected to the TorqueLane API. The PMS engine, work-order lifecycle, approvals, billing and
+              analytics all run on the server; this application renders what it returns, and every change is
+              saved there.
             </p>
           </div>
         </section>

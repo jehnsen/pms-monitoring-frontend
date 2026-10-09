@@ -2,38 +2,29 @@
 
 import { useCallback } from "react";
 import { useSession } from "@/lib/auth";
-import type { ClientUserRole, ProviderUserRole, UserRole } from "@/types";
+import type { Capability, ClientUserRole, ProviderUserRole, UserRole } from "@/types";
 
-export type { UserRole, ClientUserRole, ProviderUserRole };
+export type { UserRole, ClientUserRole, ProviderUserRole, Capability };
 
 /**
- * Role-based access control.
+ * Permissions, as the API grants them.
  *
- * **This is a UI affordance, not a security control.** Everything runs in the
- * browser, so a determined user can grant themselves any capability from
- * devtools. Its job is to keep people out of actions that aren't theirs and to
- * make the permission model legible — real enforcement has to live on a server
- * that this build doesn't have. When an API goes in, mirror this matrix there
- * and treat the client copy as a hint.
+ * What a session may do is `GET /me` → `capabilities`; `useCan()` reads it.
+ * The API re-checks every request (capability, tenant scope, module), so this
+ * only decides what the UI offers. Denied controls render through
+ * `DeniedAction` with the reason below — dimmed with a reason, never hidden.
+ *
+ * The labels and the role matrix are presentation: the access page documents
+ * who can do what. The matrix mirrors the API's `AccessMatrix`; it is never
+ * consulted to allow anything.
  */
-
-export type Capability =
-  | "vehicle:update"
-  | "vehicle:manage"
-  | "workorder:create"
-  | "workorder:update"
-  | "workorder:complete"
-  | "workorder:approve"
-  | "po:issue"
-  | "document:upload"
-  | "document:delete"
-  | "settings:manage"
-  | "access:manage";
 
 export const ROLE_LABEL: Record<UserRole, string> = {
   provider_admin: "Provider Admin",
   service_advisor: "Service Advisor",
   provider_technician: "Provider Technician",
+  branch_manager: "Branch Manager",
+  cashier: "Cashier",
   fleet_manager: "Fleet Manager",
   operations: "Operations Staff",
   technician: "Technician",
@@ -48,6 +39,9 @@ export const ROLE_DESCRIPTION: Record<UserRole, string> = {
     "Front of house across all clients: checks vehicles in and out, raises work orders, and sends quotations.",
   provider_technician:
     "Works assigned jobs across all clients: records findings and parts, and closes jobs. Cannot approve spend.",
+  branch_manager:
+    "Runs the branches they are pinned to: everything the provider admin can do there except organization settings.",
+  cashier: "Front counter: registers customers. No access to jobs or spend.",
   fleet_manager:
     "Full control of their own fleet: schedules, work orders, documents, and settings. Unlimited approval authority within that one client. Cannot view or add users — only the provider admin manages accounts.",
   operations:
@@ -56,16 +50,9 @@ export const ROLE_DESCRIPTION: Record<UserRole, string> = {
     "Works the bay: updates and closes jobs, records parts and findings, attaches reports.",
   purchasing_officer:
     "Views everything and approves purchases within threshold, and issues purchase orders. Cannot edit PMS intervals or close work orders.",
-  viewer:
-    "Read-only. Sees every screen and can export nothing that changes state.",
+  viewer: "Read-only. Sees every screen and can export nothing that changes state.",
 };
 
-/**
- * Which side of the tenancy boundary each role sits on. Client-side roles are
- * scoped to one fleet client and can never see across; provider-side roles see
- * every client beneath their provider. Enforced in `lib/tenancy.ts`, not here —
- * this is only how the matrix is presented.
- */
 export const CLIENT_ROLES: ClientUserRole[] = [
   "fleet_manager",
   "operations",
@@ -76,82 +63,11 @@ export const CLIENT_ROLES: ClientUserRole[] = [
 
 export const PROVIDER_ROLES: ProviderUserRole[] = [
   "provider_admin",
+  "branch_manager",
   "service_advisor",
   "provider_technician",
+  "cashier",
 ];
-
-/**
- * Capability grants per role. Order is least- to most-privileged.
- *
- * Note what a provider-side grant does and does not mean: it is the same
- * capability set, applied across every client beneath the provider rather than
- * one. Cross-client *visibility* comes from the tenant scope in
- * `lib/tenancy.ts`, never from a capability here — which is why no client-side
- * role can be widened into one by editing this table.
- */
-export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
-  viewer: [],
-  technician: [
-    "vehicle:update",
-    "workorder:update",
-    "workorder:complete",
-    "document:upload",
-  ],
-  purchasing_officer: ["workorder:approve", "po:issue", "document:upload"],
-  operations: [
-    "vehicle:update",
-    "vehicle:manage",
-    "workorder:create",
-    "workorder:update",
-    "workorder:complete",
-    "workorder:approve",
-    "document:upload",
-  ],
-  // `access:manage` is deliberately absent — user accounts are managed
-  // provider-wide by the provider admin only, even for a client's own fleet.
-  fleet_manager: [
-    "vehicle:update",
-    "vehicle:manage",
-    "workorder:create",
-    "workorder:update",
-    "workorder:complete",
-    "workorder:approve",
-    "po:issue",
-    "document:upload",
-    "document:delete",
-    "settings:manage",
-  ],
-
-  // ------------------------------------------------------------ provider side
-  /** Assigned jobs only: records findings and closes them. No spend authority. */
-  provider_technician: [
-    "vehicle:update",
-    "workorder:update",
-    "workorder:complete",
-    "document:upload",
-  ],
-  /** Front of house: check-in/out, raises work, quotes. Does not approve spend. */
-  service_advisor: [
-    "vehicle:update",
-    "vehicle:manage",
-    "workorder:create",
-    "workorder:update",
-    "document:upload",
-  ],
-  provider_admin: [
-    "vehicle:update",
-    "vehicle:manage",
-    "workorder:create",
-    "workorder:update",
-    "workorder:complete",
-    "workorder:approve",
-    "po:issue",
-    "document:upload",
-    "document:delete",
-    "settings:manage",
-    "access:manage",
-  ],
-};
 
 export const ALL_CAPABILITIES: Capability[] = [
   "vehicle:update",
@@ -165,8 +81,11 @@ export const ALL_CAPABILITIES: Capability[] = [
   "document:delete",
   "settings:manage",
   "access:manage",
+  "customer:manage",
+  "organization:manage",
 ];
 
+/** The API's labels (`Capability::label()`). */
 export const CAPABILITY_LABEL: Record<Capability, string> = {
   "vehicle:update": "Log odometer readings",
   "vehicle:manage": "Add and edit vehicle records",
@@ -179,30 +98,82 @@ export const CAPABILITY_LABEL: Record<Capability, string> = {
   "document:delete": "Delete documents",
   "settings:manage": "Change settings & reset data",
   "access:manage": "Manage user access",
+  "customer:manage": "Manage customer accounts",
+  "organization:manage": "Manage the organization",
 };
 
-export function can(role: UserRole | undefined, capability: Capability) {
-  if (!role) return false;
-  return ROLE_CAPABILITIES[role]?.includes(capability) ?? false;
-}
+/**
+ * Documentation of the API's role grants, for the access page's matrix only.
+ * Mirrors `App\Domain\Access\AccessMatrix`; the session's own list, from
+ * `/me`, is what the UI acts on.
+ */
+export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
+  viewer: [],
+  technician: ["vehicle:update", "workorder:update", "workorder:complete", "document:upload"],
+  purchasing_officer: ["workorder:approve", "po:issue", "document:upload"],
+  operations: [
+    "vehicle:update",
+    "vehicle:manage",
+    "workorder:create",
+    "workorder:update",
+    "workorder:complete",
+    "workorder:approve",
+    "document:upload",
+  ],
+  fleet_manager: [
+    "vehicle:update",
+    "vehicle:manage",
+    "workorder:create",
+    "workorder:update",
+    "workorder:complete",
+    "workorder:approve",
+    "po:issue",
+    "document:upload",
+    "document:delete",
+    "settings:manage",
+    "customer:manage",
+  ],
+  provider_technician: ["vehicle:update", "workorder:update", "workorder:complete", "document:upload"],
+  service_advisor: [
+    "vehicle:update",
+    "vehicle:manage",
+    "workorder:create",
+    "workorder:update",
+    "document:upload",
+    "customer:manage",
+  ],
+  cashier: ["customer:manage"],
+  branch_manager: ALL_CAPABILITIES.filter((c) => c !== "organization:manage"),
+  provider_admin: [...ALL_CAPABILITIES],
+};
 
 /** Why an action is unavailable — shown on the disabled control itself. */
-export function denialReason(role: UserRole | undefined, capability: Capability) {
-  if (!role) return "Sign in to do this.";
-  return `${ROLE_LABEL[role]} doesn't have permission to ${CAPABILITY_LABEL[
-    capability
-  ].toLowerCase()}.`;
+export function denialReason(roleLabel: string | undefined, capability: Capability) {
+  if (!roleLabel) return "Sign in to do this.";
+  return `${roleLabel} doesn't have permission to ${CAPABILITY_LABEL[capability].toLowerCase()}.`;
 }
 
+/** What the signed-in session may do, from `/me`. */
 export function useCan() {
   const { session } = useSession();
   const role = session?.role;
+  const capabilities = session?.capabilities;
+  const roleLabel = session?.roleLabel;
 
-  const check = useCallback((capability: Capability) => can(role, capability), [role]);
-  const reason = useCallback(
-    (capability: Capability) => denialReason(role, capability),
-    [role]
+  const side = session?.side;
+  const check = useCallback((capability: Capability) => capabilities?.includes(capability) ?? false, [capabilities]);
+  const reason = useCallback((capability: Capability) => denialReason(roleLabel, capability), [roleLabel]);
+
+  /**
+   * For writes the API keeps to staff (the shop's catalogue, roster and
+   * vendors): the capability AND the staff side. A portal fleet manager holds
+   * `settings:manage` for their own fleet, not the service centre's.
+   */
+  const canAsStaff = useCallback((capability: Capability) => side === "staff" && check(capability), [side, check]);
+  const staffReason = useCallback(
+    (capability: Capability) => (side !== "staff" ? "Only the service centre can change this." : reason(capability)),
+    [side, reason]
   );
 
-  return { role, can: check, reason };
+  return { role, side, can: check, reason, canAsStaff, staffReason };
 }

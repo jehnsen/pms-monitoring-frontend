@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { differenceInCalendarDays, parseISO } from "date-fns";
+import { useEffect, useState } from "react";
 import { ArrowDownWideNarrow, FileWarning, FolderOpen, HardDrive, Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { DocumentList } from "@/components/documents/document-list";
@@ -17,12 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFleet } from "@/lib/store";
+import { Pagination } from "@/components/ui/pagination";
+import { QueryError } from "@/components/ui/query-error";
+import { useAllVehicles, useDocumentPage, useDocumentSummary } from "@/lib/store";
 import { DOCUMENT_KINDS, DOCUMENT_KIND_LABEL } from "@/lib/documents";
-import { DOCUMENT_EXPIRY_WARNING_DAYS } from "@/lib/alerts";
-import { documentExpiryStatus, type ComplianceStatus } from "@/lib/compliance";
 import { formatBytes } from "@/lib/utils";
-import type { DocumentKind } from "@/types";
+import type { ComplianceStatus, DocumentKind } from "@/types";
 
 const STATUS_LABEL: Record<ComplianceStatus, string> = {
   expired: "Expired",
@@ -31,37 +30,35 @@ const STATUS_LABEL: Record<ComplianceStatus, string> = {
 };
 
 export default function DocumentsPage() {
-  const { ready, documents, vehicles, vehiclesById } = useFleet();
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<DocumentKind | "all">("all");
   const [vehicleId, setVehicleId] = useState("all");
   const [status, setStatus] = useState<ComplianceStatus | "all">("all");
   const [sortByExpiry, setSortByExpiry] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+  // Filters, expiry status and ordering are the API's.
+  const { data, error, refetch } = useDocumentPage({
+    page,
+    per_page: pageSize,
+    q: query.trim() || undefined,
+    kind: kind === "all" ? undefined : kind,
+    vehicle_id: vehicleId === "all" ? undefined : vehicleId,
+    status: status === "all" ? undefined : status,
+    sort: sortByExpiry ? "expiry" : "uploaded",
+  });
+  const { data: tiles } = useDocumentSummary();
+  const { vehicles } = useAllVehicles();
 
-    return documents
-      .filter((doc) => {
-        if (kind !== "all" && doc.kind !== kind) return false;
-        if (vehicleId !== "all" && doc.vehicleId !== vehicleId) return false;
-        if (status !== "all" && documentExpiryStatus(doc) !== status) return false;
-        if (!q) return true;
-        const plate = doc.vehicleId
-          ? (vehiclesById.get(doc.vehicleId)?.plateNumber ?? "")
-          : "";
-        return `${doc.name} ${doc.notes} ${doc.uploadedBy} ${plate}`
-          .toLowerCase()
-          .includes(q);
-      })
-      .sort((a, b) =>
-        sortByExpiry
-          ? (a.expiresOn ?? "9999-99-99").localeCompare(b.expiresOn ?? "9999-99-99")
-          : b.uploadedOn.localeCompare(a.uploadedOn)
-      );
-  }, [documents, query, kind, vehicleId, status, sortByExpiry, vehiclesById]);
+  useEffect(() => setPage(1), [query, kind, vehicleId, status, sortByExpiry, pageSize]);
 
-  if (!ready) {
+  const filtered = data?.data ?? [];
+  const total = data?.meta.total ?? 0;
+
+  if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
+
+  if (!data) {
     return (
       <>
         <PageHeader
@@ -73,14 +70,7 @@ export default function DocumentsPage() {
     );
   }
 
-  const totalBytes = documents.reduce((total, doc) => total + doc.sizeBytes, 0);
-  const expiringSoon = documents.filter((doc) => {
-    if (!doc.expiresOn) return false;
-    return (
-      differenceInCalendarDays(parseISO(doc.expiresOn), new Date()) <=
-      DOCUMENT_EXPIRY_WARNING_DAYS
-    );
-  }).length;
+  const expiringSoon = tiles?.expiringSoon ?? 0;
 
   return (
     <>
@@ -93,20 +83,20 @@ export default function DocumentsPage() {
       <div className="grid gap-4 sm:grid-cols-3">
         <StatTile
           label="Documents on file"
-          value={String(documents.length)}
+          value={String(tiles?.count ?? 0)}
           hint={`Across ${vehicles.length} vehicles`}
           icon={FolderOpen}
         />
         <StatTile
           label="Needing renewal"
           value={String(expiringSoon)}
-          hint={`Expiring within ${DOCUMENT_EXPIRY_WARNING_DAYS} days, or already expired`}
+          hint={`Expiring within ${tiles?.expiringWindowDays ?? 45} days, or already expired`}
           icon={FileWarning}
           tone={expiringSoon > 0 ? "warning" : "ok"}
         />
         <StatTile
           label="Repository size"
-          value={formatBytes(totalBytes)}
+          value={formatBytes(tiles?.totalBytes ?? 0)}
           hint="Seeded records are metadata only"
           icon={HardDrive}
         />
@@ -181,7 +171,7 @@ export default function DocumentsPage() {
       </div>
 
       <p className="mb-4 text-xs text-subtle-foreground">
-        Showing {filtered.length} of {documents.length} documents.
+        Showing {filtered.length} of {total} {total === 1 ? "document" : "documents"}.
       </p>
 
       <div className="card-raised">
@@ -190,6 +180,17 @@ export default function DocumentsPage() {
           showVehicle
           emptyTitle="No documents match those filters"
           emptyDescription="Try a different type, vehicle, or clear the search."
+        />
+      </div>
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          pageCount={Math.max(1, Math.ceil(total / pageSize))}
+          pageSize={pageSize}
+          totalItems={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
         />
       </div>
     </>

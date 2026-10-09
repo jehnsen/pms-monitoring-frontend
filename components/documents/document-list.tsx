@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { Download, FileX2, Trash2 } from "lucide-react";
@@ -7,16 +8,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useFleet, useFleetActions } from "@/lib/store";
+import { useAllVehicles, useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
-import { DOCUMENT_KIND_ICON, DOCUMENT_KIND_LABEL } from "@/lib/documents";
-import { DOCUMENT_EXPIRY_WARNING_DAYS } from "@/lib/alerts";
+import { DOCUMENT_KIND_ICON } from "@/lib/documents";
 import { formatBytes, formatDate, formatDayDelta } from "@/lib/utils";
-import type { FleetDocument } from "@/types";
+import type { ComplianceStatus, FleetDocument } from "@/types";
 
-function ExpiryChip({ expiresOn }: { expiresOn: string }) {
+/** The API decides the status (`expiry_status`); the countdown is wording only. */
+function ExpiryChip({ expiresOn, status }: { expiresOn: string; status: ComplianceStatus }) {
   const days = differenceInCalendarDays(parseISO(expiresOn), new Date());
-  if (days > DOCUMENT_EXPIRY_WARNING_DAYS) {
+  if (status === "ok") {
     return (
       <span className="tabular text-2xs text-subtle-foreground">
         Valid to {formatDate(expiresOn)}
@@ -24,8 +25,8 @@ function ExpiryChip({ expiresOn }: { expiresOn: string }) {
     );
   }
   return (
-    <Badge tone={days < 0 ? "critical" : "warning"}>
-      {days < 0 ? "Expired" : "Expires"} {formatDayDelta(days).replace("in ", "in ")}
+    <Badge tone={status === "expired" ? "critical" : "warning"}>
+      {status === "expired" ? "Expired" : "Expires"} {formatDayDelta(days)}
     </Badge>
   );
 }
@@ -41,9 +42,16 @@ export function DocumentList({
   emptyDescription?: string;
   showVehicle?: boolean;
 }) {
-  const { vehiclesById } = useFleet();
-  const { deleteDocument } = useFleetActions();
+  const { vehiclesById } = useAllVehicles();
+  const { deleteDocument, downloadDocument } = useFleetActions();
   const { can, reason } = useCan();
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function run(action: () => Promise<{ ok: boolean; error?: string }>) {
+    setError(null);
+    const result = await action();
+    if (!result.ok) setError(result.error ?? "That didn't work.");
+  }
 
   if (documents.length === 0) {
     return (
@@ -57,6 +65,8 @@ export function DocumentList({
   }
 
   return (
+    <>
+    {error ? <p role="alert" className="border-b border-border bg-critical/[0.06] px-5 py-2 text-xs text-critical">{error}</p> : null}
     <ul className="divide-y divide-border">
       {documents.map((doc) => {
         const Icon = DOCUMENT_KIND_ICON[doc.kind];
@@ -74,7 +84,7 @@ export function DocumentList({
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{doc.name}</p>
               <p className="mt-0.5 truncate text-2xs text-subtle-foreground">
-                {DOCUMENT_KIND_LABEL[doc.kind]} · {formatBytes(doc.sizeBytes)} ·
+                {doc.kindLabel} · {formatBytes(doc.sizeBytes)} ·
                 filed {formatDate(doc.uploadedOn)} by {doc.uploadedBy}
                 {showVehicle && vehicle ? (
                   <>
@@ -90,19 +100,18 @@ export function DocumentList({
               </p>
             </div>
 
-            {doc.expiresOn ? <ExpiryChip expiresOn={doc.expiresOn} /> : null}
+            {doc.expiresOn ? <ExpiryChip expiresOn={doc.expiresOn} status={doc.expiryStatus} /> : null}
 
             <div className="flex items-center gap-1">
               {/* Seeded records are metadata only — there is no file behind them. */}
-              {doc.dataUrl ? (
-                <Button variant="ghost" size="icon-sm" asChild>
-                  <a
-                    href={doc.dataUrl}
-                    download={doc.name}
-                    aria-label={`Download ${doc.name}`}
-                  >
-                    <Download />
-                  </a>
+              {doc.hasFile ? (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Download ${doc.name}`}
+                  onClick={() => void run(() => downloadDocument(doc.id))}
+                >
+                  <Download />
                 </Button>
               ) : (
                 <Tooltip>
@@ -124,7 +133,7 @@ export function DocumentList({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={`Delete ${doc.name}`}
-                  onClick={() => deleteDocument(doc.id)}
+                  onClick={() => void run(() => deleteDocument(doc.id))}
                   className="text-subtle-foreground hover:text-critical"
                 >
                   <Trash2 />
@@ -146,5 +155,6 @@ export function DocumentList({
         );
       })}
     </ul>
+    </>
   );
 }

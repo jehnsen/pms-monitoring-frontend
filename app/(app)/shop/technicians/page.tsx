@@ -1,7 +1,7 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
-import { startOfMonth } from "date-fns";
 import { Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,11 +9,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DeniedAction } from "@/components/auth/denied-action";
 import { TechnicianFormDialog } from "@/components/settings/technician-form-dialog";
-import { useFleet, useFleetActions } from "@/lib/store";
+import { QueryError } from "@/components/ui/query-error";
+import { useBays, useFleetActions, useShopTechnicians, useTechnicians, useWorkOrderPage } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
-import { BAY_BY_ID, bayName } from "@/lib/bays";
 import { CATEGORY_LABEL } from "@/lib/service-tasks";
-import { elapsedMinutes, formatDuration, technicianLoad } from "@/lib/shop";
+import { differenceInMinutes, parseISO } from "date-fns";
+import type { WorkOrder } from "@/types";
+
+/** Time on the job since its start event — wording only. */
+function elapsed(order: WorkOrder, now: Date): string {
+  const started = [...order.history].reverse().find((event) => event.status === "in_progress");
+  if (!started) return "—";
+  const minutes = Math.max(0, differenceInMinutes(now, parseISO(started.at)));
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
 import { cn } from "@/lib/utils";
 
 const HEADINGS = [
@@ -26,18 +36,26 @@ const HEADINGS = [
   "Variance",
 ];
 
-/** `specialty` is free text on `pms_technicians`, not the `TaskCategory` union. */
+/** A technician's `specialty` is free text, not the `TaskCategory` union. */
 function specialtyLabel(specialty: string): string {
   if (specialty === "general") return "General";
   return CATEGORY_LABEL[specialty as keyof typeof CATEGORY_LABEL] ?? specialty;
 }
 
 export default function ShopTechniciansPage() {
-  const { ready, workOrders, vehiclesById, technicians } = useFleet();
+  const { technicians, isSuccess: rosterReady } = useTechnicians();
+  // Load, closed this period, actual vs estimated hours and variance: the API's.
+  const { data: loads, error, refetch } = useShopTechnicians();
+  const { data: running } = useWorkOrderPage({ status: ["in_progress"], per_page: 100 });
+  const { bayName } = useBays();
   const { deleteTechnician } = useFleetActions();
-  const { can, reason } = useCan();
+  const { canAsStaff, staffReason } = useCan();
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const ready = rosterReady && Boolean(loads);
 
-  if (!ready) {
+  if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
+
+  if (!ready || !loads) {
     return (
       <>
         <PageHeader
@@ -54,12 +72,7 @@ export default function ShopTechniciansPage() {
   // Retired staff (`active: false`) still worked jobs, but are not carried
   // forward into a fresh assignment/workload view.
   const activeTechnicians = technicians.filter((tech) => tech.active);
-  const loads = technicianLoad(
-    activeTechnicians.map((tech) => tech.name),
-    workOrders,
-    startOfMonth(now),
-    now
-  );
+  const runningById = new Map((running?.data ?? []).map((order) => [order.id, order]));
 
   return (
     <>
@@ -68,6 +81,12 @@ export default function ShopTechniciansPage() {
         description="The provider's staff, shared across every fleet client — roster, load, and variance against the catalogue's own estimate."
         actions={<TechnicianFormDialog />}
       />
+
+      {deleteError ? (
+        <p role="alert" className="mb-5 rounded-lg border border-critical/25 bg-critical/[0.06] px-4 py-3 text-xs text-critical">
+          {deleteError}
+        </p>
+      ) : null}
 
       <section className="card-raised">
         <header className="px-5 pb-3 pt-4">
@@ -87,31 +106,33 @@ export default function ShopTechniciansPage() {
                 <p className="mt-0.5 text-2xs text-subtle-foreground">
                   {specialtyLabel(technician.specialty)}
                   {technician.homeBayId
-                    ? ` · ${BAY_BY_ID.get(technician.homeBayId)?.name ?? "Unassigned bay"}`
+                    ? ` · ${bayName(technician.homeBayId)}`
                     : ""}
                 </p>
               </div>
               <span className="inline-flex items-center gap-1">
                 <TechnicianFormDialog technician={technician} />
-                {can("settings:manage") ? (
+                {canAsStaff("settings:manage") ? (
                   <Button
                     variant="ghost"
                     size="sm"
                     aria-label={`Remove ${technician.name}`}
-                    onClick={() => {
+                    onClick={async () => {
                       if (
                         window.confirm(
                           `Remove "${technician.name}" from the roster? Past work orders keep their record of who did the job.`
                         )
                       ) {
-                        deleteTechnician(technician.id);
+                        setDeleteError(null);
+                        const result = await deleteTechnician(technician.id);
+                        if (!result.ok) setDeleteError(`${technician.name}: ${result.error}`);
                       }
                     }}
                   >
                     <Trash2 className="text-critical" />
                   </Button>
                 ) : (
-                  <DeniedAction reason={reason("settings:manage")}>
+                  <DeniedAction reason={staffReason("settings:manage")}>
                     <Button variant="ghost" size="sm" aria-label={`Remove ${technician.name}`}>
                       <Trash2 />
                     </Button>
@@ -159,23 +180,12 @@ export default function ShopTechniciansPage() {
             </thead>
             <tbody className="divide-y divide-border">
               {loads.map((load) => {
-                const tech = activeTechnicians.find((t) => t.name === load.name);
-                const current = load.current;
-                const vehicle = current
-                  ? vehiclesById.get(current.vehicleId)
-                  : undefined;
-
-                const variance =
-                  load.avgActualHours !== null && load.avgEstimatedHours
-                    ? Math.round(
-                        ((load.avgActualHours - load.avgEstimatedHours) /
-                          load.avgEstimatedHours) *
-                          100
-                      )
-                    : null;
+                const tech = activeTechnicians.find((t) => t.id === load.technicianId);
+                const current = load.currentWorkOrderId ? runningById.get(load.currentWorkOrderId) : undefined;
+                const variance = load.variancePct;
 
                 return (
-                  <tr key={load.name} className="transition-colors hover:bg-surface-2/50">
+                  <tr key={load.technicianId} className="transition-colors hover:bg-surface-2/50">
                     <td className="px-4 py-3">
                       <span className="block text-xs font-medium">{load.name}</span>
                       <span className="block text-2xs text-subtle-foreground">
@@ -186,16 +196,16 @@ export default function ShopTechniciansPage() {
                       {tech ? bayName(tech.homeBayId) : "—"}
                     </td>
                     <td className="max-w-[260px] px-4 py-3">
-                      {current ? (
+                      {load.currentWorkOrderId ? (
                         <>
                           <Link
-                            href={`/work-orders/${current.id}`}
+                            href={`/work-orders/${load.currentWorkOrderId}`}
                             className="block truncate text-xs font-medium transition-colors hover:text-brand"
                           >
-                            {vehicle?.plateNumber ?? current.reference}
+                            {current?.vehicle?.plateNumber ?? current?.displayReference ?? "Current job"}
                           </Link>
                           <span className="tabular block text-2xs text-subtle-foreground">
-                            {current.title} · {formatDuration(elapsedMinutes(current, now))}
+                            {current ? `${current.title} · ${elapsed(current, now)}` : ""}
                           </span>
                         </>
                       ) : (

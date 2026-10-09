@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { exportPurchaseOrderToExcel } from "@/lib/po-export";
+import { useFleetActions } from "@/lib/store";
 import type { PurchaseOrder } from "@/types";
 
 /**
@@ -24,7 +24,7 @@ import type { PurchaseOrder } from "@/types";
  * rendered its own hidden copy, the print stylesheet would show all of them
  * at once. `onPrint` asks the parent to mount that one order's document,
  * then this component fires the print dialog on the next frame once it's in
- * the DOM.
+ * the DOM. The spreadsheet is the API's (`GET /purchase-orders/{id}/export`).
  */
 export function PurchaseOrderExportMenu({
   order,
@@ -34,6 +34,7 @@ export function PurchaseOrderExportMenu({
   /** Mounts `order` into the page's single `PurchaseOrderPrintDocument`. */
   onPrint: (order: PurchaseOrder) => void;
 }) {
+  const { exportPurchaseOrder } = useFleetActions();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -53,7 +54,7 @@ export function PurchaseOrderExportMenu({
           <Printer />
           Print / save as PDF
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void exportPurchaseOrderToExcel(order)}>
+        <DropdownMenuItem onSelect={() => void exportPurchaseOrder(order.id, order.reference, "xlsx")}>
           <FileSpreadsheet />
           Export to Excel
         </DropdownMenuItem>

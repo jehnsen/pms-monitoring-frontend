@@ -14,7 +14,7 @@ import {
 import { ChartFrame, ChartTable, TooltipShell } from "@/components/charts/chart-frame";
 import { axisProps, useChartColors } from "@/lib/chart-theme";
 import { formatCurrency, formatCurrencyCompact } from "@/lib/utils";
-import type { NamedTotal } from "@/lib/analytics";
+import type { NamedTotal } from "@/lib/api/views";
 
 /**
  * Magnitude comparison across nominal categories, so every bar wears the same

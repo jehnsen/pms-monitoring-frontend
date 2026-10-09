@@ -45,6 +45,15 @@ export const DOCUMENT_KINDS = Object.keys(
   DOCUMENT_KIND_LABEL
 ) as DocumentKind[];
 
+/** Compliance papers: the upload form asks for their reference, issue date and issuer. */
+export const COMPLIANCE_DOC_KINDS: DocumentKind[] = [
+  "lto_registration",
+  "ctpl",
+  "comprehensive_insurance",
+  "emission_test",
+  "ltfrb_franchise",
+];
+
 /** Kinds that carry a renewal date, and therefore raise expiry alerts. */
 export const EXPIRING_KINDS: DocumentKind[] = [
   "lto_registration",

@@ -1,13 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Check, Lock, Minus, ShieldCheck, UserCheck } from "lucide-react";
+import { Check, Lock, Minus, ShieldCheck, UserCheck, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { AddUserDialog } from "@/components/access/add-user-dialog";
-import { DEMO_ACCOUNTS, useAuthActions, useSession } from "@/lib/auth";
+import { DEMO_ACCOUNTS, DEMO_MODE, useAuthActions, useSession } from "@/lib/auth";
 import {
   ALL_CAPABILITIES,
   CAPABILITY_LABEL,
@@ -19,16 +19,9 @@ import {
   useCan,
   type UserRole,
 } from "@/lib/rbac";
-import { useFleet } from "@/lib/store";
-import { describeError, getSupabase } from "@/lib/supabase";
+import { useFleetActions, useFleetClients, useInvitations, useMembers } from "@/lib/store";
+import { describeApiError } from "@/lib/api/errors";
 import { cn, formatDate } from "@/lib/utils";
-
-interface PersonnelRow {
-  email: string;
-  name: string;
-  title: string;
-  role: UserRole;
-}
 
 /**
  * The two sides of the tenancy boundary, rendered as separate matrices rather
@@ -61,45 +54,23 @@ export default function AccessPage() {
   const { session } = useSession();
   const { switchAccount } = useAuthActions();
   const { can, reason } = useCan();
-  const { scope, fleetClients } = useFleet();
+  const staff = session?.side === "staff";
+  const canManageAccess = can("access:manage");
+  const { fleetClients } = useFleetClients({ enabled: canManageAccess && staff });
+  // The API scopes the roster: staff see the organization's people; a
+  // client's people see only their own account's.
+  const members = useMembers({ enabled: canManageAccess });
+  const invitations = useInvitations({ enabled: canManageAccess });
+  const { revokeInvitation } = useFleetActions();
+  const pendingInvitations = (invitations.data ?? []).filter((invitation) => invitation.status === "pending");
 
   // Which account is mid-switch, so the buttons can be held while a real
   // sign-out/sign-in round trip is in flight.
   const [switching, setSwitching] = React.useState<string | null>(null);
   const [switchError, setSwitchError] = React.useState<string | null>(null);
 
-  // The roster itself, unlike the demo switcher below, is a live read: RLS on
-  // `pms_profiles` already scopes it the same way every other read is scoped —
-  // a client sees only its own people, never the provider's staff or a
-  // sibling client's roster — so no client-side filtering is needed here.
-  const [personnel, setPersonnel] = React.useState<PersonnelRow[] | null>(null);
-  const [personnelError, setPersonnelError] = React.useState<string | null>(null);
-
-  const loadPersonnel = React.useCallback(async () => {
-    const supabase = getSupabase();
-    if (!supabase) {
-      setPersonnelError("Supabase is not configured.");
-      return;
-    }
-    const { data, error } = await supabase
-      .from("pms_profiles")
-      .select("email, name, title, role")
-      .order("name");
-
-    if (error) {
-      setPersonnelError(describeError(error));
-      return;
-    }
-    setPersonnelError(null);
-    setPersonnel((data ?? []) as PersonnelRow[]);
-  }, []);
-
-  const canManageAccess = can("access:manage");
-
-  React.useEffect(() => {
-    if (!canManageAccess) return;
-    void loadPersonnel();
-  }, [loadPersonnel, canManageAccess]);
+  const personnel = members.data ?? null;
+  const personnelError = members.error ? describeApiError(members.error) : null;
 
   async function onSwitch(email: string) {
     setSwitching(email);
@@ -116,16 +87,12 @@ export default function AccessPage() {
         description="Who can see what, and who can change it. Roles are assigned per account and enforced across every screen."
       />
 
-      {/* The honesty note belongs on the page itself, not just in the code. */}
-      <div className="mb-5 flex items-start gap-3 rounded-lg border border-warning/35 bg-warning/[0.08] px-4 py-3">
+      <div className="mb-5 flex items-start gap-3 rounded-lg border border-border bg-surface-2/60 px-4 py-3">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-foreground" />
         <p className="text-xs leading-relaxed text-muted-foreground">
-          <span className="font-medium text-foreground">
-            Prototype build.
-          </span>{" "}
-          Permissions are enforced in the browser here and server-side in
-          production — this matrix is what gets mirrored on the server when
-          this build goes live.
+          <span className="font-medium text-foreground">Enforced by the server.</span> Every request is checked
+          against the signed-in role, the customer account or branches it reaches, and the modules switched on.
+          This page shows what that means; it doesn&apos;t decide it.
         </p>
       </div>
 
@@ -137,14 +104,14 @@ export default function AccessPage() {
               <div>
                 <p className="text-sm font-medium">{session.name}</p>
                 <p className="text-xs text-subtle-foreground">
-                  {session.email} · signed in{" "}
-                  {formatDate(session.signedInAt.slice(0, 10))}
+                  {session.email}
+                  {session.fleetClientName ? ` · ${session.fleetClientName}` : ` · ${session.providerName}`}
                 </p>
               </div>
             </div>
             <Badge tone="brand" size="md">
               <UserCheck />
-              {ROLE_LABEL[session.role]}
+              {session.roleLabel}
             </Badge>
           </div>
           <p className="mt-4 border-t border-border pt-4 text-xs leading-relaxed text-muted-foreground">
@@ -159,7 +126,7 @@ export default function AccessPage() {
             <h3 className="text-sm font-semibold tracking-tight">Personnel</h3>
             <p className="mt-0.5 text-xs text-subtle-foreground">
               {canManageAccess
-                ? scope?.kind === "provider"
+                ? staff
                   ? "Everyone authorised on this provider, across every fleet client beneath it."
                   : "Everyone authorised on your fleet. Provider staff and other clients' people are not listed."
                 : "Visible to the provider admin only."}
@@ -169,7 +136,7 @@ export default function AccessPage() {
             <AddUserDialog
               session={session}
               fleetClients={fleetClients}
-              onCreated={() => void loadPersonnel()}
+              onCreated={() => void invitations.refetch()}
             />
           ) : null}
         </header>
@@ -205,10 +172,10 @@ export default function AccessPage() {
                     </tr>
                   ) : null}
                   {personnel?.map((account) => {
-                    const active = session?.email === account.email;
+                    const active = session?.uid === account.id;
                     return (
                       <tr
-                        key={account.email}
+                        key={account.id}
                         className={cn(
                           "transition-colors hover:bg-surface-2/50",
                           active && "bg-brand-muted/40"
@@ -222,7 +189,8 @@ export default function AccessPage() {
                                 {account.name}
                               </span>
                               <span className="block text-2xs text-subtle-foreground">
-                                {account.title}
+                                {account.title || "—"}
+                                {account.status !== "active" ? " · disabled" : ""}
                               </span>
                             </span>
                           </span>
@@ -232,11 +200,11 @@ export default function AccessPage() {
                         </td>
                         <td className="px-4 py-3">
                           <Badge tone={active ? "brand" : "neutral"}>
-                            {ROLE_LABEL[account.role]}
+                            {account.roleLabel}
                           </Badge>
                         </td>
                         <td className="tabular px-4 py-3 text-xs text-muted-foreground">
-                          {ROLE_CAPABILITIES[account.role].length} of{" "}
+                          {(ROLE_CAPABILITIES[account.role] ?? []).length} of{" "}
                           {ALL_CAPABILITIES.length}
                           {active ? (
                             <span className="ml-2 text-2xs font-medium text-brand">
@@ -262,9 +230,34 @@ export default function AccessPage() {
         )}
       </section>
 
-      {/* Separated from the directory above on purpose. Switching account
-          crosses the tenancy boundary the rest of the page enforces, so it is
-          labelled as the bypass it is rather than sitting inside a roster. */}
+      {canManageAccess && pendingInvitations.length > 0 ? (
+        <section className="card-raised mb-5">
+          <header className="px-5 pb-3 pt-4">
+            <h3 className="text-sm font-semibold tracking-tight">Pending invitations</h3>
+            <p className="mt-0.5 text-xs text-subtle-foreground">Sent, not yet accepted.</p>
+          </header>
+          <ul className="divide-y divide-border border-t border-border">
+            {pendingInvitations.map((invitation) => (
+              <li key={invitation.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium">{invitation.name}</span>
+                  <span className="block truncate text-2xs text-subtle-foreground">
+                    {invitation.email} · {ROLE_LABEL[invitation.role] ?? invitation.role} · expires {formatDate(invitation.expiresAt.slice(0, 10))}
+                  </span>
+                </span>
+                <Button variant="ghost" size="sm" onClick={() => void revokeInvitation(invitation.id)}>
+                  <X />
+                  Revoke
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {/* Demo builds only. Switching account crosses the tenancy boundary the
+          rest of the page describes, so it is labelled as the shortcut it is. */}
+      {DEMO_MODE ? (
       <section className="card-raised mb-5 border-warning/35">
         <header className="px-5 pb-3 pt-4">
           <h3 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
@@ -272,10 +265,9 @@ export default function AccessPage() {
             Demo account switcher
           </h3>
           <p className="mt-0.5 text-xs leading-relaxed text-subtle-foreground">
-            Signs you in as anyone, on either side of the tenancy boundary and
-            across fleet clients — so the isolation above can be seen working.
-            This deliberately ignores scoping and disappears with the demo
-            accounts once a real identity provider goes in.
+            Signs you out and back in as a seeded demo account, on either side of
+            the tenancy boundary — so the isolation above can be seen working.
+            Shown only in demo builds.
           </p>
         </header>
 
@@ -287,8 +279,8 @@ export default function AccessPage() {
                 key={account.email}
                 variant={active ? "primary" : "secondary"}
                 size="sm"
-                // Switching is a real sign-out/sign-in against Supabase now, so
-                // every button is held while one is in flight.
+                // Switching is a real sign-out/sign-in against the API, so every
+                // button is held while one is in flight.
                 disabled={active || switching !== null}
                 onClick={() => void onSwitch(account.email)}
               >
@@ -304,6 +296,7 @@ export default function AccessPage() {
           </p>
         ) : null}
       </section>
+      ) : null}
 
       <section className="card-raised">
         <header className="flex flex-wrap items-start justify-between gap-3 px-5 pb-3 pt-4">

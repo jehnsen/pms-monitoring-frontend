@@ -20,10 +20,8 @@ export function PurchaseOrderPrintDocument({
   order: PurchaseOrder;
   tenant: TenantSettings;
 }) {
-  const total = order.lines.reduce(
-    (sum, line) => sum + line.quantity * line.unitCost,
-    0
-  );
+  // The API's totals (each line, and the order's, from centavos).
+  const total = order.total;
 
   return (
     <div className="po-print-root">
@@ -80,7 +78,7 @@ export function PurchaseOrderPrintDocument({
                   {formatCurrency(line.unitCost)}
                 </td>
                 <td className="tabular py-1.5 text-right">
-                  {formatCurrency(line.quantity * line.unitCost)}
+                  {formatCurrency(line.lineTotal)}
                 </td>
               </tr>
             ))}

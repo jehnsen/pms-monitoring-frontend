@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DeniedAction } from "@/components/auth/denied-action";
 import { ServiceTaskFormDialog } from "@/components/settings/service-task-form-dialog";
 import { CATEGORY_LABEL } from "@/lib/service-tasks";
-import { useFleet, useFleetActions } from "@/lib/store";
+import { useFleetActions, useServiceTasks } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
 import { formatCurrency, formatKm } from "@/lib/utils";
 
@@ -17,17 +18,18 @@ import { formatCurrency, formatKm } from "@/lib/utils";
  * `/shop/vendors`, but visible on both sides of the tenancy boundary (see
  * `lib/nav.ts`'s CONFIGURE section on each): a fleet client needs to see what
  * its vehicles are measured against, even though only `settings:manage`
- * (provider admin / fleet manager) can change it. RLS on `pms_service_tasks`
- * enforces the same split independently of this page.
+ * (staff only) can change it. The API enforces the same split; this page
+ * only reflects it.
  *
- * Warning thresholds (`DUE_SOON_KM`/`DUE_SOON_DAYS`) stay on the Settings page
+ * Warning thresholds (due-soon km/days) stay on the Settings page
  * rather than duplicating here — they're a fleet-wide display setting, not
  * part of the catalogue itself.
  */
 export default function ServiceCataloguePage() {
-  const { ready, serviceTasks } = useFleet();
+  const { serviceTasks, isSuccess: ready } = useServiceTasks();
   const { deleteServiceTask } = useFleetActions();
-  const { can, reason } = useCan();
+  const { canAsStaff, staffReason } = useCan();
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
 
   return (
     <>
@@ -36,6 +38,12 @@ export default function ServiceCataloguePage() {
         description="The PMS schedule every vehicle is measured against. Each item is due on whichever limit arrives first."
         actions={<ServiceTaskFormDialog />}
       />
+
+      {deleteError ? (
+        <p role="alert" className="mb-5 rounded-lg border border-critical/25 bg-critical/[0.06] px-4 py-3 text-xs text-critical">
+          {deleteError}
+        </p>
+      ) : null}
 
       <section className="card-raised">
         {!ready ? (
@@ -75,6 +83,7 @@ export default function ServiceCataloguePage() {
                         {task.critical ? (
                           <Badge tone="outline">Safety critical</Badge>
                         ) : null}
+                        {!task.active ? <Badge tone="neutral">Inactive</Badge> : null}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
@@ -95,25 +104,27 @@ export default function ServiceCataloguePage() {
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <span className="inline-flex items-center gap-1">
                         <ServiceTaskFormDialog task={task} />
-                        {can("settings:manage") ? (
+                        {canAsStaff("settings:manage") ? (
                           <Button
                             variant="ghost"
                             size="sm"
                             aria-label={`Remove ${task.name}`}
-                            onClick={() => {
+                            onClick={async () => {
                               if (
                                 window.confirm(
-                                  `Remove "${task.name}" from the catalogue? Vehicles keep their existing service history for it, but it will no longer be evaluated.`
+                                  `Remove "${task.name}" from the catalogue? A task with service history stays (deactivate it instead).`
                                 )
                               ) {
-                                deleteServiceTask(task.id);
+                                setDeleteError(null);
+                                const result = await deleteServiceTask(task.id);
+                                if (!result.ok) setDeleteError(`${task.name}: ${result.error}`);
                               }
                             }}
                           >
                             <Trash2 className="text-critical" />
                           </Button>
                         ) : (
-                          <DeniedAction reason={reason("settings:manage")}>
+                          <DeniedAction reason={staffReason("settings:manage")}>
                             <Button variant="ghost" size="sm" aria-label={`Remove ${task.name}`}>
                               <Trash2 />
                             </Button>

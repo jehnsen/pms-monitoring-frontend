@@ -1,36 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from "react";
-import type { Session, UserRole } from "@/types";
-import { FLEET_CLIENT_IDS, SEED_FLEET_CLIENT, SEED_PROVIDER } from "@/lib/tenant";
-import { describeError, getSupabase } from "@/lib/supabase";
+import { useCallback, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Capability, ModuleKey, Session, UserRole } from "@/types";
+import { api, apiData, ensureCsrfCookie } from "@/lib/api/client";
+import { describeApiError, isApiError } from "@/lib/api/errors";
+import { ME_KEY } from "@/lib/api/query";
+import type { ApiMe } from "@/lib/api/schema";
+import { bindBranchToUser } from "@/lib/api/branch";
+import { DEFAULT_TENANT_SETTINGS } from "@/lib/tenant";
 
 /**
- * Authentication, backed by Supabase Auth.
+ * Authentication against the TorqueLane API (Sanctum cookie session).
  *
- * This module used to compare credentials against a hardcoded list in the
- * browser, which meant the "session" was a localStorage record anyone could
- * forge from devtools. It is now a real GoTrue session, and — more importantly
- * — the tenancy it carries comes from `pms_profiles`, the same table the
- * database's RLS policies read. A user cannot claim a provider or fleet client
- * they were not granted, because the claim is never theirs to make: the browser
- * reports what the profile says, and the database independently enforces it.
- *
- * `Session` is unchanged, so every consumer of `useSession()` keeps working.
+ * The session is `GET /me`: who the user is, which side they sit on, their
+ * capabilities, modules, branches and branding. Nothing here is decided in
+ * the browser — the API answers, and re-checks on every request.
  */
 
 /* --------------------------------------------------------- demo directory */
 
 /**
- * The demo roster.
- *
- * These are now **descriptions of accounts that exist in Supabase Auth**
- * (created by `supabase/migrations/0002_pms_auth_users.sql`), not credentials
- * checked in the browser. The list survives because the access page renders it
- * as a personnel directory and the login screen offers one-click fill; sign-in
- * itself goes through Supabase and fails if the account is absent.
- *
- * The shared password is a demo convenience — see the security note in 0002.
+ * The demo roster, for one-click sign-in. Rendered only when
+ * `NEXT_PUBLIC_DEMO_MODE=true`; the accounts themselves are the API's demo
+ * seed (`DemoSeeder::DEMO_USERS`, password `demo1234`).
  */
 export interface DemoAccount {
   email: string;
@@ -38,413 +31,199 @@ export interface DemoAccount {
   name: string;
   role: UserRole;
   title: string;
-  providerId: string;
-  /** Null for provider-side staff, who see every client beneath the provider. */
-  fleetClientId: string | null;
+  /** Null for staff; else the demo customer account's name. */
+  account: string | null;
 }
+
+export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 const DEMO_PASSWORD = "demo1234";
 
-export const DEMO_ACCOUNTS: DemoAccount[] = [
-  // ---------------------------------------------------------- provider side
-  {
-    email: "owner@mekanikomore.ph",
-    password: DEMO_PASSWORD,
-    name: "Mike Manabat",
-    role: "provider_admin",
-    title: "Owner / Provider Admin",
-    providerId: SEED_PROVIDER.id,
-    fleetClientId: null,
-  },
-  {
-    email: "advisor@mekanikomore.ph",
-    password: DEMO_PASSWORD,
-    name: "Divina Lacson",
-    role: "service_advisor",
-    title: "Service Advisor",
-    providerId: SEED_PROVIDER.id,
-    fleetClientId: null,
-  },
-  {
-    email: "bay@mekanikomore.ph",
-    password: DEMO_PASSWORD,
-    name: "Arnel Pascual",
-    role: "provider_technician",
-    title: "Provider Technician",
-    providerId: SEED_PROVIDER.id,
-    fleetClientId: null,
-  },
-  // ------------------------------------------- client side · Actimed
-  {
-    email: "donmiguel@mekanikomor.ph",
-    password: DEMO_PASSWORD,
-    name: "Don Miguel",
-    role: "fleet_manager",
-    title: "Fleet Manager",
-    providerId: SEED_PROVIDER.id,
-    fleetClientId: FLEET_CLIENT_IDS.actimed,
-  },
-  {
-    email: "ops@mekanikomore.ph",
-    password: DEMO_PASSWORD,
-    name: "Marisol Bautista",
-    role: "operations",
-    title: "Operations Supervisor",
-    providerId: SEED_PROVIDER.id,
-    fleetClientId: SEED_FLEET_CLIENT.id,
-  },
-  {
-    email: "tech@mekanikomore.ph",
-    password: DEMO_PASSWORD,
-    name: "Arnel Pascual",
-    role: "technician",
-    title: "Lead Technician",
-    providerId: SEED_PROVIDER.id,
-    fleetClientId: SEED_FLEET_CLIENT.id,
-  },
-  {
-    email: "purchasing@mekanikomor.ph",
-    password: DEMO_PASSWORD,
-    name: "Grace Villanueva",
-    role: "purchasing_officer",
-    title: "Purchasing Officer",
-    providerId: SEED_PROVIDER.id,
-    fleetClientId: SEED_FLEET_CLIENT.id,
-  },
-  {
-    email: "viewer@mekanikomore.ph",
-    password: DEMO_PASSWORD,
-    name: "Camille Ortega",
-    role: "viewer",
-    title: "Authorised Viewer",
-    providerId: SEED_PROVIDER.id,
-    fleetClientId: SEED_FLEET_CLIENT.id,
-  },
-  // ------------------------------- client side · the other fleet clients
-  {
-    email: "fleet@northwind.ph",
-    password: DEMO_PASSWORD,
-    name: "Ruben Salcedo",
-    role: "fleet_manager",
-    title: "Fleet Manager",
-    providerId: SEED_PROVIDER.id,
-    fleetClientId: FLEET_CLIENT_IDS.northwind,
-  },
-  {
-    email: "operations@sagrada.ph",
-    password: DEMO_PASSWORD,
-    name: "Imelda Cortez",
-    role: "fleet_manager",
-    title: "Operations Director",
-    providerId: SEED_PROVIDER.id,
-    fleetClientId: FLEET_CLIENT_IDS.sagrada,
-  },
-  {
-    // Bayani is suspended, so this account resolves to no scope — the
-    // fail-closed path, now enforced by RLS as well as by the client.
-    email: "yard@bayanicon.ph",
-    password: DEMO_PASSWORD,
-    name: "Andres Malolos",
-    role: "fleet_manager",
-    title: "Yard Manager (suspended account)",
-    providerId: SEED_PROVIDER.id,
-    fleetClientId: FLEET_CLIENT_IDS.bayani,
-  },
+const ALL_DEMO_ACCOUNTS: DemoAccount[] = [
+  { email: "owner@mekanikomore.ph", password: DEMO_PASSWORD, name: "Mike Manabat", role: "provider_admin", title: "Owner / Provider Admin", account: null },
+  { email: "advisor@mekanikomore.ph", password: DEMO_PASSWORD, name: "Divina Lacson", role: "service_advisor", title: "Service Advisor", account: null },
+  { email: "bay@mekanikomore.ph", password: DEMO_PASSWORD, name: "Arnel Pascual", role: "provider_technician", title: "Provider Technician", account: null },
+  { email: "donmiguel@mekanikomor.ph", password: DEMO_PASSWORD, name: "Don Miguel", role: "fleet_manager", title: "Fleet Manager", account: "Actimed" },
+  { email: "ops@mekanikomore.ph", password: DEMO_PASSWORD, name: "Marisol Bautista", role: "operations", title: "Operations Supervisor", account: "Actimed" },
+  { email: "tech@mekanikomore.ph", password: DEMO_PASSWORD, name: "Arnel Pascual", role: "technician", title: "Lead Technician", account: "Actimed" },
+  { email: "purchasing@mekanikomor.ph", password: DEMO_PASSWORD, name: "Grace Villanueva", role: "purchasing_officer", title: "Purchasing Officer", account: "Actimed" },
+  { email: "viewer@mekanikomore.ph", password: DEMO_PASSWORD, name: "Camille Ortega", role: "viewer", title: "Authorised Viewer", account: "Actimed" },
+  { email: "fleet@northwind.ph", password: DEMO_PASSWORD, name: "Ruben Salcedo", role: "fleet_manager", title: "Fleet Manager", account: "Northwind Logistics" },
+  { email: "operations@sagrada.ph", password: DEMO_PASSWORD, name: "Imelda Cortez", role: "fleet_manager", title: "Operations Director", account: "Sagrada Medical Transport" },
+  // Bayani is suspended: signing in is refused (the fail-closed path, live).
+  { email: "yard@bayanicon.ph", password: DEMO_PASSWORD, name: "Andres Malolos", role: "fleet_manager", title: "Yard Manager (suspended account)", account: "Bayani Construction" },
 ];
+
+/** Empty outside demo mode, so nothing renders the roster in production. */
+export const DEMO_ACCOUNTS: DemoAccount[] = DEMO_MODE ? ALL_DEMO_ACCOUNTS : [];
 
 export type { Session };
 
-/* ------------------------------------------------------------ session store */
+/* ------------------------------------------------------------ the session */
 
-/**
- * `undefined` means "not resolved yet" and is what the server renders; `null`
- * means "resolved, nobody signed in". The guard has to tell those apart or it
- * bounces every first paint to the login screen.
- */
-type Snapshot = Session | null | undefined;
-
-let session: Snapshot = undefined;
-let loading = false;
-const listeners = new Set<() => void>();
-
-function emit() {
-  for (const listener of listeners) listener();
-}
-
-function setSession(next: Session | null) {
-  session = next;
-  emit();
-}
-
-/**
- * Builds the app's `Session` from a Supabase user plus its profile row.
- *
- * The profile is the authority on role and tenancy. If it is missing, the user
- * authenticated but has no place in the tenancy tree — that resolves to no
- * scope at all rather than to a guessed default, which is the same fail-closed
- * rule `explainTenantScope` applies.
- */
-async function loadSession(userId: string, email: string): Promise<Session | null> {
-  const supabase = getSupabase();
-  if (!supabase) return null;
-
-  const { data, error } = await supabase
-    .from("pms_profiles")
-    .select("email, name, first_name, last_name, username, role, title, provider_id, fleet_client_id")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (error || !data) {
-    console.warn(
-      `[auth] no pms_profiles row for ${email}` +
-        (error ? ` (${describeError(error)})` : "") +
-        " — signed in with no tenant scope."
-    );
-    return null;
-  }
-
+/** `/me` → the app's Session. */
+export function sessionFromMe(me: ApiMe): Session {
+  const branding = me.branding;
   return {
-    uid: userId,
-    email: data.email ?? email,
-    name: data.name ?? email,
-    firstName: data.first_name ?? "",
-    lastName: data.last_name ?? "",
-    username: data.username ?? "",
-    role: data.role as UserRole,
-    title: data.title ?? "",
-    signedInAt: new Date().toISOString(),
-    providerId: data.provider_id ?? null,
-    fleetClientId: data.fleet_client_id ?? null,
+    uid: me.user.id,
+    email: me.user.email,
+    name: me.user.name,
+    firstName: me.user.first_name,
+    lastName: me.user.last_name,
+    username: me.user.username ?? "",
+    role: me.user.role as UserRole,
+    roleLabel: me.user.role_label,
+    title: me.user.title ?? "",
+    side: me.side,
+    providerId: me.organization.id,
+    providerName: me.organization.name,
+    fleetClientId: me.customer_account?.id ?? null,
+    fleetClientName: me.customer_account?.display_name ?? null,
+    capabilities: me.capabilities as Capability[],
+    modules: me.modules.active as ModuleKey[],
+    branches: me.branches.allowed.map((b) => ({ id: b.id, name: b.name, slug: b.slug })),
+    branchRestricted: me.branches.restricted,
+    branding: {
+      displayName: branding.display_name || DEFAULT_TENANT_SETTINGS.displayName,
+      logoUrl: branding.logo_url,
+      brandColor: branding.brand_color ?? DEFAULT_TENANT_SETTINGS.brandColor,
+      supportEmail: branding.support_email ?? DEFAULT_TENANT_SETTINGS.supportEmail,
+    },
   };
+}
+
+/** `null` when nobody is signed in (a 401 is an answer, not an error). */
+async function fetchSession(): Promise<Session | null> {
+  try {
+    return sessionFromMe(await apiData<ApiMe>("/me", { branch: null }));
+  } catch (error) {
+    if (isApiError(error) && (error.isUnauthenticated || error.status === 403)) return null;
+    throw error;
+  }
 }
 
 /**
- * Resolves the current session once, then keeps it in step with Supabase's own
- * auth events (token refresh, sign-out, or a sign-out in another tab).
+ * `ready` is false until `/me` has answered once; `session` is null when
+ * nobody is signed in. The guard must tell those apart or every first paint
+ * bounces to the login screen.
  */
-function ensureSubscribed() {
-  if (loading) return;
-  loading = true;
+export function useSession(): { session: Session | null; ready: boolean } {
+  const query = useQuery({ queryKey: ME_KEY, queryFn: fetchSession, staleTime: 5 * 60_000 });
+  const session = query.data ?? null;
 
-  const supabase = getSupabase();
-  if (!supabase) {
-    // Unconfigured: resolve to "nobody signed in" so the app renders the login
-    // screen rather than hanging on a skeleton forever.
-    setSession(null);
-    return;
-  }
-
-  supabase.auth
-    .getSession()
-    .then(async ({ data }) => {
-      const user = data.session?.user;
-      setSession(user ? await loadSession(user.id, user.email ?? "") : null);
-    })
-    .catch(() => setSession(null));
-
-  supabase.auth.onAuthStateChange(async (event, next) => {
-    if (event === "SIGNED_OUT" || !next?.user) {
-      setSession(null);
-      return;
-    }
-    // TOKEN_REFRESHED fires often and carries no tenancy change; re-reading the
-    // profile on every one would be a query per refresh for no benefit.
-    if (event === "SIGNED_IN" || event === "USER_UPDATED" || session === undefined) {
-      setSession(await loadSession(next.user.id, next.user.email ?? ""));
-    }
-  });
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function getSnapshot(): Snapshot {
-  return session;
-}
-
-function getServerSnapshot(): Snapshot {
-  return undefined;
-}
-
-export function useSession() {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-
-  // Kicks off resolution on first mount. In an effect rather than inline so the
-  // render pass stays pure.
   useEffect(() => {
-    ensureSubscribed();
-  }, []);
+    if (query.isSuccess) {
+      bindBranchToUser(session?.side === "staff" ? session.uid : null, session?.branches.map((b) => b.id) ?? []);
+    }
+  }, [query.isSuccess, session]);
 
-  return { session: snapshot ?? null, ready: snapshot !== undefined };
+  return { session, ready: query.isSuccess || query.isError };
 }
 
-export type SignInResult = { ok: true } | { ok: false; error: string };
+/* ---------------------------------------------------------------- actions */
+
+export type SignInResult = { ok: true; session: Session } | { ok: false; error: string };
+export type ActionResult = { ok: true } | { ok: false; error: string; fields?: Record<string, string[]> };
 
 export function useAuthActions() {
-  /**
-   * Signs in against Supabase Auth. Now asynchronous — it is a real network
-   * call rather than a comparison against a list in memory.
-   */
-  const signIn = useCallback(
+  const queryClient = useQueryClient();
+
+  const establish = useCallback(
     async (email: string, password: string): Promise<SignInResult> => {
-      const supabase = getSupabase();
-      if (!supabase) {
-        return {
-          ok: false,
-          error:
-            "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and " +
-            "NEXT_PUBLIC_SUPABASE_ANON_KEY in .env, then restart the dev server.",
-        };
+      try {
+        await ensureCsrfCookie(true);
+        const me = await apiData<ApiMe>("/auth/login", {
+          method: "POST",
+          body: { email: email.trim().toLowerCase(), password },
+          branch: null,
+        });
+        const session = sessionFromMe(me);
+        // A new identity: drop everything cached for the previous one.
+        queryClient.clear();
+        queryClient.setQueryData(ME_KEY, session);
+        return { ok: true, session };
+      } catch (error) {
+        if (isApiError(error) && error.code === "validation") {
+          return { ok: false, error: error.field("email") ?? "That email and password combination isn't recognised." };
+        }
+        return { ok: false, error: describeApiError(error) };
       }
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-
-      if (error || !data.user) {
-        return {
-          ok: false,
-          error:
-            error?.message === "Invalid login credentials"
-              ? "That email and password combination isn't recognised."
-              : describeError(error) || "Sign-in failed.",
-        };
-      }
-
-      // Resolved eagerly so the caller can route on the new role without
-      // waiting for the auth-state listener to fire.
-      setSession(await loadSession(data.user.id, data.user.email ?? email));
-      return { ok: true };
     },
-    []
+    [queryClient]
   );
 
+  const signIn = useCallback((email: string, password: string) => establish(email, password), [establish]);
+
   /**
-   * Demo convenience: switches the active account from the access page.
-   *
-   * This is a genuine sign-in now — it has to be, because the database only
-   * honours a real JWT — so it signs the current user out and back in as the
-   * target account using the shared demo password. Delete it along with
-   * `DEMO_ACCOUNTS` once real user management exists.
+   * Null the session — that disables every session-bound query — and drop the
+   * data nothing is showing. Queries a mounted screen still observes are left
+   * to unmount and be collected: removing one would make its observer refetch
+   * at once, into a 401. Every key carries the user id, so none of it can
+   * surface for whoever signs in next.
    */
+  const endSession = useCallback(() => {
+    queryClient.setQueryData(ME_KEY, null);
+    queryClient.removeQueries({
+      predicate: (query) => query.queryKey[0] !== ME_KEY[0] && query.getObserversCount() === 0,
+    });
+    // Signing out rotates the session; take its new token before the next write.
+    void ensureCsrfCookie(true);
+  }, [queryClient]);
+
+  const signOut = useCallback(async () => {
+    try {
+      await api("/auth/logout", { method: "POST", branch: null });
+    } catch {
+      // Signing out of a session that already ended is still signing out.
+    }
+    endSession();
+  }, [endSession]);
+
+  /** Demo convenience (demo mode only): sign out, then in as the given demo account. */
   const switchAccount = useCallback(
     async (email: string): Promise<SignInResult> => {
       const account = DEMO_ACCOUNTS.find((candidate) => candidate.email === email);
       if (!account) return { ok: false, error: "Unknown account." };
-
-      const supabase = getSupabase();
-      if (!supabase) return { ok: false, error: "Supabase is not configured." };
-
-      await supabase.auth.signOut();
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: account.email,
-        password: account.password,
-      });
-
-      if (error || !data.user) {
-        setSession(null);
-        return { ok: false, error: describeError(error) || "Switch failed." };
+      try {
+        await api("/auth/logout", { method: "POST", branch: null });
+      } catch {
+        // Already signed out.
       }
-
-      setSession(await loadSession(data.user.id, data.user.email ?? account.email));
-      return { ok: true };
+      endSession();
+      return establish(account.email, account.password);
     },
-    []
+    [establish, endSession]
   );
 
-  const signOut = useCallback(async () => {
-    const supabase = getSupabase();
-    if (supabase) await supabase.auth.signOut();
-    setSession(null);
-  }, []);
-
-  /**
-   * Edits the signed-in user's own name/username. `pms_profiles_update_self`
-   * pins role and tenancy, so this can only ever touch identity fields —
-   * nothing here needs a capability check on top of "is signed in".
-   */
+  /** The signed-in user's own names and username (`PATCH /me`). */
   const updateProfile = useCallback(
-    async (patch: {
-      firstName: string;
-      lastName: string;
-      username: string;
-    }): Promise<SignInResult> => {
-      const current = session;
-      if (!current) return { ok: false, error: "You need to be signed in." };
-
-      const supabase = getSupabase();
-      if (!supabase) return { ok: false, error: "Supabase is not configured." };
-
-      const firstName = patch.firstName.trim();
-      const lastName = patch.lastName.trim();
-      const username = patch.username.trim();
-      if (!firstName || !lastName || !username) {
-        return {
-          ok: false,
-          error: "First name, last name, and username are all required.",
-        };
+    async (patch: { firstName: string; lastName: string; username: string }): Promise<ActionResult> => {
+      try {
+        await api("/me", {
+          method: "PATCH",
+          body: { first_name: patch.firstName.trim(), last_name: patch.lastName.trim(), username: patch.username.trim() },
+        });
+        await queryClient.invalidateQueries({ queryKey: ME_KEY });
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: describeApiError(error), fields: isApiError(error) ? error.fields : undefined };
       }
-
-      const name = `${firstName} ${lastName}`;
-      setSession({ ...current, firstName, lastName, username, name });
-
-      const { error } = await supabase
-        .from("pms_profiles")
-        .update({ first_name: firstName, last_name: lastName, username, name })
-        .eq("id", current.uid);
-
-      if (error) {
-        setSession(current);
-        return {
-          ok: false,
-          error:
-            error.code === "23505"
-              ? "That username is already taken."
-              : describeError(error),
-        };
-      }
-      return { ok: true };
     },
-    []
+    [queryClient]
   );
 
-  /**
-   * Changes the signed-in user's password. Supabase's `updateUser` trusts
-   * whatever session is live and does not itself ask for the current
-   * password, so it's verified here with a fresh sign-in first — otherwise
-   * anyone at an unlocked, already-signed-in browser could change it without
-   * knowing it.
-   */
-  const changePassword = useCallback(
-    async (currentPassword: string, newPassword: string): Promise<SignInResult> => {
-      const current = session;
-      if (!current) return { ok: false, error: "You need to be signed in." };
-
-      const supabase = getSupabase();
-      if (!supabase) return { ok: false, error: "Supabase is not configured." };
-
-      const { error: verifyError } = await supabase.auth.signInWithPassword({
-        email: current.email,
-        password: currentPassword,
+  /** `PUT /me/password`: the API checks the current password itself. */
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string): Promise<ActionResult> => {
+    try {
+      await api("/me/password", {
+        method: "PUT",
+        body: { current_password: currentPassword, password: newPassword, password_confirmation: newPassword },
       });
-      if (verifyError) {
-        return { ok: false, error: "Your current password isn't correct." };
-      }
-
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) {
-        return { ok: false, error: describeError(error) || "Could not change your password." };
-      }
       return { ok: true };
-    },
-    []
-  );
+    } catch (error) {
+      return { ok: false, error: describeApiError(error), fields: isApiError(error) ? error.fields : undefined };
+    }
+  }, []);
 
   return { signIn, signOut, switchAccount, updateProfile, changePassword };
 }

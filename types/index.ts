@@ -1,11 +1,15 @@
 /**
- * Lives here rather than in `lib/rbac.ts` so `lib/auth.ts` can type a session's
- * role without importing the RBAC module, which imports auth in turn.
+ * The app's domain types: what components render.
  *
- * Roles split by which side of the tenancy boundary they sit on. A client-side
- * role is always scoped to exactly one `FleetClient`; a provider-side role sees
- * every client beneath its `Provider`. See `lib/tenancy.ts`.
+ * Since the API cutover (Phase 5) these are the API's resources, mapped by
+ * `lib/mappers.ts` (camelCase, money in pesos for display). Everything the API
+ * derives — due dates, health, totals, approval values, the next legal
+ * statuses, expiry status — arrives as data here; the frontend never computes
+ * an authoritative value itself (../api CLAUDE.md, R2).
  */
+
+/* ------------------------------------------------------------- identity */
+
 export type ClientUserRole =
   | "fleet_manager"
   | "operations"
@@ -16,186 +20,187 @@ export type ClientUserRole =
 export type ProviderUserRole =
   | "provider_admin"
   | "service_advisor"
-  | "provider_technician";
+  | "provider_technician"
+  | "branch_manager"
+  | "cashier";
 
 export type UserRole = ClientUserRole | ProviderUserRole;
 
-/* --------------------------------------------------------------- tenancy */
+/** Which side of the tenancy boundary a session sits on (the API's `side`). */
+export type UserSide = "staff" | "portal";
 
-/**
- * The service centre operating this instance. One provider serves many fleet
- * clients; it is the root of the tenancy tree.
- */
-export interface Provider {
+/** The API's capability list (`GET /me` → `capabilities`). */
+export type Capability =
+  | "vehicle:update"
+  | "vehicle:manage"
+  | "workorder:create"
+  | "workorder:update"
+  | "workorder:complete"
+  | "workorder:approve"
+  | "po:issue"
+  | "document:upload"
+  | "document:delete"
+  | "settings:manage"
+  | "access:manage"
+  | "customer:manage"
+  | "organization:manage";
+
+/** A module the API gates screens behind. */
+export type ModuleKey = "repair_pms" | "detailing" | "equipment" | "cafe_pos";
+
+export interface BranchRef {
   id: string;
   name: string;
   slug: string;
+}
+
+/** Branding: the tenant's (`/me` → `branding`), or the platform's when none resolves. */
+export interface TenantSettings {
+  displayName: string;
   logoUrl: string | null;
-  /** Hex, e.g. "#1d5ba6". */
+  /** Hex, e.g. "#1d5ba6" — drives the `--brand`/`--brand-foreground` CSS vars. */
   brandColor: string;
   supportEmail: string;
-  createdAt: string;
-}
-
-export type FleetClientStatus = "active" | "suspended";
-
-/**
- * One fleet operator served by a provider. Every vehicle belongs to exactly one
- * of these, and it is the unit of data isolation — a client-side user never
- * sees across this boundary, not even to a sibling under the same provider.
- */
-export interface FleetClient {
-  id: string;
-  providerId: string;
-  name: string;
-  slug: string;
-  contactName: string;
-  contactEmail: string;
-  contractTerms: string;
-  paymentTermsDays: number;
-  /** Per-client approval band overrides; null falls back to the provider's. */
-  approvalThresholdOverrides: Partial<ApprovalSettings> | null;
-  /**
-   * Client-side branding. Null on either field falls back to the provider's,
-   * so a client that hasn't supplied a mark still gets a coherent shell rather
-   * than a blank one.
-   */
-  logoUrl: string | null;
-  brandColor: string | null;
-  status: FleetClientStatus;
-  createdAt: string;
 }
 
 /**
- * A service bay on the provider's floor. Static catalogue rather than stored
- * state — bays are a property of the building, and nothing in the app creates
- * or retires one. See `lib/bays.ts`.
- */
-export interface Bay {
-  id: string;
-  name: string;
-  /** What the bay specialises in; advisory when assigning, never enforced. */
-  focus: string;
-  /** Working hours the bay can absorb in one day — the denominator for utilisation. */
-  capacityHoursPerDay: number;
-}
-
-/** A technician on the provider's staff. Static catalogue; see `lib/technicians.ts`. */
-export interface Technician {
-  /** Matches `WorkOrder.technician`, which stores the name rather than an id. */
-  name: string;
-  specialty: TaskCategory | "general";
-  /** Bay this technician normally works out of. */
-  homeBayId: string;
-}
-
-/**
- * The signed-in user. A provider-side user carries `providerId` with
- * `fleetClientId` null; a client-side user carries both. Any other combination
- * is ambiguous and `resolveTenantScope` fails closed on it.
- *
- * Lives here rather than in `lib/auth.ts` so `lib/tenancy.ts` can type a
- * session without importing the auth module.
+ * The signed-in user, as `GET /me` describes them. Role, capabilities,
+ * modules, branches and branding are the API's answer.
  */
 export interface Session {
-  /**
-   * The Supabase `auth.users` id — also the primary key of `pms_profiles`.
-   * Use this, never `email`, as the key for anything that has to match a
-   * database `uuid` column (e.g. `pms_alert_interactions.user_id`).
-   */
+  /** The API user id (ULID). */
   uid: string;
   email: string;
   name: string;
-  /** Split out of `name` for the profile-edit form; keep both in sync on write. */
   firstName: string;
   lastName: string;
   username: string;
   role: UserRole;
+  /** The API's label for the role ("Fleet Manager"). */
+  roleLabel: string;
   /** Job title for display; `role` is what permissions key off. */
   title: string;
-  signedInAt: string;
-  providerId: string | null;
+  side: UserSide;
+  /** The organization (../web's "provider"). */
+  providerId: string;
+  providerName: string;
+  /** The customer account a portal user belongs to; null for staff. */
   fleetClientId: string | null;
+  fleetClientName: string | null;
+  capabilities: Capability[];
+  /** Modules active where the session works. */
+  modules: ModuleKey[];
+  /** Branches a staff member may work in (empty for portal users). */
+  branches: BranchRef[];
+  /** True when the user is pinned to specific branches. */
+  branchRestricted: boolean;
+  branding: TenantSettings;
 }
+
+/** A person with access (`GET /users`). */
+export interface Member {
+  id: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  username: string;
+  email: string;
+  title: string;
+  side: UserSide;
+  role: UserRole;
+  roleLabel: string;
+  fleetClientId: string | null;
+  branchIds: string[];
+  status: "active" | "disabled" | string;
+  lastLoginAt: string | null;
+  createdAt: string;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  name: string;
+  side: UserSide;
+  role: UserRole;
+  title: string;
+  fleetClientId: string | null;
+  branchIds: string[];
+  status: "accepted" | "revoked" | "expired" | "pending";
+  expiresAt: string;
+  createdAt: string;
+}
+
+/* ------------------------------------------------------------- tenancy */
+
+export type FleetClientStatus = "active" | "suspended";
+
+/** A customer account (../web's "fleet client"). */
+export interface FleetClient {
+  id: string;
+  name: string;
+  accountType: "company" | "individual" | string;
+  registeredName: string;
+  contactName: string;
+  contactEmail: string;
+  mobile: string;
+  address: string;
+  tin: string;
+  paymentTermsDays: number;
+  creditLimit: number | null;
+  /** Sparse overrides of the organization's bands (pesos for money keys). */
+  approvalThresholdOverrides: Partial<ApprovalSettings> | null;
+  logoUrl: string | null;
+  brandColor: string | null;
+  status: FleetClientStatus;
+  /** Free text: contract terms and the like. */
+  notes: string;
+  tags: string[];
+  createdAt: string;
+}
+
+export interface Bay {
+  id: string;
+  branchId: string;
+  name: string;
+  /** What the bay specialises in; advisory when assigning, never enforced. */
+  focus: string;
+  capacityHoursPerDay: number;
+  status: string;
+}
+
+/** A technician on the provider's roster (`GET /technicians`). */
+export interface ProviderTechnician {
+  id: string;
+  branchId: string;
+  name: string;
+  /** Advisory only, like `Bay.focus`. */
+  specialty: string;
+  skillTags: string[];
+  /** Bay this technician normally works out of; null when unassigned. */
+  homeBayId: string | null;
+  userId: string | null;
+  /** False retires a technician from new assignments without deleting history. */
+  active: boolean;
+}
+
+/** A repair vendor on the provider's approved list. */
+export interface ProviderVendor {
+  id: string;
+  name: string;
+  active: boolean;
+}
+
+/* --------------------------------------------------------------- fleet */
 
 export type VehicleOperationalStatus = "active" | "in_service" | "down";
 
-/** Health of a preventive-maintenance item, worst-first. */
 export type PmsStatus = "overdue" | "due_soon" | "ok";
 
-/**
- * Every job is a purchase before it's a repair, so it lives through an
- * approval stage before it can be scheduled:
- *
- *   draft -> pending_approval -> approved | partially_approved | declined
- *                                    |
- *                              scheduled -> in_progress -> closed
- *
- * `cancelled` is reachable from any pre-closed state and is a distinct
- * concept from `declined` — a decline is a purchasing decision on the
- * lines; a cancellation is the job being abandoned outright.
- */
-export type WorkOrderStatus =
-  | "draft"
-  | "pending_approval"
-  | "approved"
-  | "partially_approved"
-  | "declined"
-  | "scheduled"
-  | "in_progress"
-  | "closed"
-  | "cancelled";
-
-export type WorkOrderType = "preventive" | "corrective" | "inspection";
-
-export type Priority = "low" | "medium" | "high" | "critical";
+export type ComplianceStatus = "ok" | "expiring" | "expired";
 
 export type VehicleClass = "sedan" | "suv" | "pickup" | "van" | "truck";
 
 export type FuelType = "gasoline" | "diesel" | "hybrid" | "electric";
-
-export interface Vehicle {
-  id: string;
-  /**
-   * The tenancy anchor. Work orders and PMS intervals derive their client from
-   * here rather than carrying a copy — one unambiguous hop, no denormalisation.
-   */
-  fleetClientId: string;
-  plateNumber: string;
-  make: string;
-  model: string;
-  year: number;
-  vin: string;
-  vehicleClass: VehicleClass;
-  fuelType: FuelType;
-  color: string;
-  /** Licence expiry of whoever is in `assignedTo`. Null when nobody's assigned. */
-  driverLicenceExpiry: string | null;
-  /** Current odometer reading, in kilometres. */
-  odometer: number;
-  /**
-   * When that reading was taken. Readings are not always same-day, so distance
-   * projections roll the odometer forward from here rather than assuming it is
-   * current.
-   */
-  odometerReadAt: string;
-  /** Rolling average distance per day, used to project km-based intervals onto a date. */
-  avgDailyKm: number;
-  status: VehicleOperationalStatus;
-  assignedTo: string;
-  department: string;
-  location: string;
-  acquiredOn: string;
-  registrationExpiry: string;
-  insuranceExpiry: string;
-  /** Per-task service history keyed by task template id. */
-  taskState: Record<string, TaskState>;
-}
-
-export interface TaskState {
-  lastDoneOdometer: number;
-  lastDoneOn: string;
-}
 
 export type TaskCategory =
   | "engine"
@@ -209,65 +214,164 @@ export type TaskCategory =
 /** A recurring preventive-maintenance item, due on whichever limit arrives first. */
 export interface ServiceTask {
   id: string;
+  code: string;
   name: string;
   category: TaskCategory;
   intervalKm: number;
   intervalMonths: number;
+  /** Catalogue estimate, pesos. */
   estimatedCost: number;
   estimatedHours: number;
   /** Skipping this one takes the vehicle off the road. */
   critical: boolean;
-}
-
-/**
- * A technician on the provider's staff, backed by `pms_technicians`.
- *
- * Distinct from `Technician` in `lib/technicians.ts`, which is the older
- * static, name-keyed catalogue that seeded `WorkOrder.technician`. This is
- * the database-backed roster a provider admin manages from Settings; a work
- * order's `technicianId` (nullable) points here, and `WorkOrder.technician`
- * stays the historical text label so a technician who has since left the shop
- * still renders a name on old jobs.
- */
-export interface ProviderTechnician {
-  id: string;
-  name: string;
-  /** Advisory only, like `Bay.focus` — nothing stops a job going elsewhere. */
-  specialty: string;
-  /** Bay this technician normally works out of; null when unassigned. */
-  homeBayId: string | null;
-  /** False retires a technician from new assignments without deleting history. */
   active: boolean;
 }
 
-/** A repair vendor on the provider's approved list, backed by `pms_vendors`. */
-export interface ProviderVendor {
-  id: string;
-  name: string;
-  active: boolean;
+/** The PMS summary the API attaches to a vehicle. */
+export interface VehiclePms {
+  status: PmsStatus;
+  healthScore: number;
+  overdueCount: number;
+  dueSoonCount: number;
+  nextItem: {
+    serviceTaskId: string;
+    name: string;
+    status: PmsStatus;
+    dueDate: string;
+    daysRemaining: number;
+    dueLabel: string;
+    governedBy: "distance" | "time";
+    kmRemaining: number;
+    dueOdometer: number;
+    progress: number;
+  } | null;
 }
 
-/**
- * One entry in a work order's status history. Append-only — nothing ever
- * edits or removes an entry, so the record can't drift from what actually
- * happened.
- */
-export interface WorkOrderEvent {
+export interface Vehicle {
   id: string;
-  status: WorkOrderStatus;
-  /** ISO datetime. */
-  at: string;
-  actor: string;
+  fleetClientId: string;
+  plateNumber: string;
+  make: string;
+  model: string;
+  year: number | null;
+  vin: string;
+  vehicleClass: VehicleClass | null;
+  fuelType: FuelType | null;
+  color: string;
+  /** Licence expiry of whoever is in `assignedTo`. */
+  driverLicenceExpiry: string | null;
+  /** Current odometer (the latest effective reading), km. */
+  odometer: number;
+  odometerLabel: string;
+  odometerReadAt: string;
+  odometerAgeDays: number;
+  /** The API's verdict: the reading is too old to project from. */
+  odometerStale: boolean;
+  avgDailyKm: number;
+  status: VehicleOperationalStatus;
+  assignedTo: string;
+  department: string;
+  location: string;
+  acquiredOn: string | null;
+  registrationExpiry: string | null;
+  insuranceExpiry: string | null;
+  ltoRenewalMonth: string | null;
+  complianceStatus: ComplianceStatus;
+  /** Null where PMS doesn't apply (repair module off). */
+  pms: VehiclePms | null;
+  archivedAt: string | null;
 }
 
-/** One line on a work order's parts list. */
-export interface PartLine {
-  id: string;
-  partNumber: string;
-  name: string;
-  quantity: number;
-  unitCost: number;
+export interface PmsItem {
+  task: Pick<ServiceTask, "id" | "code" | "name" | "category" | "critical" | "intervalKm" | "intervalMonths">;
+  status: PmsStatus;
+  kmRemaining: number;
+  daysRemaining: number;
+  /** "in 11 days", "3 days overdue" — the API's wording. */
+  dueLabel: string;
+  progress: number;
+  dueOdometer: number;
+  dueDate: string;
+  governedBy: "distance" | "time";
+  lastDoneOn: string;
+  lastDoneOdometer: number;
 }
+
+/** `GET /vehicles/{id}/health`. */
+export interface VehicleHealth {
+  vehicleId: string;
+  evaluatedOn: string;
+  items: PmsItem[];
+  status: PmsStatus;
+  overdueCount: number;
+  dueSoonCount: number;
+  nextItem: PmsItem | null;
+  healthScore: number;
+  thresholds: { dueSoonKm: number; dueSoonDays: number };
+}
+
+export interface MeterReading {
+  id: string;
+  value: number | null;
+  readOn: string;
+  source: string;
+  recordedBy: string | null;
+  voidsReadingId: string | null;
+  voidReason: string | null;
+  createdAt: string;
+}
+
+/** `GET /fleet/summary` (and the dashboard's `summary`). */
+export interface FleetSummary {
+  evaluatedOn: string;
+  total: number;
+  compliant: number;
+  dueSoon: number;
+  overdue: number;
+  inService: number;
+  down: number;
+  complianceRate: number;
+  avgHealthScore: number;
+  totalOdometer: number;
+  documents: { expired: number; expiring: number; ok: number };
+  expiringDocuments: { windowDays: number; total: number; byKind: { label: string; count: number }[] };
+  thresholds: {
+    dueSoonKm: number;
+    dueSoonDays: number;
+    odometerStaleDays: number;
+    dashboardExpiryWindowDays: number;
+    badgeWarningDays: number;
+    documentExpiryWarningDays: number;
+  };
+}
+
+/* --------------------------------------------------------- work orders */
+
+export type WorkOrderStatus =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "partially_approved"
+  | "declined"
+  | "scheduled"
+  | "in_progress"
+  | "closed"
+  | "cancelled";
+
+/** The brief's five-stage workflow, projected by the API over the nine statuses. */
+export type LifecycleStage =
+  | "draft"
+  | "pending_approval"
+  | "approved"
+  | "in_progress"
+  | "ready_for_billing"
+  | "completed"
+  | "declined"
+  | "cancelled";
+
+export type WorkOrderType = "preventive" | "corrective" | "inspection";
+
+export type Priority = "low" | "medium" | "high" | "critical";
 
 /** How much a line's absence would matter, worst-first. */
 export type LineUrgency = "safety_critical" | "recommended" | "optional";
@@ -277,56 +381,48 @@ export type PartsSource = "own_stock" | "supplier_provided";
 
 export type LineApprovalStatus = "pending" | "approved" | "declined" | "deferred";
 
+export type ApproverBand = "auto" | "operations" | "fleet_manager";
+
+/** One entry in a work order's status history (append-only). */
+export interface WorkOrderEvent {
+  id: string;
+  status: WorkOrderStatus;
+  at: string;
+  actor: string;
+}
+
+/** A part fitted, recorded at close-out. */
+export interface PartLine {
+  id: string;
+  partNumber: string;
+  name: string;
+  quantity: number;
+  /** Pesos. */
+  unitCost: number;
+}
+
 /**
- * One purchasable item on a work order. Approval happens per line, not per
- * order — a real answer is "do the brakes, skip the shocks" — so the order's
- * status is always derived from the set of its lines (see
- * `lib/approvals.ts`'s `deriveOrderStatus`), never set directly once the
- * order has left `draft`.
+ * One priced line of a work order. Costs are the API's stored prices
+ * (pesos here): the historical amount the customer authorised.
  */
 export interface WorkOrderLine {
   id: string;
-  /**
-   * The catalogue task this line bills for, when there is one. Null for
-   * ad-hoc work — a technician finding an unlisted repair mid-job has no
-   * catalogue id, and the schema must not force one.
-   *
-   * When set, the catalogue's name is what renders; `description` is the
-   * historical label kept for lines whose task is later removed.
-   */
-  serviceTaskId?: string | null;
+  serviceTaskId: string | null;
   description: string;
   category: TaskCategory | "other";
-  /**
-   * How many of the part this line fits. Always at least 1 — a line that
-   * bills only labour still counts as one of itself, so `quantity * unitPartRate`
-   * stays meaningful at a zero rate.
-   */
   quantity: number;
-  /** Price of one unit of the part. `partCost` is `quantity * unitPartRate`. */
   unitPartRate: number;
-  /** Billable hours on this line. `labourCost` is `labourHours * labourRate`. */
   labourHours: number;
-  /** Shop rate applied to `labourHours`, per hour. */
   labourRate: number;
-  /**
-   * Extended part total, always `quantity * unitPartRate`.
-   *
-   * Stored rather than derived at read time because it is the historical
-   * price: re-deriving it would let a later rate change rewrite what a client
-   * already approved. `lib/billing.ts`'s `recalcLine` is the only thing that
-   * should write it — never set it directly beside a qty/rate change, or the
-   * two drift apart.
-   */
   partCost: number;
-  /** Extended labour total, always `labourHours * labourRate`. Same rule as `partCost`. */
   labourCost: number;
+  /** partCost + labourCost, from the API. */
+  lineCost: number;
   urgency: LineUrgency;
   partsSource: PartsSource;
   approvalStatus: LineApprovalStatus;
   approvedBy: string | null;
   approvedAt: string | null;
-  /** Required when `approvalStatus` is `declined`, especially for safety-critical lines. */
   declineReason: string | null;
   photoUrls: string[];
 }
@@ -340,72 +436,122 @@ export type ApprovalAction =
   | "escalated"
   | "variance_approved";
 
-/**
- * One entry in a work order's approval log. Append-only, like `history` —
- * this is the shop's liability record for what was and wasn't authorised.
- */
+/** One entry in a work order's approval log (append-only). */
 export interface ApprovalLogEntry {
   id: string;
-  /**
-   * Carried explicitly rather than derived. This table is append-only and is
-   * the shop's liability record; it must remain readable in isolation without
-   * joining back through a work order to a vehicle. Backfilled by `normalise()`.
-   */
-  fleetClientId: string;
-  /** Null for order-level entries, e.g. a variance re-approval at close-out. */
   lineId: string | null;
   action: ApprovalAction;
-  actorId: string;
   actorName: string;
   at: string;
   note: string | null;
+  /** Pesos. */
   amountAtTime: number;
 }
 
-/** Tenant-configurable approval policy. Lives on `FleetState`, edited in Settings. */
-export interface ApprovalSettings {
-  /** Total pending value below which lines auto-approve, no human involved. */
-  autoApproveUnder: number;
-  /** Above this, only a Fleet Manager can approve; below, Operations/Purchasing can too. */
-  opsApprovalUnder: number;
-  /** Working hours a line may sit in pending_approval before escalating. */
+/** Billing totals, pesos (the API rounds each once, in centavos). */
+export interface WorkOrderTotals {
+  partsTotal: number;
+  labourTotal: number;
+  subTotal: number;
+  miscTotal: number;
+  taxTotal: number;
+  vatRatePct: number;
+  grandTotal: number;
+}
+
+export interface WorkOrderApproval {
+  pendingValue: number;
+  approvedValue: number;
+  declinedValue: number;
+  requiredApprover: ApproverBand;
+  pendingApprovalEnteredAt: string | null;
+  approvalWaitHours: number | null;
   slaHours: number;
-  /** How far actual cost may exceed the approved amount before close-out is blocked. */
+  /** While pending: business hours waited so far (the API's count). */
+  waitingHours: number | null;
+  slaBreached: boolean;
+  /** Whether the caller may decide the pending lines (capability + band). */
+  canApprove: boolean;
+}
+
+/** A vehicle as screen endpoints attach it to an order. */
+export interface VehicleRef {
+  id: string;
+  plateNumber: string;
+  make: string;
+  model: string;
+}
+
+export interface WorkOrder {
+  id: string;
+  /** Issued at draft → pending_approval; "" while a draft. */
+  reference: string;
+  /** What to show: the reference, or the API's draft label. */
+  displayReference: string;
+  fleetClientId: string;
+  vehicleId: string;
+  title: string;
+  type: WorkOrderType;
+  status: WorkOrderStatus;
+  lifecycleStage: LifecycleStage;
+  /** The moves the API's state machine allows from here. */
+  nextStatuses: WorkOrderStatus[];
+  priority: Priority;
+  branchId: string | null;
+  bayId: string | null;
+  technicianId: string | null;
+  technician: string;
+  /** A third-party subcontractor; "" in-house. */
+  vendor: string;
+  inHouse: boolean;
+  openedOn: string;
+  scheduledFor: string | null;
+  scheduledTime: string | null;
+  completedOn: string | null;
+  collectedAt: string | null;
+  odometerAtIntake: number | null;
+  odometerAtService: number | null;
+  findings: string;
+  notes: string;
+  cancellationReason: string | null;
+  /** The estimate's aggregates (pesos). */
+  laborCost: number;
+  partsCost: number;
+  totals: WorkOrderTotals;
+  approvedTotals: WorkOrderTotals;
+  approval: WorkOrderApproval;
+  lines: WorkOrderLine[];
+  taskIds: string[];
+  parts: PartLine[];
+  history: WorkOrderEvent[];
+  approvalLog: ApprovalLogEntry[];
+  /** Present on screen endpoints that attach them. */
+  vehicle: VehicleRef | null;
+  customerName: string | null;
+  createdAt: string;
+}
+
+/* ----------------------------------------------------- approval settings */
+
+/** Approval policy (pesos for money). Org defaults, branch and account overrides fold in the API. */
+export interface ApprovalSettings {
+  autoApproveUnder: number;
+  opsApprovalUnder: number;
+  slaHours: number;
   varianceThresholdPct: number;
   defaultPartsSource: PartsSource;
-  /** Maintenance spend ceiling per month, for the purchasing landing page's budget tile. */
   monthlyBudget: number;
-  /**
-   * VAT applied to the subtotal, as a percentage. 12 is the Philippine
-   * standard rate; configurable because a provider may be non-VAT registered,
-   * in which case 0 is a legitimate setting rather than a missing value.
-   */
+  /** 0 is a real setting (a non-VAT-registered provider). */
   vatRatePct: number;
-  /**
-   * Flat shop/miscellaneous charge added to every order before VAT — consumables,
-   * disposal, and the like. Zero by default; a provider opts into it.
-   */
   miscFeeFlat: number;
-  /** Default hourly labour rate quoted on new lines, in PHP. */
   defaultLabourRate: number;
 }
 
-/* --------------------------------------------------------- parts & demand */
+/* -------------------------------------------------------------- parts */
 
-/**
- * A stocked part. The catalogue attributes (sku, category, cost, reorder
- * point, vendor, lead time) come from `lib/parts.ts`'s static
- * `PART_DEFINITIONS` at seed time — `currentStock` is the only field that
- * actually changes afterward (consumed by jobs, replenished by receiving a
- * purchase order), which is why the record as a whole lives here in
- * `FleetState` rather than as static catalogue data.
- */
+/** A spare part one customer account stocks for its own fleet. */
 export interface Part {
   id: string;
-  /**
-   * Explicit: parts stock has no vehicle relationship at all, so there is
-   * nothing to derive from. Stock is held per client, not pooled.
-   */
   fleetClientId: string;
   sku: string;
   name: string;
@@ -414,159 +560,48 @@ export interface Part {
   unitCost: number;
   currentStock: number;
   reorderPoint: number;
+  needsReorder: boolean;
   preferredVendor: string;
   leadTimeDays: number;
+  active: boolean;
+  usages: { serviceTaskId: string; quantityPerService: number }[];
 }
 
 export type PurchaseOrderStatus = "draft" | "sent" | "received" | "cancelled";
 
-/**
- * One line on a purchase order. `serviceTaskIds`/`vehicleIds` record which
- * projected due-items this line was raised to cover, so a later demand-forecast
- * run can exclude them rather than double-counting.
- */
 export interface PurchaseOrderLine {
   id: string;
-  partId: string;
+  partId: string | null;
   description: string;
   quantity: number;
   unitCost: number;
+  lineTotal: number;
   serviceTaskIds: string[];
   vehicleIds: string[];
 }
 
 export interface PurchaseOrder {
   id: string;
-  /**
-   * Explicit: a PO's lines can span many vehicles or none, so the vehicle
-   * relationship is ambiguous — cheaper and safer than joining through lines.
-   */
   fleetClientId: string;
   reference: string;
   vendor: string;
   status: PurchaseOrderStatus;
+  nextStatuses: PurchaseOrderStatus[];
+  /** Whether issuing is within the caller's approval band (the API's answer). */
+  canSend: boolean;
   createdOn: string;
   createdBy: string;
+  notes: string;
+  total: number;
   lines: PurchaseOrderLine[];
-  notes: string;
+  sentAt: string | null;
+  receivedAt: string | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  events: { status: PurchaseOrderStatus; at: string; actorName: string; note: string | null }[];
 }
 
-/* --------------------------------------------------------------- tenant */
-
-/** Branding for the fleet client this instance is deployed to. */
-export interface TenantSettings {
-  displayName: string;
-  logoUrl: string | null;
-  /** Hex, e.g. "#1d5ba6" — drives the `--brand`/`--brand-foreground` CSS vars. */
-  brandColor: string;
-  supportEmail: string;
-}
-
-export interface WorkOrder {
-  id: string;
-  /**
-   * The sequential order number, e.g. "WO-2026-0007". Empty string while the
-   * order is still a `draft` — a number is only burned once the job becomes
-   * real to someone outside the shop, which is the `draft -> pending_approval`
-   * shift. Read it through `displayReference` in `lib/work-order-machine.ts`
-   * rather than testing for `""` at call sites.
-   */
-  reference: string;
-  vehicleId: string;
-  title: string;
-  type: WorkOrderType;
-  status: WorkOrderStatus;
-  priority: Priority;
-  openedOn: string;
-  scheduledFor: string;
-  /**
-   * Arrival slot on `scheduledFor`, as "HH:mm". Null for jobs booked before
-   * the counter workflow existed, which only ever recorded a date.
-   */
-  scheduledTime: string | null;
-  completedOn: string | null;
-  odometerAtService: number;
-  technician: string;
-  /**
-   * A third-party repair vendor the work is sent out to. Empty string means the
-   * job is in-house — see `assignedProviderId`. The provider's own name never
-   * belongs here, or it lands in the vendor-spend analytics beside real
-   * subcontractors.
-   */
-  vendor: string;
-  /**
-   * The provider that owns the work once it is authorised. Stamped
-   * automatically on approval (see `assignOnApproval` in
-   * `lib/work-order-machine.ts`) from the vehicle's owning client, so an
-   * approved job is never unassigned. Null while the order is still a draft or
-   * awaiting a decision.
-   */
-  assignedProviderId: string | null;
-  /** Bay the job is assigned to. Null for work sent out to a third-party vendor. */
-  bayId: string | null;
-  /**
-   * When the client actually took the vehicle back. A job can be `closed`
-   * without being collected — that gap is the "ready for collection" queue the
-   * counter works from.
-   */
-  collectedAt: string | null;
-  collectedBy: string | null;
-  laborCost: number;
-  /**
-   * Authoritative only while `parts` is empty (estimates, seeded history). Once
-   * parts are itemised, `resolvePartsCost` sums the lines instead — always read
-   * through that helper rather than this field.
-   */
-  partsCost: number;
-  /** Itemised parts replaced. Empty until a technician records them. */
-  parts: PartLine[];
-  /** What the technician found — the diagnostic half of the service record. */
-  findings: string;
-  /** Task template ids covered by this order. */
-  taskIds: string[];
-  notes: string;
-  /** Every status change, oldest first — append-only. */
-  history: WorkOrderEvent[];
-  /** The purchasable items on this order — the source of truth once non-empty. */
-  lines: WorkOrderLine[];
-  /** Every approval decision, oldest first — append-only. */
-  approvalLog: ApprovalLogEntry[];
-  /** When the order most recently entered `pending_approval`; null once resolved. */
-  pendingApprovalEnteredAt: string | null;
-  /** Working hours spent in `pending_approval`, stamped once it resolves. */
-  approvalWaitHours: number | null;
-}
-
-/** A single computed PMS item for one vehicle — the output of the due engine. */
-export interface PmsItem {
-  task: ServiceTask;
-  status: PmsStatus;
-  /** Negative once the interval has been passed. */
-  kmRemaining: number;
-  daysRemaining: number;
-  /** 0–1+ progress through the interval; > 1 means overdue. */
-  progress: number;
-  dueOdometer: number;
-  dueDate: string;
-  /** Which limit governs — whichever arrives first. */
-  governedBy: "distance" | "time";
-  lastDoneOn: string;
-  lastDoneOdometer: number;
-}
-
-export interface VehicleHealth {
-  vehicle: Vehicle;
-  items: PmsItem[];
-  status: PmsStatus;
-  overdueCount: number;
-  dueSoonCount: number;
-  /** The single most urgent item, or null when the vehicle is fully compliant. */
-  nextItem: PmsItem | null;
-  /** 0–100 compliance score across all tracked intervals. */
-  healthScore: number;
-}
-
-/* ---------------------------------------------------------------- documents */
+/* ---------------------------------------------------------- documents */
 
 export type DocumentKind =
   | "invoice"
@@ -583,35 +618,28 @@ export type DocumentKind =
 
 export interface FleetDocument {
   id: string;
-  /**
-   * Explicit: a document may hang off a vehicle, a work order, both, or
-   * neither — the unlinked case has no derivation path.
-   */
   fleetClientId: string;
   name: string;
   kind: DocumentKind;
-  /** Documents may hang off a vehicle, a work order, both, or neither. */
+  kindLabel: string;
   vehicleId: string | null;
   workOrderId: string | null;
   uploadedBy: string;
   uploadedOn: string;
   sizeBytes: number;
   mimeType: string;
-  /**
-   * Data URL for files added in-session. Seeded records carry `null` — they
-   * stand for documents already held elsewhere, and cannot be opened.
-   */
-  dataUrl: string | null;
-  /** Renewal date for documents that expire — the compliance kinds, plus warranty. */
+  /** Whether a file is stored (seeded records may carry metadata only). */
+  hasFile: boolean;
   expiresOn: string | null;
-  /** OR/CR number, policy number, certificate number — whatever the issuer prints. */
+  /** The API's verdict on the expiry date. */
+  expiryStatus: ComplianceStatus;
   referenceNumber: string | null;
   issuedOn: string | null;
   issuingBody: string | null;
   notes: string;
 }
 
-/* ------------------------------------------------------------------- alerts */
+/* ------------------------------------------------------------- alerts */
 
 export type AlertKind =
   | "pms_overdue"
@@ -623,11 +651,7 @@ export type AlertKind =
 
 export type AlertSeverity = "critical" | "warning" | "info";
 
-/**
- * Alerts are derived from fleet state on every read, never stored — so they can
- * never contradict the data. Only the user's interaction with them persists,
- * keyed by the deterministic `id`.
- */
+/** Derived by the API on every read; ids are identity (read/dismiss keys). */
 export interface Alert {
   id: string;
   kind: AlertKind;
@@ -636,31 +660,7 @@ export interface Alert {
   body: string;
   vehicleId: string | null;
   href: string;
-  /** Days until (negative: past) the thing this alert is about. */
   daysRemaining: number;
-}
-
-export interface AlertInteraction {
-  readIds: string[];
-  dismissedIds: string[];
-}
-
-/**
- * Read/dismiss bookkeeping, bucketed by tenant scope key (see
- * `tenantScopeKey`). It was a single flat pair before tenancy, which meant one
- * client's dismissals followed the reader into every other client.
- */
-export type AlertInteractionByScope = Record<string, AlertInteraction>;
-
-export interface FleetState {
-  providers: Provider[];
-  fleetClients: FleetClient[];
-  vehicles: Vehicle[];
-  workOrders: WorkOrder[];
-  documents: FleetDocument[];
-  alerts: AlertInteractionByScope;
-  approvalSettings: ApprovalSettings;
-  parts: Part[];
-  purchaseOrders: PurchaseOrder[];
-  tenant: TenantSettings;
+  read: boolean;
+  dismissed: boolean;
 }

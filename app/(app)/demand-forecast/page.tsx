@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowRight, PackageSearch } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
@@ -16,9 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFleet, useFleetActions } from "@/lib/store";
+import { QueryError } from "@/components/ui/query-error";
+import { useDemandForecast, useFleetActions, useFleetClients } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
-import { computePartsDemand, summariseDemand } from "@/lib/parts-forecast";
 import { formatCurrency } from "@/lib/utils";
 
 const HORIZONS = [
@@ -28,23 +28,38 @@ const HORIZONS = [
 ];
 
 export default function DemandForecastPage() {
-  const { ready, health, workOrders, purchaseOrders, parts } = useFleet();
   const { generatePurchaseOrders } = useFleetActions();
-  const { can, reason } = useCan();
-
+  const { can, reason, side } = useCan();
   const [horizon, setHorizon] = useState("6");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [justGenerated, setJustGenerated] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
 
-  const rows = useMemo(
-    () =>
-      ready
-        ? computePartsDemand(health, workOrders, purchaseOrders, parts, Number(horizon), new Date())
-        : [],
-    [ready, health, workOrders, purchaseOrders, parts, horizon]
+  // Stock is each customer account's own, so a forecast is for one account:
+  // staff pick it; a portal user's is their own.
+  const staff = side === "staff";
+  const { fleetClients } = useFleetClients({ enabled: staff });
+  const [accountId, setAccountId] = useState<string>("");
+  useEffect(() => {
+    if (staff && !accountId && fleetClients.length > 0) setAccountId(fleetClients[0].id);
+  }, [staff, accountId, fleetClients]);
+
+  // The demand, the plain-English summary and which rows may be ordered are
+  // the API's (`GET /demand-forecast`).
+  const { data, error, refetch } = useDemandForecast(
+    { customer_account_id: staff ? accountId : undefined, horizon_weeks: Number(horizon) },
+    { enabled: !staff || Boolean(accountId) }
   );
+  const rows = data?.rows ?? [];
 
-  if (!ready) {
+  useEffect(() => {
+    setSelected(new Set());
+  }, [accountId, horizon]);
+
+  if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
+
+  if (!data) {
     return (
       <>
         <PageHeader
@@ -56,8 +71,8 @@ export default function DemandForecastPage() {
     );
   }
 
-  const summary = summariseDemand(rows, Number(horizon));
-  const selectableIds = rows.filter((row) => row.shortfall > 0).map((row) => row.part.id);
+  const summary = data.summary;
+  const selectableIds = rows.filter((row) => row.selectable).map((row) => row.part.id);
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
 
   function toggleRow(partId: string, checked: boolean) {
@@ -75,9 +90,20 @@ export default function DemandForecastPage() {
     setJustGenerated(false);
   }
 
-  function generate() {
-    const selectedRows = rows.filter((row) => selected.has(row.part.id));
-    generatePurchaseOrders(selectedRows);
+  /** The server recomputes the forecast and orders each chosen part's shortfall. */
+  async function generate() {
+    setPending(true);
+    setGenerateError(null);
+    const result = await generatePurchaseOrders({
+      partIds: [...selected],
+      horizonWeeks: Number(horizon),
+      customerAccountId: staff ? accountId : undefined,
+    });
+    setPending(false);
+    if (!result.ok) {
+      setGenerateError(result.fields?.part_ids?.[0] ?? result.error);
+      return;
+    }
     setSelected(new Set());
     setJustGenerated(true);
   }
@@ -88,6 +114,21 @@ export default function DemandForecastPage() {
         title="Demand forecast"
         description="What the PMS schedule says the fleet will need, and whether stock covers it."
         actions={
+          <div className="flex flex-wrap items-center gap-2">
+          {staff ? (
+            <Select value={accountId} onValueChange={setAccountId}>
+              <SelectTrigger className="w-[220px]" aria-label="Customer account">
+                <SelectValue placeholder="Choose an account" />
+              </SelectTrigger>
+              <SelectContent>
+                {fleetClients.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
           <Select value={horizon} onValueChange={setHorizon}>
             <SelectTrigger className="w-[160px]" aria-label="Forecast horizon">
               <SelectValue />
@@ -100,12 +141,19 @@ export default function DemandForecastPage() {
               ))}
             </SelectContent>
           </Select>
+          </div>
         }
       />
 
       <div className="card-raised px-5 py-4">
         <p className="text-sm leading-relaxed">{summary}</p>
       </div>
+
+      {generateError ? (
+        <p role="alert" className="mt-4 rounded-lg border border-critical/25 bg-critical/[0.06] px-4 py-3 text-xs text-critical">
+          {generateError}
+        </p>
+      ) : null}
 
       {justGenerated ? (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-ok/25 bg-ok/10 px-4 py-3">
@@ -134,7 +182,7 @@ export default function DemandForecastPage() {
             </p>
           </div>
           {can("po:issue") ? (
-            <Button variant="primary" size="sm" disabled={selected.size === 0} onClick={generate}>
+            <Button variant="primary" size="sm" disabled={selected.size === 0 || pending || !data.canRaise} onClick={() => void generate()}>
               Generate purchase request
             </Button>
           ) : (
@@ -207,7 +255,7 @@ export default function DemandForecastPage() {
                         type="checkbox"
                         className="size-3.5 accent-brand"
                         checked={selected.has(row.part.id)}
-                        disabled={row.shortfall === 0}
+                        disabled={!row.selectable}
                         onChange={(event) => toggleRow(row.part.id, event.target.checked)}
                         aria-label={`Select ${row.part.name}`}
                       />

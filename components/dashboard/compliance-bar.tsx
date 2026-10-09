@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowUpRight, CheckCircle2, Clock, OctagonAlert, ShieldCheck } from "lucide-react";
-import type { FleetSummary } from "@/lib/pms";
+import type { FleetSummary } from "@/types";
 import { cn } from "@/lib/utils";
 
 const BANDS = [

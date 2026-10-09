@@ -23,12 +23,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PriorityBadge, WorkOrderStatusBadge } from "@/components/status";
 import { CompleteWorkOrderDialog } from "@/components/work-orders/complete-work-order-dialog";
+import { CancelWorkOrderDialog } from "@/components/work-orders/cancel-work-order-dialog";
 import { useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
-import { workOrderCost } from "@/lib/pms";
-import type { Vehicle, WorkOrder } from "@/types";
+import type { VehicleRef, WorkOrder } from "@/types";
 import { cn, formatCurrency, formatDate, titleCase } from "@/lib/utils";
 
+/**
+ * Work orders, one row each. What each row may do next is the API's
+ * `next_statuses` (its state machine) plus the session's capabilities; the
+ * API re-checks both when the action is taken.
+ */
 export function WorkOrderTable({
   orders,
   vehiclesById,
@@ -37,14 +42,23 @@ export function WorkOrderTable({
   showVehicle = true,
 }: {
   orders: WorkOrder[];
-  vehiclesById: Map<string, Vehicle>;
+  /** Plates for rows whose order doesn't carry its vehicle. */
+  vehiclesById?: Map<string, VehicleRef>;
   emptyTitle?: string;
   emptyDescription?: string;
   showVehicle?: boolean;
 }) {
-  const { updateWorkOrder } = useFleetActions();
+  const { startWorkOrder } = useFleetActions();
   const { can } = useCan();
   const [closing, setClosing] = React.useState<WorkOrder | null>(null);
+  const [cancelling, setCancelling] = React.useState<WorkOrder | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function start(order: WorkOrder) {
+    setError(null);
+    const result = await startWorkOrder(order.id);
+    if (!result.ok) setError(`${order.displayReference}: ${result.error}`);
+  }
 
   if (orders.length === 0) {
     return (
@@ -58,6 +72,11 @@ export function WorkOrderTable({
 
   return (
     <>
+      {error ? (
+        <p role="alert" className="border-b border-border bg-critical/[0.06] px-5 py-2 text-xs text-critical">
+          {error}
+        </p>
+      ) : null}
       <div className="overflow-x-auto">
       <table className="w-full min-w-[880px] text-sm">
         <thead>
@@ -87,9 +106,7 @@ export function WorkOrderTable({
         </thead>
         <tbody className="divide-y divide-border">
           {orders.map((order) => {
-            const vehicle = vehiclesById.get(order.vehicleId);
-            const closed =
-              order.status === "closed" || order.status === "cancelled";
+            const vehicle = order.vehicle ?? vehiclesById?.get(order.vehicleId);
 
             return (
               <tr
@@ -102,7 +119,7 @@ export function WorkOrderTable({
                     className="group/ref inline-flex flex-col rounded"
                   >
                     <span className="tabular text-xs font-medium group-hover/ref:text-brand">
-                      {order.reference}
+                      {order.displayReference}
                     </span>
                     <span className="mt-0.5 block text-2xs text-subtle-foreground">
                       {titleCase(order.type)}
@@ -133,8 +150,8 @@ export function WorkOrderTable({
                 <td className="max-w-[260px] px-4 py-3">
                   <p className="truncate text-xs font-medium">{order.title}</p>
                   <p className="mt-0.5 flex items-center gap-1.5 text-2xs text-subtle-foreground">
-                    <Avatar name={order.technician} size="sm" />
-                    <span className="truncate">{order.technician}</span>
+                    <Avatar name={order.technician || "—"} size="sm" />
+                    <span className="truncate">{order.technician || "Unassigned"}</span>
                   </p>
                 </td>
 
@@ -147,11 +164,11 @@ export function WorkOrderTable({
                 </td>
 
                 <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                  {formatDate(order.completedOn ?? order.scheduledFor)}
+                  {formatDate(order.completedOn ?? order.scheduledFor ?? order.openedOn)}
                 </td>
 
                 <td className="tabular whitespace-nowrap px-4 py-3 text-right text-xs font-medium">
-                  {formatCurrency(workOrderCost(order))}
+                  {formatCurrency(order.totals.subTotal)}
                 </td>
 
                 <td className="px-2 py-3">
@@ -160,13 +177,13 @@ export function WorkOrderTable({
                       <Button
                         variant="ghost"
                         size="icon-sm"
-                        aria-label={`Actions for ${order.reference}`}
+                        aria-label={`Actions for ${order.displayReference}`}
                       >
                         <MoreHorizontal />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-60">
-                      <DropdownMenuLabel>{order.reference}</DropdownMenuLabel>
+                      <DropdownMenuLabel>{order.displayReference}</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
                         <Link href={`/work-orders/${order.id}`}>
@@ -176,20 +193,14 @@ export function WorkOrderTable({
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        disabled={
-                          order.status !== "scheduled" || !can("workorder:update")
-                        }
-                        onSelect={() =>
-                          updateWorkOrder(order.id, { status: "in_progress" })
-                        }
+                        disabled={!order.nextStatuses.includes("in_progress") || !can("workorder:update")}
+                        onSelect={() => void start(order)}
                       >
                         <Play />
                         Start job
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        disabled={
-                          order.status !== "in_progress" || !can("workorder:complete")
-                        }
+                        disabled={order.status !== "in_progress" || !can("workorder:complete")}
                         onSelect={() => setClosing(order)}
                       >
                         <CheckCircle2 />
@@ -198,10 +209,8 @@ export function WorkOrderTable({
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         destructive
-                        disabled={closed || !can("workorder:update")}
-                        onSelect={() =>
-                          updateWorkOrder(order.id, { status: "cancelled" })
-                        }
+                        disabled={!order.nextStatuses.includes("cancelled") || !can("workorder:update")}
+                        onSelect={() => setCancelling(order)}
                       >
                         <XCircle />
                         Cancel work order
@@ -219,10 +228,20 @@ export function WorkOrderTable({
       {closing ? (
         <CompleteWorkOrderDialog
           order={closing}
-          vehicle={vehiclesById.get(closing.vehicleId)}
+          vehicle={closing.vehicle ?? vehiclesById?.get(closing.vehicleId)}
           open={Boolean(closing)}
           onOpenChange={(next) => {
             if (!next) setClosing(null);
+          }}
+        />
+      ) : null}
+
+      {cancelling ? (
+        <CancelWorkOrderDialog
+          order={cancelling}
+          open={Boolean(cancelling)}
+          onOpenChange={(next) => {
+            if (!next) setCancelling(null);
           }}
         />
       ) : null}

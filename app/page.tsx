@@ -7,9 +7,8 @@ import { homeHrefFor } from "@/lib/nav";
 
 /**
  * Role-aware entry. The two sides of the application have different home
- * screens, and which one you belong to lives in the session — which lives in
- * localStorage — so this has to resolve on the client rather than as a server
- * redirect. `AuthGuard` handles the signed-out case on the destination.
+ * screens, and which one you belong to is the session's `side` (`GET /me`),
+ * so this resolves on the client rather than as a server redirect. `AuthGuard` handles the signed-out case on the destination.
  */
 export default function Home() {
   const router = useRouter();
@@ -17,7 +16,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!ready) return;
-    router.replace(session ? homeHrefFor(session.role) : "/login");
+    router.replace(session ? homeHrefFor(session.side, session.role) : "/login");
   }, [ready, session, router]);
 
   return null;

@@ -1,59 +1,16 @@
-import type { FleetClient, Provider, TenantSettings } from "@/types";
+import type { TenantSettings } from "@/types";
 import { PLATFORM, PLATFORM_THEME } from "@/lib/platform";
 
 /**
  * Branding when no provider resolves — before sign-in, or a fail-closed
  * scope. With no tenant to show, the platform's own identity is the honest
- * answer; a tenant's mark replaces it once `providerBranding` has a scope.
+ * answer; the tenant's mark replaces it once `/me` returns its branding.
  */
 export const DEFAULT_TENANT_SETTINGS: TenantSettings = {
   displayName: PLATFORM.productName,
   logoUrl: null,
   brandColor: PLATFORM_THEME.brandColor,
   supportEmail: PLATFORM.supportEmail,
-};
-
-/**
- * The tenancy root the existing demo collapses into: everything that shipped
- * before tenancy existed belongs to this one provider and this one client, so
- * the seeded fleet and any payload already in a browser keep working unchanged.
- * `normalise()` in `lib/store.ts` backfills against these ids.
- */
-export const SEED_PROVIDER: Provider = {
-  id: "prov-mekanikomore",
-  name: "MekanikoMoR",
-  slug: "mekanikomore",
-  logoUrl: null,
-  brandColor: "#1d5ba6",
-  supportEmail: "support@mekanikomore.ph",
-  createdAt: "2024-01-01",
-};
-
-/**
- * Client ids as constants so `lib/auth.ts` can pin demo accounts to a tenant
- * without importing the whole seed module.
- */
-export const FLEET_CLIENT_IDS = {
-  actimed: "fc-actimed",
-  northwind: "fc-northwind",
-  sagrada: "fc-sagrada",
-  bayani: "fc-bayani",
-} as const;
-
-export const SEED_FLEET_CLIENT: FleetClient = {
-  id: FLEET_CLIENT_IDS.actimed,
-  providerId: SEED_PROVIDER.id,
-  name: "Actimed",
-  slug: "actimed",
-  contactName: "Marisol Bautista",
-  contactEmail: "fleet@actimed.ph",
-  contractTerms: "Full-service PMS retainer, 16 units",
-  paymentTermsDays: 30,
-  approvalThresholdOverrides: null,
-  logoUrl: null,
-  brandColor: "#0f7a5a",
-  status: "active",
-  createdAt: "2024-01-01",
 };
 
 /** Parses a `#rgb` or `#rrggbb` hex colour into an `"H S% L%"` triplet for a CSS custom property. */

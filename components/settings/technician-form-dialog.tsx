@@ -23,10 +23,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DeniedAction } from "@/components/auth/denied-action";
-import { BAYS } from "@/lib/bays";
 import { CATEGORY_LABEL } from "@/lib/service-tasks";
-import { useFleetActions } from "@/lib/store";
+import { useBays, useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
+import { useSession } from "@/lib/auth";
+import { ALL_BRANCHES, useSelectedBranch } from "@/lib/api/branch";
 import type { ProviderTechnician, TaskCategory } from "@/types";
 
 const SPECIALTY_OPTIONS: { value: string; label: string }[] = [
@@ -44,7 +45,7 @@ type FormState = {
 };
 
 function blank(): FormState {
-  return { name: "", specialty: "general", homeBayId: BAYS[0]?.id ?? "", active: true };
+  return { name: "", specialty: "general", homeBayId: "", active: true };
 }
 
 function fromTechnician(technician: ProviderTechnician): FormState {
@@ -71,7 +72,10 @@ export function TechnicianFormDialog({
 }) {
   const isEdit = Boolean(technician);
   const { addTechnician, updateTechnician } = useFleetActions();
-  const { can, reason } = useCan();
+  const { bays } = useBays();
+  const { session } = useSession();
+  const selectedBranch = useSelectedBranch();
+  const { canAsStaff, staffReason } = useCan();
   const [open, setOpen] = React.useState(false);
   const [form, setForm] = React.useState<FormState>(
     technician ? fromTechnician(technician) : blank()
@@ -97,20 +101,20 @@ export function TechnicianFormDialog({
     const shared = {
       name: form.name.trim(),
       specialty: form.specialty,
-      homeBayId: form.homeBayId || null,
-      active: form.active,
+      home_bay_id: form.homeBayId || null,
+      status: form.active ? "active" : "inactive",
     };
 
-    if (isEdit && technician) {
-      // Fire-and-forget, like `updateServiceTask`: the guard above already
-      // covers who may call this, and an optimistic update rolls itself back
-      // on failure.
-      updateTechnician(technician.id, shared);
-      setOpen(false);
-      return;
-    }
+    // A technician belongs to one branch: the home bay's, else the branch
+    // being worked in, else the caller's first.
+    const branchId =
+      bays.find((bay) => bay.id === form.homeBayId)?.branchId ??
+      (selectedBranch && selectedBranch !== ALL_BRANCHES ? selectedBranch : session?.branches[0]?.id);
 
-    const result = await addTechnician(shared);
+    const result =
+      isEdit && technician
+        ? await updateTechnician(technician.id, shared)
+        : await addTechnician({ ...shared, branch_id: branchId });
     if (!result.ok) {
       setError(result.error);
       return;
@@ -129,8 +133,8 @@ export function TechnicianFormDialog({
     </Button>
   );
 
-  if (!can("settings:manage")) {
-    return <DeniedAction reason={reason("settings:manage")}>{trigger}</DeniedAction>;
+  if (!canAsStaff("settings:manage")) {
+    return <DeniedAction reason={staffReason("settings:manage")}>{trigger}</DeniedAction>;
   }
 
   return (
@@ -184,7 +188,7 @@ export function TechnicianFormDialog({
                   <SelectValue placeholder="Unassigned" />
                 </SelectTrigger>
                 <SelectContent>
-                  {BAYS.map((bay) => (
+                  {bays.map((bay) => (
                     <SelectItem key={bay.id} value={bay.id}>
                       {bay.name}
                     </SelectItem>

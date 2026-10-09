@@ -1,306 +1,136 @@
-# MekanikoMoR — Fleet PMS & Maintenance
+# TorqueLane web — Fleet PMS & Maintenance
 
 Next.js 14 (App Router) · TypeScript · Tailwind · Radix primitives · Recharts ·
-date-fns · lucide-react · Supabase (Postgres + Auth). See "Data" below.
+date-fns · lucide-react · TanStack Query · the **TorqueLane API** (Laravel, in
+`../torquelane-api`; its docs call this repo `../web`).
 
-Two sides share one codebase: the **provider** (the service centre running
-this instance — shop owner, service advisors, technicians) and its **fleet
-clients** (Actimed and others, who each see only their own fleet). See
-"Tenancy" before touching anything cross-cutting.
+Two sides share one codebase: **staff** (the service centre — owner, branch
+manager, service advisors, technicians, cashier) and **portal** users (a fleet
+client such as Actimed, who see only their own account). The API decides which
+side a session is on and what it may read; this app renders that.
 
 ## Commands
 
 ```bash
-npm run dev     # dev server
-npm run build   # production build (run before calling work done)
+npm run dev        # dev server on :3000 (the origin the API trusts)
+npm run build      # production build (run before calling work done)
 npm run lint
 npx tsc --noEmit
-npm test        # vitest run — lib/*.test.ts, no watch
-
-# Authoring scripts (vitest files that WRITE; never part of npm test):
-npx vitest run scripts/emit-seed-json.ts        # fixtures/seed/demo-seed.json
-npx vitest run scripts/emit-golden-fixtures.ts  # fixtures/golden/*.json (needs the seed above to be current)
+npm test           # vitest — lib/**/*.test.ts (the billing preview's golden replay)
+npm run test:e2e   # Playwright against a running API with the demo seed (see e2e/)
+npm run api:types  # regenerate types/api.ts from ../torquelane-api/openapi.json
 ```
 
-## Domain model — read this before touching maintenance logic
+The e2e suite needs the API up first: in `../torquelane-api`,
+`php artisan migrate:fresh --seed` then `php artisan serve --port=8000`. It
+writes to that database (work orders, readings, documents) — demo data only.
 
-A **PMS item** is one recurring service task evaluated against one vehicle. Every
-task has two limits, `intervalKm` and `intervalMonths`, and **is due on whichever
-arrives first**. `lib/pms.ts` projects the distance limit onto the calendar via
-the vehicle's `avgDailyKm` so the two are comparable, then reports which one
-governs (`governedBy`).
+## The API is the source of truth
 
-- `evaluateTask` → one `PmsItem` (status, km/days remaining, progress, due date)
-- `evaluateVehicle` → `VehicleHealth` (items sorted by urgency, counts, score)
-- `summariseFleet` → the dashboard's KPI figures
-- `applyCompletion` → what closing a work order does to a vehicle
+Every business rule lives in the API: PMS due dates and health, the work-order
+state machine, approval bands, billing, check-in hydration, the parts forecast,
+analytics, alerts, tenancy and permissions. **The frontend computes no
+authoritative total, status, due date or permission** (the API's standing rule
+R2). It renders what the API returns, and the endpoints were shaped so it never
+has to derive one (`approval.can_approve`, `approval.waiting_hours` /
+`sla_breached`, `pms.next_item.progress`, list `summary` endpoints, …).
+`../torquelane-api/docs/frontend-parity.md` maps every screen and action to
+its endpoint, with the Phase 5 verification results.
 
-Thresholds live in `lib/pms.ts` as `DUE_SOON_KM` / `DUE_SOON_DAYS`; the settings
-page reads them from there, so change them in one place.
+- **No domain modules remain in `lib/`.** The old reference implementations
+  (`pms`, `approvals`, `work-order-machine`, `tenancy`, `checkin`, `shop`,
+  `analytics`, `alerts`, …) were deleted at the cutover; their golden fixtures
+  live on in the API (`tests/Golden/fixtures/web/`).
+- **`lib/billing.ts` is the one exception, and it is a PREVIEW.** The new
+  work-order dialog and check-in quote while you type with it; the saved order
+  is priced by the API. It stays golden-tested (`lib/billing.golden.test.ts`
+  replays `fixtures/golden/billing.json`, which resolves `$seed` references into
+  `fixtures/seed/demo-seed.json`) and every figure it drives is labelled
+  "preview". Don't grow another client-side copy of a rule; ask the API for the
+  value.
+- Pure wording is fine client-side: `formatDayDelta`, "2h 15m on the job",
+  share-of-total meters over two API figures.
 
-The catalogue itself — `pms_service_tasks`, mapped through `ServiceTask` —
-lives in the database, provider-global like bays and technicians (see below):
-every fleet client beneath a provider is measured against the same schedule.
-`evaluateVehicle`/`evaluateFleet` take it as an optional parameter defaulting
-to `SERVICE_TASKS` (`lib/service-tasks.ts`, now used only as that default and
-by `lib/seed.ts`'s generator) — `useFleet()` passes the live list from
-`lib/store.ts`. Provider-admin CRUD is `addServiceTask` /`updateServiceTask` /
-`deleteServiceTask` in `useFleetActions()`, gated by `settings:manage`. Editing
-an interval does not retroactively touch any vehicle's `taskState`.
+## Data layer
 
-`healthScore` weights are deliberately steep (overdue critical −25, overdue −15,
-due-soon critical −8, due-soon −4). A vehicle with two breached safety intervals
-must not read as a 90-something — that was a real bug, don't soften it back.
+- **`lib/api/client.ts`** — fetch wrapper: `credentials: "include"`, Sanctum
+  CSRF bootstrap (`/sanctum/csrf-cookie`, `XSRF-TOKEN` echoed as
+  `X-XSRF-TOKEN`, one retry on 419), `X-Request-Id`, and `X-Branch-Id` from the
+  branch switcher. Base URL `NEXT_PUBLIC_API_URL` (default
+  `http://localhost:8000/api/v1`). `apiAll` pages a list at 100 per page.
+- **`lib/api/errors.ts`** — the API's envelope `{error:{code,message,details}}`
+  as a typed `ApiError`. 401 → the session query is cleared and the guard sends
+  you to `/login`; 404 → "Not found, or not yours" (an out-of-scope record is
+  byte-identical to a missing one); 403 `module_disabled` → a module notice;
+  422 → `fields` on forms. `components/ui/query-error.tsx` renders these.
+- **`lib/api/query.tsx`** — the TanStack `QueryClient`. No retries on 4xx.
+- **`lib/store.ts`** — per-screen query hooks (`useVehiclePage`,
+  `useWorkOrder`, `useDashboard`, `useShopHome`, …) and `useFleetActions()`,
+  whose actions keep their old names and resolve to an `ActionResult`
+  (`{ok:true,data}` / `{ok:false,error,code,reason,fields}`). **Nothing is
+  optimistic**: a write goes to the API, then the affected queries are
+  invalidated (`AFFECTS` groups). A caller that shows success must check
+  `result.ok`. Every query key carries the user and the selected branch, so
+  switching either refetches.
+- **`lib/mappers.ts`** — the seam between API resources and `types/index.ts`:
+  snake_case → camelCase, centavos → pesos (**display only**), and the defaults
+  components rely on (`""`, `[]`) for nullable fields. A new field on a domain
+  type needs its default here. `lib/api/views.ts` does the same for the
+  screen-shaped endpoints (`/analytics/*`, `/shop/*`, `/requests`,
+  `/check-in/lookup`, …).
+- **`types/api.ts`** is generated (`npm run api:types`); `lib/api/schema.ts`
+  aliases it. Don't edit it by hand.
+- **Laravel turns `""` into `null`** (`ConvertEmptyStringsToNull`), and most
+  string rules are `sometimes|string`, so an empty optional string must be
+  *omitted*, not sent. The store's builders do this; follow suit in new ones.
+- Pages that read data are client components and render skeletons until their
+  query resolves; check the query's `data`/`error`, not a global `ready`.
 
-## Work order lifecycle, billing, and check-in
+## Session, permissions, branding
 
-- **`lib/work-order-machine.ts`** is the one place transitions are legal or
-  not. Before, each store action guarded its own status and a new screen
-  calling a different action could move an order anywhere. `checkTransition`
-  is the gate; it returns the `Capability` needed rather than resolving it, so
-  the module stays pure. The brief's five-stage workflow (Draft → Pending
-  Approval → Approved/In Progress → Ready for Billing → Completed) is a
-  *projection* over the nine stored statuses via `lifecycleStage` — the extra
-  ones carry real distinctions (`partially_approved` is a genuine answer;
-  `declined` ≠ `cancelled`) and must not be collapsed. `closed` splits on
-  `collectedAt`: unset is "ready for billing", set is "completed", which
-  matches revenue being recognised on collection.
-- **Order numbers are issued at `draft → pending_approval`**, not at creation
-  — a draft that never leaves the shop must not burn a number and leave a gap.
-  `reference` is `""` until then; read it through `displayReference`.
-  `nextReference` scans for the **highest issued** number over the *unscoped*
-  order list. The old generator counted the tenant-**scoped** list, so two
-  clients under one provider both produced `WO-2026-0001`, and a count went
-  backwards when a row was filtered out. The client-side generator can still
-  race, so migration `0007` carries a partial unique index on `reference`
-  (excluding `''`) — the loser's write fails and rolls back.
-- **`lib/billing.ts` owns all money arithmetic.** Lines carry `quantity ×
-  unitPartRate` and `labourHours × labourRate`; `partCost`/`labourCost` are
-  **stored, not derived on read**, because they are the historical price the
-  client approved — re-deriving would let a later rate change rewrite an
-  authorised amount. `recalcLine` is the *only* thing that may write them;
-  never set a cost beside a qty/rate change. `withRates` reconstructs inputs
-  for rows predating the columns (one unit at the stored cost; labour becomes
-  one flat hour) so old lines render and edit without a backfill guess.
-  Rounding happens once per total, never per line.
-- **Approval bands run on the pre-tax subtotal**, VAT never enters a
-  threshold — a band is a decision about the work. `vatRatePct` /
-  `miscFeeFlat` / `defaultLabourRate` live on `ApprovalSettings`; a 0% rate is
-  a real setting (non-VAT-registered provider), not a missing value.
-- **`assignedProviderId` is not `vendor`.** Approval stamps the owning
-  provider automatically (`assignOnApproval`), and `vendor` stays reserved for
-  genuine third-party subcontractors — writing the provider's own name there
-  puts the shop in its own vendor-spend analytics. An in-house job has an
-  assigned provider and an **empty** vendor.
-- **`lib/checkin.ts`** turns a plate or VIN into hydrated form state so the
-  counter never asks for data the fleet already holds. Matching is exact on a
-  normalised form (case/space/dash insensitive) — a prefix match would hydrate
-  the wrong customer. It is pure and takes the candidate vehicles as a
-  parameter; the caller passes the already-scoped list, since a lookup over
-  the raw fleet would confirm a sibling client's vehicle exists. A **stale**
-  odometer is deliberately *not* pre-filled (`odometerNeedsConfirmation`) —
-  accepting an old reading unchallenged shifts every due date behind it.
+- **`lib/auth.ts`** — `useSession()` is `GET /me`: role and role label, side,
+  capabilities, active modules, branches, branding. Sign-in posts to
+  `/auth/login`; forgot/reset password and invitation acceptance are API flows
+  (`/reset-password`, `/accept-invite` are the pages the API's emails link to).
+  One-click demo accounts render only when `NEXT_PUBLIC_DEMO_MODE=true`
+  (demo builds; every seeded password is `demo1234`).
+- **`lib/rbac.ts`** — `useCan()` reads `session.capabilities`, never a local
+  matrix (`ROLE_CAPABILITIES` there is documentation of the API's
+  AccessMatrix only). Gate inside the action component, not at call sites;
+  denied controls render through `DeniedAction` — dimmed with the reason, never
+  hidden. `canAsStaff` for staff-only actions (catalogue, roster, vendors,
+  scheduling). The API enforces all of it independently.
+- **Tenancy is the API's.** A portal session sees exactly its own account; a
+  sibling client's record is a 404. There is no client-side scope filter to
+  maintain.
+- **Branches** — staff with two or more branches get the topbar switcher
+  (`lib/api/branch.ts`), persisted per user; it sets `X-Branch-Id` (`all` or one
+  allowed branch).
+- **Branding** comes from `/me`; `lib/tenant.ts` holds only the platform
+  fallback (`DEFAULT_TENANT_SETTINGS`) and colour helpers. Product vs tenant:
+  the product is TorqueLane (`lib/platform.ts`), shown where no tenant
+  resolves; inside the app the tenant's mark shows. The demo *provider* is
+  MekanikoMoR — tenant data in the API's seed.
 
-## Tenancy — read this before touching anything cross-client
+## Screens worth knowing
 
-The shape is `provider → fleet_client → vehicles → work orders, PMS
-intervals, documents`. A provider-side session sees every client beneath its
-provider; a client-side session sees exactly one client — never a sibling
-under the same provider, which is the leak a naive `providerId` filter would
-let through.
-
-- **`lib/tenancy.ts`** is the single chokepoint. `resolveTenantScope` turns a
-  session into a `TenantScope | null`; `scopeFleetState` narrows a full
-  `FleetState` down to what that scope may read. `useFleetState()` in
-  `lib/store.ts` calls it on every read, and the raw unscoped snapshot
-  (`useRawFleetState`) is deliberately **not exported** — a new screen gets
-  scoping by default because there's no unscoped path to reach for.
-- **Fails closed, always.** No scope, or an ambiguous one (unknown provider,
-  a client that doesn't belong to the session's provider, a suspended
-  client), renders nothing — never a fallback to unscoped. `explainTenantScope`
-  gives the reason, logged so an empty screen doesn't read as data loss.
-- **Writes are scoped too.** Every mutation in `useFleetActions()` resolves the
-  record's owning client via `guards.clientForVehicle` / `clientForOrder` /
-  `writeClientId` before touching it — raising a work order against another
-  tenant's vehicle, or approving a purchase order that isn't yours, is a no-op.
-- **This is a UI affordance, not a security control** — same caveat as RBAC
-  below, and for the same reason: every tenant's rows sit in one `localStorage`
-  blob the browser's own devtools can read. What this buys is one tested
-  definition of scope, ready to mirror server-side verbatim once an API exists.
-- **`lib/rbac.ts`** roles split by side: `provider_admin` / `service_advisor` /
-  `provider_technician` (provider) vs `fleet_manager` / `operations` /
-  `technician` / `purchasing_officer` / `viewer` (client) — see
-  `PROVIDER_ROLES` / `CLIENT_ROLES`. Capabilities are the same list on both
-  sides; scope, not capability, is what stops a provider-side grant from
-  reading as cross-client access.
-- **Per-client approval bands**: `FleetClient.approvalThresholdOverrides` is a
-  sparse override folded over the provider's `ApprovalSettings` defaults by
-  `effectiveApprovalSettings` / `approvalSettingsForClient` — an unset field
-  inherits, it is never treated as zero.
-- **Branding resolves two levels deep**: provider-side sessions always see the
-  provider's own mark; client-side sessions see their own logo/colour where
-  set, falling back field-by-field to the provider's (`providerBranding`).
-  Support email always stays with the provider.
-
-## Permissions, alerts, documents
-
-- **`lib/rbac.ts`** — eight capabilities across eight roles (provider- and
-  client-side). Gate inside the action component (`NewWorkOrderDialog`,
-  `OdometerDialog`, `UploadDocumentDialog`), not at call sites, so new screens
-  inherit the gate. Denied controls render through `DeniedAction` — dimmed
-  with a reason, never hidden. **This is a UI affordance, not security**;
-  mirror it server-side when an API exists.
-- **`lib/alerts.ts`** — alerts are *derived on every read*, never stored, so
-  they can't outlive their trigger. Ids must stay deterministic or dismissals
-  stop sticking. Persisted read/dismiss state is bucketed per tenant scope
-  (`AlertInteractionByScope`, keyed by `tenantScopeKey`) — a provider
-  dismissing a fleet-wide alert hasn't decided anything on a client's behalf,
-  so provider and client scopes never share a bucket.
-- **`lib/documents.ts`** — uploads become data URLs in localStorage, hence the
-  1.5 MB cap and `setStateChecked`'s rollback on quota failure. Only insurance,
-  registration, and warranty offer an expiry (it feeds alerts); an expiry on an
-  invoice is noise.
-
-## Shop (provider) side
-
-`/shop/*` is the provider's own job — bays and a cross-client book of work,
-not one fleet's compliance — and gets its own nav section and dashboard
-(`lib/nav.ts`'s `PROVIDER_NAV_SECTIONS`, split from `CLIENT_NAV_SECTIONS`).
-`homeHrefFor(role)` decides which side a bare sign-in lands on; both `/shop`
-and `/dashboard` self-guard against the wrong side landing there by URL.
-
-- **`lib/bays.ts` / `lib/technicians.ts`** — still static catalogues (unlike
-  service tasks, now database-backed — see "Domain model" above): a bay or a
-  technician is a property of the shop, so adding one today is a code change,
-  not an admin screen.
-  `Bay.focus` is advisory only — nothing stops a job from being assigned to a
-  bay outside its specialty, and nothing stops two jobs booked into the same
-  bay at once; `bayLoadFor`/`floorUtilisation` will just read over 100%.
-- **`WorkOrder` carries shop-only fields**: `bayId`, `scheduledTime` ("HH:mm",
-  separate from the date-only `scheduledFor`), `collectedAt`, `collectedBy`.
-  All four default to `null` in `normalise()` for orders written before the
-  counter workflow existed — never fabricate a time from a bare date.
-- **Revenue is recognised on collection, not completion.** `revenueBetween` in
-  `lib/shop.ts` only counts a job once `collectedAt` is set; a closed-but-
-  uncollected job is "outstanding," which is informational only — there is no
-  billing/invoice model behind it.
-- **Bay time vs the catalogue's own estimate** (`technicianLoad`,
-  `estimatedHours`) reads actual duration off the `closed` history event, not
-  `completedOn` — that field is a date, and diffing it against a datetime
-  start silently produced negative durations for every real job. Comparable
-  bug: day keys for time series use `formatISO(day, { representation: "date"
-  })`, not `toISOString()`, which shifts the date for anyone east of UTC.
-- **Quotation send** (`sendForApproval` in `lib/store.ts`) is the provider's
-  half of the approval loop: a `draft` work order becomes `pending_approval`,
-  stamped into the append-only `approvalLog` as `sent_for_approval`. The wait
-  timer (`ApprovalWaitBanner`) reads `businessHoursBetween` — always working
-  hours, so a quote sent Friday evening doesn't read as three days late by
-  Monday morning.
-
-## Data
-
-State lives in **Supabase Postgres**, in tables prefixed `pms_` — the project
-is shared with an unrelated application, so *never query an unprefixed table*.
-`lib/store.ts` loads the visible fleet once per session behind a
-`useSyncExternalStore` store; `lib/fleet-data.ts` holds the queries and
-`lib/mappers.ts` the row↔domain mapping. Consume state through `useFleet()`
-(already scoped, PMS engine applied) and `useFleetActions()` (scoped
-mutations) exactly as before.
-
-The schema, RLS policies, demo accounts, and seed data are in
-`supabase/migrations/`. The seed is one provider (MekanikoMoR) with four fleet
-clients — Actimed (16 vehicles, the original fleet), Northwind Logistics,
-Sagrada Medical Transport, and Bayani Construction (seeded `suspended`, so its
-demo account demonstrates the fail-closed path live).
-
-Rules that bite:
-
-- **Pages that read fleet data are client components.** Due dates depend on
-  "now", so `getServerSnapshot` returns empty and the UI renders skeletons
-  until mount. Check `ready` before rendering data.
-- **Mutations are optimistic.** Local state updates immediately, the write
-  goes to Postgres, and a failure rolls it back and logs. Writes can now fail —
-  they could not before — so a caller that shows success must check the result.
-- **RLS is the real boundary.** `lib/tenancy.ts` still scopes what the UI
-  renders, but the database enforces the same rule independently via
-  `pms_visible_client_ids()`. Any change to one must be made in the other;
-  `lib/rls-parity.test.ts` fails if they drift. Adding a `pms_` table means
-  adding its RLS policies **and** its grants, or that test fails too — and
-  adding a *migration* that creates tables means adding it to that test's
-  `allSchemas`, or its tables are never checked and the test passes vacuously.
-  A child table inherits its parent's tenancy (`pms_client_for_work_order`,
-  `pms_client_for_po_line`) rather than storing a `provider_id` — that filter
-  is the sibling-client leak.
-- **The append-only tables are enforced, not conventional.**
-  `pms_work_order_events` and `pms_approval_log` are granted select+insert
-  only, with no update or delete policy anywhere.
-- **`lib/mappers.ts` is where `normalise()` went.** Any new non-nullable field
-  on a domain type needs a default there, or a null column surfaces as a
-  runtime error deep in a component.
-- **Relations are normalised; the domain types are not.** `0006` moved
-  `task_ids[]`, `service_task_ids[]`, `vehicle_ids[]` and the `parts` jsonb
-  into junction tables (`pms_work_order_tasks`, `pms_work_order_parts`,
-  `pms_purchase_order_line_tasks`/`_vehicles`), and repeated names into
-  `pms_technicians` / `pms_vendors` / `pms_service_tasks` FKs. `order.taskIds`
-  is still a `string[]` at every call site — the mapper is the seam, so
-  normalising storage never rippled into components. Writing one of these
-  fields means writing child rows (`replaceWorkOrderTasks`,
-  `replaceWorkOrderParts` in `lib/store.ts`), not a column.
-- **Every catalogue FK is nullable, deliberately.** A technician recording an
-  unlisted repair has no `service_task_id`, and a part fitted off the shelf has
-  no `pms_parts` row. The text column survives beside each FK as the historical
-  label — a line whose catalogue task is later deleted still renders. Never
-  make one of these `not null`.
-- **Enum columns are already ids.** `pms_task_category` and friends store a
-  4-byte oid per row, not the label. Converting them to lookup tables would
-  grow every row and add a join; don't "normalise" them for space.
-- **Seed dates are drawn inside their calendar month**, not by 30-day
-  arithmetic — the naive version left the current month reading zero spend.
-  Regenerate with `scripts/emit-seed-sql.ts`, which runs the real
-  `createSeedState()` rather than duplicating it in SQL.
-- **Read parts cost via `resolvePartsCost`**, never `order.partsCost`.
-  Estimates carry only the aggregate; itemised lines win once a technician
-  records them.
-
-## Backend migration
-
-The Laravel API in `../api` (on this machine, the sibling directory
-`../torquelane-api`) is replacing Supabase. **From Phase 5 it is the only
-writer**: every mutation goes through it, and it is the source of truth for
-every business rule.
-
-- **Until then, the `lib/` domain modules are frozen reference
-  implementations.** They are what the PHP port is proven against: `pms`,
-  `interval-status`, `odometer-validation`, `compliance`,
-  `work-order-machine`, `approvals`, `billing`, `checkin`, `parts-forecast`,
-  `parts`, `shop`, `analytics`, `alerts`, `tenancy`, `rbac`. A change to any
-  of them, or to `lib/seed.ts`, **must regenerate the fixtures in the same
-  commit**: `emit-seed-json`, then `emit-golden-fixtures` (see Commands). A
-  fixture diff is the behaviour change, made reviewable. A commit that changes
-  behaviour without one leaves the port proving the wrong thing.
-- **`fixtures/golden/`** records every top-level call the existing unit tests
-  make, plus sweeps (whole seed fleet, every transition × role, every demo
-  account). The format, references and money encoding are in
-  `fixtures/golden/README.md`; per-module counts are in `COVERAGE.md`. The
-  clock is frozen to `2026-10-08T10:00:00+08:00` in Asia/Manila
-  (`scripts/golden/clock.ts`). The emitter pins the timezone itself, because
-  date-fns runs in the process's local zone.
-- **`fixtures/seed/demo-seed.json`** is `createSeedState()` under that clock,
-  plus `SERVICE_TASKS` and `DEFAULT_APPROVAL_SETTINGS`. The API seeder loads
-  it, so both sides start from byte-identical demo data. Golden `$seed`
-  references point into it, and the golden emitter refuses to run if it is
-  stale.
-- **After Phase 5, the frontend renders values the API returns.** It never
-  computes an authoritative total, status, due date or permission. The
-  `lib/` copies may still drive optimistic UI and previews, but whatever the
-  API says wins. `lib/rbac.ts` and `lib/tenancy.ts` become hints, exactly as
-  their own comments already describe.
-- **Product vs tenant naming.** The product is TorqueLane (`lib/platform.ts`:
-  name, platform support email, default theme tokens). It shows where no
-  tenant resolves: sign-in, metadata, the loading mark, the fail-closed
-  fallback (`DEFAULT_TENANT_SETTINGS`). Inside the app, branding is the
-  tenant's (`providerBranding`). The demo *provider* is still called
-  MekanikoMoR, because that is tenant data in the seed, not the product name.
+- `/shop/*` is the staff side (`lib/nav.ts`'s `PROVIDER_NAV_SECTIONS`);
+  `homeHrefFor(side, role)` decides where sign-in lands. A portal session on
+  `/shop` gets a notice; staff on `/dashboard` are sent to `/shop`.
+- **Work orders**: raised as a draft, then sent (`/send` numbers it and
+  auto-approves inside the account's band) — the dialog does both, so the UX is
+  one step. Scheduling (bay, time, technician) is staff-only and legal only once
+  approved; closing is `workorder:complete` (technicians, not advisors).
+- **Check-in** (`components/shop/check-in-workflow.tsx`): exact plate/VIN lookup
+  via `/check-in/lookup` (a stale odometer is never pre-filled), walk-in
+  registration via `POST /check-in` (consent recorded in the same call), the
+  reading via `/vehicles/{id}/readings` (an implausible one comes back as a 422
+  with `confirm_warning` — show the warning, ask, resend), then create → send →
+  schedule per chosen job. Check-out lists `/shop/ready-for-collection` and
+  releases all-or-none.
+- **Documents** upload as multipart to the API (10 MB); a document on no vehicle
+  is filed against an account (the portal user's own, or one staff pick).
+  Downloads open a short-lived signed URL.
 
 ## Styling
 

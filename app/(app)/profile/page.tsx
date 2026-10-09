@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { SuccessDialog } from "@/components/ui/success-dialog";
 import { useAuthActions, useSession } from "@/lib/auth";
-import { ROLE_LABEL } from "@/lib/rbac";
+
 
 function ProfileDetailsCard() {
   const { session } = useSession();
@@ -27,7 +27,7 @@ function ProfileDetailsCard() {
 
   // Resyncs the draft if the session changes from outside this card (e.g.
   // a fresh sign-in). Not on every session update, so an in-flight edit isn't
-  // clobbered by the optimistic write this same card just made.
+  // clobbered by the refetch that follows this same card's own save.
   useEffect(() => {
     setDraft({
       firstName: session?.firstName ?? "",
@@ -65,7 +65,7 @@ function ProfileDetailsCard() {
             Profile details
           </h3>
           <p className="mt-0.5 text-xs text-subtle-foreground">
-            {session.email} · {ROLE_LABEL[session.role]}
+            {session.email} · {session.roleLabel}
           </p>
         </div>
       </header>

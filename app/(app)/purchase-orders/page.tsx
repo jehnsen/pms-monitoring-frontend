@@ -19,22 +19,36 @@ import {
 import { PurchaseOrderStatusBadge } from "@/components/status";
 import { PurchaseOrderExportMenu } from "@/components/purchase-orders/purchase-order-export-menu";
 import { PurchaseOrderPrintDocument } from "@/components/purchase-orders/purchase-order-print";
-import { useFleet, useFleetActions } from "@/lib/store";
+import { QueryError } from "@/components/ui/query-error";
+import { useBranding, useFleetActions, usePurchaseOrders } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
-import { exportPurchaseOrdersToExcel, purchaseOrderTotal } from "@/lib/po-export";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { PurchaseOrder } from "@/types";
 
 export default function PurchaseOrdersPage() {
-  const { ready, purchaseOrders, tenant } = useFleet();
-  const { updatePurchaseOrderStatus } = useFleetActions();
+  const { data, error, refetch } = usePurchaseOrders();
+  const tenant = useBranding();
+  const { sendPurchaseOrder, receivePurchaseOrder, exportPurchaseOrders } = useFleetActions();
   const { can, reason } = useCan();
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  /** Send (issue, held to the caller's approval band) or receive (restocks). */
+  async function advance(order: PurchaseOrder) {
+    setBusyId(order.id);
+    setActionError(null);
+    const result = order.status === "draft" ? await sendPurchaseOrder(order.id) : await receivePurchaseOrder(order.id);
+    setBusyId(null);
+    if (!result.ok) setActionError(`${order.reference}: ${result.error}`);
+  }
   const [viewing, setViewing] = useState<PurchaseOrder | null>(null);
   // The one order currently rendered into `.po-print-root` — see
   // PurchaseOrderExportMenu for why only one may exist at a time.
   const [printing, setPrinting] = useState<PurchaseOrder | null>(null);
 
-  if (!ready) {
+  if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
+
+  if (!data) {
     return (
       <>
         <PageHeader
@@ -46,7 +60,8 @@ export default function PurchaseOrdersPage() {
     );
   }
 
-  const orders = [...purchaseOrders].sort((a, b) => b.createdOn.localeCompare(a.createdOn));
+  // Newest first, as the API lists them.
+  const orders = data.data;
 
   return (
     <>
@@ -57,7 +72,7 @@ export default function PurchaseOrdersPage() {
           orders.length > 0 ? (
             <Button
               variant="secondary"
-              onClick={() => void exportPurchaseOrdersToExcel(orders)}
+              onClick={() => void exportPurchaseOrders({ format: "xlsx" })}
             >
               <FileSpreadsheet />
               Export all to Excel
@@ -65,6 +80,12 @@ export default function PurchaseOrdersPage() {
           ) : undefined
         }
       />
+
+      {actionError ? (
+        <p role="alert" className="mb-5 rounded-lg border border-critical/25 bg-critical/[0.06] px-4 py-3 text-xs text-critical">
+          {actionError}
+        </p>
+      ) : null}
 
       {orders.length === 0 ? (
         <div className="card">
@@ -118,7 +139,7 @@ export default function PurchaseOrdersPage() {
                       {order.lines.length} {order.lines.length === 1 ? "line" : "lines"}
                     </td>
                     <td className="tabular whitespace-nowrap px-4 py-3 text-right text-xs font-medium">
-                      {formatCurrency(purchaseOrderTotal(order))}
+                      {formatCurrency(order.total)}
                     </td>
                     <td className="tabular whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
                       {formatDate(order.createdOn)}
@@ -128,21 +149,23 @@ export default function PurchaseOrdersPage() {
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       {order.status === "draft" || order.status === "sent" ? (
-                        can("po:issue") ? (
+                        can("po:issue") && (order.status !== "draft" || order.canSend) ? (
                           <Button
                             variant="secondary"
                             size="sm"
-                            onClick={() =>
-                              updatePurchaseOrderStatus(
-                                order.id,
-                                order.status === "draft" ? "sent" : "received"
-                              )
-                            }
+                            disabled={busyId === order.id}
+                            onClick={() => void advance(order)}
                           >
                             {order.status === "draft" ? "Mark as sent" : "Mark as received"}
                           </Button>
                         ) : (
-                          <DeniedAction reason={reason("po:issue")}>
+                          <DeniedAction
+                            reason={
+                              can("po:issue")
+                                ? `Issuing ${formatCurrency(order.total)} is above your approval limit; it needs a Fleet Manager.`
+                                : reason("po:issue")
+                            }
+                          >
                             <Button variant="secondary" size="sm">
                               {order.status === "draft" ? "Mark as sent" : "Mark as received"}
                             </Button>
@@ -163,7 +186,7 @@ export default function PurchaseOrdersPage() {
           <DialogHeader>
             <DialogTitle>{viewing?.reference}</DialogTitle>
             <DialogDescription>
-              {viewing?.vendor} — {viewing ? formatCurrency(purchaseOrderTotal(viewing)) : ""}
+              {viewing?.vendor} — {viewing ? formatCurrency(viewing.total) : ""}
             </DialogDescription>
           </DialogHeader>
           <DialogBody>
@@ -177,7 +200,7 @@ export default function PurchaseOrdersPage() {
                     </span>
                   </span>
                   <span className="tabular shrink-0 text-xs font-medium">
-                    {formatCurrency(line.quantity * line.unitCost)}
+                    {formatCurrency(line.lineTotal)}
                   </span>
                 </li>
               ))}

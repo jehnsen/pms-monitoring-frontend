@@ -31,7 +31,7 @@ import { cn, formatCurrency } from "@/lib/utils";
  * — but it is not the same story with the labels swapped. The fleet client
  * asks "is my vehicle compliant"; the shop asks "what's on my floor, from
  * everyone, and what's it worth" — same records, scoped at the source
- * (`lib/tenancy.ts`), never merged and never a client-side filter.
+ * by the API, never merged and never a client-side filter.
  */
 
 function CheckInPanel() {

@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/tooltip";
 import { PmsStatusBadge } from "@/components/status";
 import { NewWorkOrderDialog } from "@/components/work-orders/new-work-order-dialog";
-import { odometerAgeDays } from "@/lib/pms";
 import { CATEGORY_LABEL } from "@/lib/service-tasks";
+import { useServiceTasks } from "@/lib/store";
 import type { PmsItem, Vehicle } from "@/types";
 import { formatCurrency, formatDate, formatDayDelta, formatKm } from "@/lib/utils";
 
@@ -31,6 +31,7 @@ export function PmsSchedule({
   /** When the vehicle's odometer reading is old, mute the projection and say so. */
   isStale?: boolean;
 }) {
+  const { tasksById } = useServiceTasks();
   return (
     <ul className="divide-y divide-border">
       {items.map((item) => {
@@ -57,7 +58,8 @@ export function PmsSchedule({
                 <p className="mt-0.5 text-xs text-subtle-foreground">
                   {CATEGORY_LABEL[item.task.category]} · every{" "}
                   {formatKm(item.task.intervalKm)} or {item.task.intervalMonths}{" "}
-                  months · {formatCurrency(item.task.estimatedCost)} est.
+                  months
+                  {tasksById.get(item.task.id) ? ` · ${formatCurrency(tasksById.get(item.task.id)!.estimatedCost)} est.` : ""}
                 </p>
               </div>
 
@@ -110,7 +112,7 @@ export function PmsSchedule({
                       </dd>
                     </TooltipTrigger>
                     <TooltipContent>
-                      Projection based on a reading {odometerAgeDays(vehicle)} days
+                      Projection based on a reading {vehicle.odometerAgeDays} days
                       old.
                     </TooltipContent>
                   </Tooltip>

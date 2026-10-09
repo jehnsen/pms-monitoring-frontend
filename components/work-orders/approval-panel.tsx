@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/input";
 import { LineApprovalStatusBadge } from "@/components/status";
-import { useFleet, useFleetActions } from "@/lib/store";
+import { useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
-import { canApprove, lineCost, pendingValue } from "@/lib/approvals";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { WorkOrder } from "@/types";
 
@@ -21,31 +20,48 @@ const PARTS_SOURCE_LABEL = {
  * Per-line approve/decline/defer — the actual decision-making UI. Approval
  * always evaluates against the order's total pending value, not the single
  * line, so who can approve here can change as sibling lines get decided.
+ * The pending value and whether the caller's band covers it are the API's
+ * (`approval.pending_value_cents`, `approval.can_approve`); the decision
+ * itself is re-checked when it is posted.
  */
 export function ApprovalPanel({ order }: { order: WorkOrder }) {
-  const { approvalSettings } = useFleet();
-  const { decideLine } = useFleetActions();
-  const { can, reason, role } = useCan();
+  const { decideLines } = useFleetActions();
+  const { can, reason } = useCan();
 
   const [decliningLineId, setDecliningLineId] = React.useState<string | null>(null);
   const [declineReason, setDeclineReason] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [pending, setPending] = React.useState(false);
 
   if (order.lines.length === 0) return null;
 
-  const orderPendingValue = pendingValue(order.lines);
-  const canApproveOrder = role ? canApprove(role, orderPendingValue, approvalSettings) : false;
-  const canDecide = can("workorder:approve");
+  const orderPendingValue = order.approval.pendingValue;
+  const canApproveOrder = order.approval.canApprove;
+  const canDecide = can("workorder:approve") && order.status === "pending_approval";
+
+  async function decide(lineId: string, decision: "approved" | "declined" | "deferred", note?: string) {
+    setPending(true);
+    setError(null);
+    const result = await decideLines(order.id, [{ lineId, decision, note: note ?? null }]);
+    setPending(false);
+    if (!result.ok) {
+      setError(result.fields ? Object.values(result.fields)[0]?.[0] ?? result.error : result.error);
+      return false;
+    }
+    return true;
+  }
 
   function startDecline(lineId: string) {
     setDecliningLineId(lineId);
     setDeclineReason("");
   }
 
-  function confirmDecline(lineId: string) {
+  async function confirmDecline(lineId: string) {
     if (!declineReason.trim()) return;
-    decideLine(order.id, lineId, "declined", declineReason.trim());
-    setDecliningLineId(null);
-    setDeclineReason("");
+    if (await decide(lineId, "declined", declineReason.trim())) {
+      setDecliningLineId(null);
+      setDeclineReason("");
+    }
   }
 
   return (
@@ -65,11 +81,13 @@ export function ApprovalPanel({ order }: { order: WorkOrder }) {
         ) : null}
       </header>
 
+      {error ? <p role="alert" className="border-t border-border bg-critical/[0.06] px-5 py-2 text-xs text-critical">{error}</p> : null}
+
       <div className="divide-y divide-border border-t border-border">
         {order.lines.map((line) => {
           // The stored extended amounts — the price actually quoted — rather
           // than re-multiplying today's rates.
-          const total = lineCost(line);
+          const total = line.lineCost;
           const declining = decliningLineId === line.id;
 
           return (
@@ -113,7 +131,9 @@ export function ApprovalPanel({ order }: { order: WorkOrder }) {
               </div>
 
               {line.approvalStatus === "pending" ? (
-                canDecide ? (
+                order.status !== "pending_approval" ? (
+                  <p className="mt-2 text-2xs text-subtle-foreground">Not yet sent for approval.</p>
+                ) : canDecide ? (
                   declining ? (
                     <div className="mt-3 space-y-2 rounded-md border border-critical/25 bg-critical/[0.06] p-3">
                       {line.urgency === "safety_critical" ? (
@@ -140,8 +160,8 @@ export function ApprovalPanel({ order }: { order: WorkOrder }) {
                         <Button
                           variant="danger"
                           size="sm"
-                          disabled={!declineReason.trim()}
-                          onClick={() => confirmDecline(line.id)}
+                          disabled={!declineReason.trim() || pending}
+                          onClick={() => void confirmDecline(line.id)}
                         >
                           Confirm decline
                         </Button>
@@ -152,13 +172,13 @@ export function ApprovalPanel({ order }: { order: WorkOrder }) {
                       <Button
                         variant="primary"
                         size="sm"
-                        disabled={!canApproveOrder}
+                        disabled={!canApproveOrder || pending}
                         title={
                           canApproveOrder
                             ? undefined
                             : "This order's pending value needs a higher approval band."
                         }
-                        onClick={() => decideLine(order.id, line.id, "approved")}
+                        onClick={() => void decide(line.id, "approved")}
                       >
                         <ThumbsUp />
                         Approve
@@ -174,7 +194,8 @@ export function ApprovalPanel({ order }: { order: WorkOrder }) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => decideLine(order.id, line.id, "deferred")}
+                        disabled={pending}
+                        onClick={() => void decide(line.id, "deferred")}
                       >
                         Defer
                       </Button>

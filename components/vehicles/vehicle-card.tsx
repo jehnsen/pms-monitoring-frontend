@@ -4,23 +4,20 @@ import Link from "next/link";
 import { Clock, Gauge, MapPin, ShieldAlert, User } from "lucide-react";
 import { Meter } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PmsStatusBadge, VehicleStatusBadge } from "@/components/status";
-import { isOdometerStale, odometerAgeDays } from "@/lib/pms";
-import { vehicleComplianceStatus } from "@/lib/compliance";
-import { useFleet } from "@/lib/store";
-import type { VehicleHealth } from "@/types";
+import type { Vehicle } from "@/types";
 import { formatDayDelta, formatKm, formatRelative } from "@/lib/utils";
 
-export function VehicleCard({ entry }: { entry: VehicleHealth }) {
-  const { vehicle, nextItem, status } = entry;
-  const { documents } = useFleet();
-  const stale = isOdometerStale(vehicle);
-  const compliance = vehicleComplianceStatus(vehicle, documents);
+/**
+ * One vehicle as the list shows it. Its PMS state, next item, odometer
+ * staleness and compliance are the API's (`GET /vehicles`).
+ */
+export function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
+  const pms = vehicle.pms;
+  const nextItem = pms?.nextItem ?? null;
+  const stale = vehicle.odometerStale;
+  const compliance = vehicle.complianceStatus;
 
   return (
     <Link
@@ -29,15 +26,13 @@ export function VehicleCard({ entry }: { entry: VehicleHealth }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="tabular text-sm font-semibold tracking-tight">
-            {vehicle.plateNumber}
-          </p>
+          <p className="tabular text-sm font-semibold tracking-tight">{vehicle.plateNumber}</p>
           <p className="mt-0.5 truncate text-xs text-subtle-foreground">
-            {vehicle.year} {vehicle.make} {vehicle.model}
+            {vehicle.year ?? ""} {vehicle.make} {vehicle.model}
           </p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <PmsStatusBadge status={status} />
+          {pms ? <PmsStatusBadge status={pms.status} /> : null}
           {compliance !== "ok" ? (
             <Badge tone={compliance === "expired" ? "critical" : "warning"}>
               <ShieldAlert />
@@ -59,20 +54,18 @@ export function VehicleCard({ entry }: { entry: VehicleHealth }) {
           <dt className="sr-only">Odometer</dt>
           <dd className="tabular truncate">
             {formatKm(vehicle.odometer)}
-            <span className="ml-1 text-subtle-foreground">
-              · {formatRelative(vehicle.odometerReadAt)}
-            </span>
+            <span className="ml-1 text-subtle-foreground">· {formatRelative(vehicle.odometerReadAt)}</span>
           </dd>
         </div>
         <div className="flex items-center gap-1.5 text-muted-foreground">
           <MapPin className="size-3.5 shrink-0 text-subtle-foreground" />
           <dt className="sr-only">Location</dt>
-          <dd className="truncate">{vehicle.location}</dd>
+          <dd className="truncate">{vehicle.location || "—"}</dd>
         </div>
         <div className="col-span-2 flex items-center gap-1.5 text-muted-foreground">
           <User className="size-3.5 shrink-0 text-subtle-foreground" />
           <dt className="sr-only">Assigned to</dt>
-          <dd className="truncate">{vehicle.assignedTo}</dd>
+          <dd className="truncate">{vehicle.assignedTo || "Unassigned"}</dd>
         </div>
       </dl>
 
@@ -80,36 +73,23 @@ export function VehicleCard({ entry }: { entry: VehicleHealth }) {
         {nextItem ? (
           <>
             <div className="flex items-baseline justify-between gap-2">
-              <p className="truncate text-xs font-medium">{nextItem.task.name}</p>
+              <p className="truncate text-xs font-medium">{nextItem.name}</p>
               {stale ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <p className="tabular shrink-0 text-2xs text-subtle-foreground">
-                      {formatDayDelta(nextItem.daysRemaining)}
-                    </p>
+                    <p className="tabular shrink-0 text-2xs text-subtle-foreground">{formatDayDelta(nextItem.daysRemaining)}</p>
                   </TooltipTrigger>
-                  <TooltipContent>
-                    Projection based on a reading {odometerAgeDays(vehicle)} days
-                    old.
-                  </TooltipContent>
+                  <TooltipContent>Projection based on a reading {vehicle.odometerAgeDays} days old.</TooltipContent>
                 </Tooltip>
               ) : (
-                <p className="tabular shrink-0 text-2xs text-muted-foreground">
-                  {formatDayDelta(nextItem.daysRemaining)}
-                </p>
+                <p className="tabular shrink-0 text-2xs text-muted-foreground">{formatDayDelta(nextItem.daysRemaining)}</p>
               )}
             </div>
             <Meter
               className="mt-2"
               value={nextItem.progress}
-              tone={
-                nextItem.status === "overdue"
-                  ? "critical"
-                  : nextItem.status === "due_soon"
-                    ? "warning"
-                    : "ok"
-              }
-              label={`${nextItem.task.name} interval progress`}
+              tone={nextItem.status === "overdue" ? "critical" : nextItem.status === "due_soon" ? "warning" : "ok"}
+              label={`${nextItem.name} interval progress`}
             />
             <p className="tabular mt-2 text-2xs text-subtle-foreground">
               {nextItem.kmRemaining <= 0
@@ -126,9 +106,7 @@ export function VehicleCard({ entry }: { entry: VehicleHealth }) {
 
       <div className="mt-4 flex items-center justify-between gap-2">
         <VehicleStatusBadge status={vehicle.status} />
-        <span className="tabular text-2xs text-subtle-foreground">
-          Health {entry.healthScore}
-        </span>
+        {pms ? <span className="tabular text-2xs text-subtle-foreground">Health {pms.healthScore}</span> : null}
       </div>
     </Link>
   );

@@ -81,8 +81,8 @@ approval SLA breaches, and registration, insurance, or licences nearing renewal.
 which side of the tenancy boundary they sit on. Gating lives inside the action
 components, so any screen using them inherits it. Denied controls are dimmed
 with a reason rather than hidden. Permissions shape the interface but do not
-secure it — **Row Level Security in Postgres is the real boundary**, and
-`lib/rls-parity.test.ts` fails if the two definitions drift apart.
+secure it — **the API is the real boundary**: capabilities come from `GET /me`,
+and every endpoint enforces role, scope and module on its own.
 
 ## Architecture
 
@@ -91,75 +91,42 @@ app/(app)/               Route group sharing the sidebar + topbar shell
 components/ui/           Primitives (button, card, dialog, select, meter, …)
 components/charts/       Recharts wrappers, each with a table-view twin
 
-lib/pms.ts               The due-date engine — the core domain logic
-lib/work-order-machine.ts Lifecycle transitions and order numbering
-lib/approvals.ts         Approval bands, SLA, variance thresholds
-lib/billing.ts           Line amounts, subtotal, VAT, grand total
-lib/checkin.ts           Plate/VIN lookup and form hydration
-lib/tenancy.ts           The scoping chokepoint — fails closed
-lib/rbac.ts              Roles and capabilities
-lib/alerts.ts            Alerts, derived on every read
-lib/parts-forecast.ts    Projected parts demand and lead-time risk
-lib/shop.ts              Bay load, floor utilisation, revenue
-lib/analytics.ts         Derived series for the dashboard and reports
-
-lib/supabase.ts          Supabase browser client
-lib/fleet-data.ts        Queries against the pms_ tables
-lib/mappers.ts           Row <-> domain mapping (where normalise() lives)
-lib/store.ts             Client store (useSyncExternalStore over Supabase)
-lib/seed.ts              Deterministic demo fleet, used to generate seed SQL
-supabase/migrations      Schema, RLS policies, auth users, seed data
+lib/api/client.ts        fetch wrapper: Sanctum cookies + CSRF, X-Branch-Id, errors
+lib/api/errors.ts        The API's error envelope as a typed ApiError
+lib/api/query.tsx        TanStack Query client and provider
+lib/api/views.ts         Screen endpoints (/analytics, /shop, …) as typed views
+lib/store.ts             Query hooks per screen, and useFleetActions() mutations
+lib/mappers.ts           API resource <-> domain type mapping (centavos -> pesos)
+lib/auth.ts              The session (GET /me), sign-in, profile, password
+lib/rbac.ts              useCan(): capabilities from /me, denial reasons
+lib/billing.ts           PREVIEW ONLY: quote arithmetic while typing
+types/api.ts             Generated from the API's openapi.json
+e2e/                     Playwright smoke and parity suites
 ```
 
-**State.** The fleet lives in Postgres (Supabase). `lib/store.ts` loads it once
-per session behind a `useSyncExternalStore` store, so reads stay synchronous for
-components, and mutations are optimistic — local state updates immediately, the
-write goes to Postgres, and a failure rolls the change back. Due dates depend on
-"now", so the server renders an empty shell and the store fills in on mount;
-check `ready` before rendering data.
+**The TorqueLane API owns the data and every rule.** This app is a client of
+the Laravel API in `../torquelane-api`: due dates, approvals, totals, check-in,
+analytics, tenancy and permissions are computed there, and the screens render
+what it returns. Mutations go to the API and then refetch the queries they
+affect; nothing is optimistic. A portal session sees only its own account — a
+sibling client's record is a 404 from the API, not a client-side filter.
 
-**Tenancy is enforced in the database.** `lib/tenancy.ts` decides what the UI
-renders, and the same rules are mirrored as Row Level Security policies keyed
-off `auth.uid()` — see `lib/rls-parity.test.ts`, which pins the SQL to the
-TypeScript so the two copies cannot drift.
+## Running locally
 
-## Database setup
+1. Start the API (see its README): Postgres, then
+   `php artisan migrate:fresh --seed` and `php artisan serve --port=8000`.
+   The demo seed is one provider (MekanikoMoR) with four fleet clients —
+   Actimed, Northwind Logistics, Sagrada Medical Transport, and Bayani
+   Construction (seeded `suspended`, so its account shows the refused sign-in).
+2. `cp .env.example .env` — `NEXT_PUBLIC_API_URL` points at the API;
+   `NEXT_PUBLIC_DEMO_MODE=true` adds one-click demo accounts to the sign-in
+   screen.
+3. `npm run dev` on port 3000 (the origin the API allows), then sign in as
+   `owner@mekanikomore.ph` (staff) or `donmiguel@mekanikomor.ph` (Actimed's
+   fleet manager), password `demo1234`.
 
-The app needs a Supabase project. Note that all its tables are prefixed `pms_`
-so it can share a project with an unrelated application.
-
-1. `cp .env.example .env` and fill in the project URL and **anon** key
-   (Settings -> API). The service_role key is not used by the app and must
-   never reach the browser.
-2. Run the migrations in order, via the Supabase SQL editor or `psql`:
-
-   ```
-   supabase/migrations/0001_pms_schema.sql             tables, RLS policies, grants
-   supabase/migrations/0002_pms_auth_users.sql         the demo accounts
-   supabase/migrations/0003_pms_seed.sql               the demo fleet
-   supabase/migrations/0004_pms_service_tasks.sql      the PMS interval catalogue table
-   supabase/migrations/0005_pms_service_tasks_seed.sql the default 12 service items
-   supabase/migrations/0006_pms_normalisation.sql      junction tables, catalogue FKs
-   supabase/migrations/0007_pms_workflow.sql           line qty/rate, order numbering, VAT
-   ```
-
-   All seven are idempotent — re-running them will not duplicate anything.
-3. Sign in as `owner@mekanikomore.ph` (provider side) or `fleet@actimed.ph`
-   (client side), password `demo1234`.
-
-The seed is one provider (MekanikoMoR) with four fleet clients — Actimed
-(16 vehicles), Northwind Logistics, Sagrada Medical Transport, and Bayani
-Construction. Bayani is seeded `suspended` on purpose, so its demo account
-demonstrates the fail-closed tenancy path against real data.
-
-**Before exposing this instance to anyone**, rotate the demo passwords (they are
-all `demo1234`) or delete the accounts you do not need. These are now real
-credentials against a real database.
-
-To regenerate the demo fleet so its dates read as current:
-`npx vitest run scripts/emit-seed-sql.ts`. To regenerate the service-task seed
-from `lib/service-tasks.ts`: `npx vitest run scripts/emit-service-tasks-sql.ts`.
-Both need a config whose `include` covers `scripts/` (see the file headers).
+`npm run test:e2e` runs the Playwright suites against that API; they write
+demo data, so never point them at a real database.
 
 **Theming.** Light and dark are driven by CSS custom properties in
 `app/globals.css`, stamped onto `<html>` before first paint so there is no

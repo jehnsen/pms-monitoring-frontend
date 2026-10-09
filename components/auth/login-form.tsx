@@ -2,33 +2,26 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ArrowRight, Loader2, Mail, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Loader2, Mail, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Logo } from "@/components/layout/logo";
-import { DEMO_ACCOUNTS, useAuthActions, useSession } from "@/lib/auth";
+import { DEMO_ACCOUNTS, DEMO_MODE, useAuthActions, useSession } from "@/lib/auth";
+import { api } from "@/lib/api/client";
+import { describeApiError } from "@/lib/api/errors";
 import { homeHrefFor } from "@/lib/nav";
 import { cn } from "@/lib/utils";
-import type { UserRole } from "@/types";
-
-/**
- * The account the login screen advertises. Looked up by email rather than by
- * position — `DEMO_ACCOUNTS` is now ordered provider-side first, and taking
- * `[0]` would quietly hand out the Provider Admin instead.
- */
-const PRIMARY_ACCOUNT =
-  DEMO_ACCOUNTS.find((account) => account.role === "provider_admin") ??
-  DEMO_ACCOUNTS[3];
+import type { Session } from "@/types";
 
 /**
  * Where a bare sign-in drops you. Provider staff land on the shop floor,
  * client staff on their fleet dashboard — two different jobs, two different
  * home screens. See `homeHrefFor`.
  */
-function defaultDestinationFor(role: UserRole | undefined) {
-  return homeHrefFor(role);
+function defaultDestinationFor(session: Pick<Session, "side" | "role"> | null) {
+  return homeHrefFor(session?.side, session?.role);
 }
 
 /**
@@ -36,9 +29,9 @@ function defaultDestinationFor(role: UserRole | undefined) {
  * same-site absolute paths are honoured — `//evil.com` and `https://evil.com`
  * are both rejected — otherwise the login screen becomes an open redirect.
  */
-function safeDestination(next: string | undefined, role: UserRole | undefined) {
-  if (!next) return defaultDestinationFor(role);
-  if (!next.startsWith("/") || next.startsWith("//")) return defaultDestinationFor(role);
+function safeDestination(next: string | undefined, session: Pick<Session, "side" | "role"> | null) {
+  if (!next) return defaultDestinationFor(session);
+  if (!next.startsWith("/") || next.startsWith("//")) return defaultDestinationFor(session);
   return next;
 }
 
@@ -50,43 +43,61 @@ export function LoginForm({ next }: { next?: string }) {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
 
   // Someone with a live session has no business on the login screen.
   React.useEffect(() => {
-    if (ready && session) router.replace(safeDestination(next, session.role));
+    if (ready && session) router.replace(safeDestination(next, session));
   }, [ready, session, router, next]);
 
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setError(null);
-
-    if (!email.trim() || !password) {
-      setError("Enter both your email and password.");
-      return;
-    }
-
+  async function attempt(withEmail: string, withPassword: string) {
     setPending(true);
-
-    // A real network round-trip to Supabase Auth, which supplies the latency
-    // the pending state used to have to fake.
-    const result = await signIn(email, password);
+    // The API's cookie session: CSRF cookie, then POST /auth/login → /me.
+    const result = await signIn(withEmail, withPassword);
     if (!result.ok) {
       setError(result.error);
       setPending(false);
       return;
     }
-
-    const account = DEMO_ACCOUNTS.find(
-      (candidate) => candidate.email.toLowerCase() === email.trim().toLowerCase()
-    );
-    router.replace(safeDestination(next, account?.role));
+    router.replace(safeDestination(next, result.session));
   }
 
-  function fillDemo() {
-    setEmail(PRIMARY_ACCOUNT.email);
-    setPassword(PRIMARY_ACCOUNT.password);
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
     setError(null);
+    setNotice(null);
+
+    if (!email.trim() || !password) {
+      setError("Enter both your email and password.");
+      return;
+    }
+    await attempt(email, password);
+  }
+
+  /** POST /auth/forgot-password; the answer never says whether the address exists. */
+  async function onForgot() {
+    setError(null);
+    setNotice(null);
+    if (!email.trim()) {
+      setError("Enter your work email first, then choose “Forgot password?”.");
+      return;
+    }
+    try {
+      await api("/auth/forgot-password", { method: "POST", body: { email: email.trim().toLowerCase() }, branch: null });
+      setNotice("If that address has an account, a reset link is on its way.");
+    } catch (failure) {
+      setError(describeApiError(failure));
+    }
+  }
+
+  /** Demo builds only: sign in as a seeded account in one click. */
+  async function signInAs(demoEmail: string, demoPassword: string) {
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    setError(null);
+    setNotice(null);
+    await attempt(demoEmail, demoPassword);
   }
 
   return (
@@ -128,11 +139,7 @@ export function LoginForm({ next }: { next?: string }) {
             <button
               type="button"
               className="rounded text-xs text-brand transition-colors hover:underline"
-              onClick={() =>
-                setError(
-                  "Password recovery needs a mail service, which this demo build doesn't have."
-                )
-              }
+              onClick={() => void onForgot()}
             >
               Forgot password?
             </button>
@@ -157,6 +164,13 @@ export function LoginForm({ next }: { next?: string }) {
           </p>
         ) : null}
 
+        {notice ? (
+          <p role="status" className="flex items-start gap-2 rounded-md border border-ok/25 bg-ok/[0.07] px-3 py-2 text-xs">
+            <CheckCircle2 className="mt-px size-4 shrink-0 text-ok" />
+            {notice}
+          </p>
+        ) : null}
+
         <Button
           type="submit"
           variant="primary"
@@ -175,60 +189,37 @@ export function LoginForm({ next }: { next?: string }) {
         </Button>
       </form>
 
-      {/* Nobody should be able to get locked out of a demo. */}
-      <details className="mt-6 rounded-lg border border-border bg-surface-2/60 p-4">
-        <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Explore with a demo account</summary>
-        <div className="mt-4">
-        <p className="text-2xs font-semibold uppercase tracking-wider text-subtle-foreground">
-          Demo credentials
-        </p>
-        <dl className="mt-2 space-y-1 text-xs">
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-subtle-foreground">Email</dt>
-            <dd className="tabular font-medium">{PRIMARY_ACCOUNT.email}</dd>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-subtle-foreground">Password</dt>
-            <dd className="tabular font-medium">{PRIMARY_ACCOUNT.password}</dd>
-          </div>
-        </dl>
-
-        <hr className="my-3" />
-
-         <dl className="mt-2 space-y-1 text-xs">
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-subtle-foreground">Email</dt>
-            <dd className="tabular font-medium">donmiguel@mekanikomor.ph</dd>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-subtle-foreground">Password</dt>
-            <dd className="tabular font-medium">demo1234</dd>
-          </div>
-        </dl>
-
-        <hr className="my-3" />
-
-        <dl className="mt-2 space-y-1 text-xs">
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-subtle-foreground">Email</dt>
-            <dd className="tabular font-medium">purchasing@mekanikomor.ph</dd>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <dt className="text-subtle-foreground">Password</dt>
-            <dd className="tabular font-medium">{PRIMARY_ACCOUNT.password}</dd>
-          </div>
-        </dl>
-
-        <Button
-          variant="secondary"
-          size="sm"
-          className="mt-3 w-full"
-          onClick={fillDemo}
-        >
-          Fill demo credentials
-        </Button>
-        </div>
-      </details>
+      {/* Demo builds only (NEXT_PUBLIC_DEMO_MODE=true): one click per seeded role. */}
+      {DEMO_MODE && DEMO_ACCOUNTS.length > 0 ? (
+        <details className="mt-6 rounded-lg border border-border bg-surface-2/60 p-4">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Explore with a demo account</summary>
+          <p className="mt-3 text-2xs leading-relaxed text-subtle-foreground">
+            Seeded accounts on the demo API; every password is{" "}
+            <span className="font-medium text-foreground">demo1234</span>.
+          </p>
+          <ul className="mt-3 space-y-1.5">
+            {DEMO_ACCOUNTS.map((account) => (
+              <li key={account.email}>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => void signInAs(account.email, account.password)}
+                  className="flex w-full items-center justify-between gap-3 rounded-md border border-border bg-surface px-3 py-2 text-left transition-colors hover:border-brand/35 disabled:opacity-60"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-medium">{account.name}</span>
+                    <span className="block truncate text-2xs text-subtle-foreground">
+                      {account.title}
+                      {account.account ? ` · ${account.account}` : " · Provider staff"}
+                    </span>
+                  </span>
+                  <ArrowRight className="size-3.5 shrink-0 text-subtle-foreground" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
 
       <p className={cn("mt-7 flex items-center justify-center gap-2 text-center text-[11px] text-subtle-foreground")}>
         <ShieldCheck className="size-3.5 shrink-0" />

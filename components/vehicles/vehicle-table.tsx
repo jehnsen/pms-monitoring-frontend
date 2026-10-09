@@ -9,8 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { PmsStatusBadge, VehicleStatusBadge } from "@/components/status";
-import { isOdometerStale, odometerAgeDays } from "@/lib/pms";
-import type { VehicleHealth } from "@/types";
+import type { Vehicle } from "@/types";
 import { formatDayDelta, formatKm } from "@/lib/utils";
 
 const HEADINGS = [
@@ -23,7 +22,7 @@ const HEADINGS = [
   "",
 ];
 
-export function VehicleTable({ entries }: { entries: VehicleHealth[] }) {
+export function VehicleTable({ vehicles }: { vehicles: Vehicle[] }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[900px] text-sm">
@@ -41,9 +40,9 @@ export function VehicleTable({ entries }: { entries: VehicleHealth[] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {entries.map((entry) => {
-            const { vehicle, nextItem } = entry;
-            const stale = isOdometerStale(vehicle);
+          {vehicles.map((vehicle) => {
+            const nextItem = vehicle.pms?.nextItem ?? null;
+            const stale = vehicle.odometerStale;
             return (
               <tr
                 key={vehicle.id}
@@ -55,7 +54,7 @@ export function VehicleTable({ entries }: { entries: VehicleHealth[] }) {
                       {vehicle.plateNumber}
                     </span>
                     <span className="block text-2xs text-subtle-foreground">
-                      {vehicle.year} {vehicle.make} {vehicle.model}
+                      {vehicle.year ?? ""} {vehicle.make} {vehicle.model}
                     </span>
                   </Link>
                 </td>
@@ -69,14 +68,14 @@ export function VehicleTable({ entries }: { entries: VehicleHealth[] }) {
                 </td>
 
                 <td className="px-4 py-3">
-                  <PmsStatusBadge status={entry.status} />
+                  {vehicle.pms ? <PmsStatusBadge status={vehicle.pms.status} /> : <span className="text-xs text-subtle-foreground">—</span>}
                 </td>
 
                 <td className="min-w-[240px] px-4 py-3">
                   {nextItem ? (
                     <>
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="truncate text-xs">{nextItem.task.name}</span>
+                        <span className="truncate text-xs">{nextItem.name}</span>
                         {stale ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -86,7 +85,7 @@ export function VehicleTable({ entries }: { entries: VehicleHealth[] }) {
                             </TooltipTrigger>
                             <TooltipContent>
                               Projection based on a reading{" "}
-                              {odometerAgeDays(vehicle)} days old.
+                              {vehicle.odometerAgeDays} days old.
                             </TooltipContent>
                           </Tooltip>
                         ) : (
@@ -105,7 +104,7 @@ export function VehicleTable({ entries }: { entries: VehicleHealth[] }) {
                               ? "warning"
                               : "ok"
                         }
-                        label={`${nextItem.task.name} interval progress`}
+                        label={`${nextItem.name} interval progress`}
                       />
                     </>
                   ) : (
@@ -114,7 +113,7 @@ export function VehicleTable({ entries }: { entries: VehicleHealth[] }) {
                 </td>
 
                 <td className="tabular px-4 py-3 text-xs font-medium">
-                  {entry.healthScore}
+                  {vehicle.pms?.healthScore ?? "—"}
                 </td>
 
                 <td className="px-2 py-3">

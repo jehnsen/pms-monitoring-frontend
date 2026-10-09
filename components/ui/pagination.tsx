@@ -13,12 +13,8 @@ import {
 const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
 /**
- * Page/limit controls for a client-side-paginated table.
- *
- * Pagination here slices an already-filtered, already-fetched array — there
- * is no server-side paging query behind it (see `lib/store.ts`: the whole
- * scoped fleet loads at once). This is presentation only, so changing the
- * page size never refetches anything; it just re-slices.
+ * Page/limit controls for a paged list. The API pages (`?page=&per_page=`,
+ * at most 100); changing either refetches that page.
  */
 export function Pagination({
   page,

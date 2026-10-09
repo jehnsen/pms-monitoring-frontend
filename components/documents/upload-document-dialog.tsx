@@ -23,23 +23,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DeniedAction } from "@/components/auth/denied-action";
-import { MAX_DOCUMENT_BYTES, useFleet, useFleetActions } from "@/lib/store";
-import { useCan } from "@/lib/rbac";
+import { MAX_DOCUMENT_BYTES, useAllVehicles, useFleetActions, useFleetClients } from "@/lib/store";
 import { useSession } from "@/lib/auth";
+import { useCan } from "@/lib/rbac";
 import {
+  COMPLIANCE_DOC_KINDS,
   DOCUMENT_KINDS,
   DOCUMENT_KIND_LABEL,
   EXPIRING_KINDS,
 } from "@/lib/documents";
-import { COMPLIANCE_DOC_KINDS } from "@/lib/compliance";
 import { formatBytes } from "@/lib/utils";
 import type { DocumentKind } from "@/types";
 
 /**
- * Files are read into a data URL and kept in localStorage alongside the fleet,
- * which is why the size cap exists — a couple of large PDFs would exhaust the
- * origin's quota and take the rest of the app's state down with them. A real
- * deployment would post to object storage and keep only the key.
+ * Uploads go to the API (multipart, `POST /documents`), which files them on
+ * its private disk under the vehicle's (or work order's) account. The API caps
+ * a file at 10 MB and checks the type; its answer is what's shown.
  */
 export function UploadDocumentDialog({
   vehicleId,
@@ -50,15 +49,17 @@ export function UploadDocumentDialog({
   workOrderId?: string;
   size?: "sm" | "md";
 }) {
-  const { vehicles } = useFleet();
   const { addDocument } = useFleetActions();
-  const { can, reason } = useCan();
+  const { can, reason, side } = useCan();
   const { session } = useSession();
 
   const [open, setOpen] = React.useState(false);
   const [file, setFile] = React.useState<File | null>(null);
   const [kind, setKind] = React.useState<DocumentKind>("invoice");
   const [linkedVehicle, setLinkedVehicle] = React.useState(vehicleId ?? "none");
+  // A document on no vehicle is filed against an account: the portal user's
+  // own, or the one staff pick.
+  const [accountId, setAccountId] = React.useState("");
   const [expiresOn, setExpiresOn] = React.useState("");
   const [referenceNumber, setReferenceNumber] = React.useState("");
   const [issuedOn, setIssuedOn] = React.useState("");
@@ -68,6 +69,10 @@ export function UploadDocumentDialog({
   const [busy, setBusy] = React.useState(false);
 
   const isCompliance = COMPLIANCE_DOC_KINDS.includes(kind);
+  const { vehicles } = useAllVehicles();
+  const { fleetClients } = useFleetClients({ enabled: open && side === "staff" });
+  const fleetWide = !workOrderId && linkedVehicle === "none";
+  const needsAccount = fleetWide && side === "staff";
 
   React.useEffect(() => {
     if (!open) return;
@@ -79,6 +84,7 @@ export function UploadDocumentDialog({
     setIssuedOn("");
     setIssuingBody("");
     setLinkedVehicle(vehicleId ?? "none");
+    setAccountId("");
   }, [open, vehicleId]);
 
   const trigger = (
@@ -93,16 +99,7 @@ export function UploadDocumentDialog({
   }
 
   const oversized = file ? file.size > MAX_DOCUMENT_BYTES : false;
-  const canSubmit = Boolean(file) && !oversized && !busy;
-
-  function readAsDataUrl(source: File) {
-    return new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(new Error("The file could not be read."));
-      reader.readAsDataURL(source);
-    });
-  }
+  const canSubmit = Boolean(file) && !oversized && !busy && (!needsAccount || Boolean(accountId));
 
   async function submit() {
     if (!file) return;
@@ -110,16 +107,14 @@ export function UploadDocumentDialog({
     setError(null);
 
     try {
-      const dataUrl = await readAsDataUrl(file);
-      const result = addDocument({
+      const result = await addDocument({
+        file,
         name: file.name,
         kind,
-        vehicleId: linkedVehicle === "none" ? null : linkedVehicle,
+        // On a work order the API files it under the order's vehicle and account.
+        vehicleId: workOrderId ? null : linkedVehicle === "none" ? null : linkedVehicle,
         workOrderId: workOrderId ?? null,
-        uploadedBy: session?.name ?? "Unknown",
-        sizeBytes: file.size,
-        mimeType: file.type || "application/octet-stream",
-        dataUrl,
+        fleetClientId: fleetWide ? (side === "staff" ? accountId : session?.fleetClientId ?? null) : null,
         expiresOn: EXPIRING_KINDS.includes(kind) && expiresOn ? expiresOn : null,
         referenceNumber: isCompliance && referenceNumber.trim() ? referenceNumber.trim() : null,
         issuedOn: isCompliance && issuedOn ? issuedOn : null,
@@ -128,7 +123,7 @@ export function UploadDocumentDialog({
       });
 
       if (!result.ok) {
-        setError(result.error);
+        setError(result.fields?.file?.[0] ?? result.error);
         return;
       }
       setOpen(false);
@@ -174,7 +169,7 @@ export function UploadDocumentDialog({
             >
               {file
                 ? `${file.name} · ${formatBytes(file.size)}`
-                : `Up to ${formatBytes(MAX_DOCUMENT_BYTES)} in this demo build.`}
+                : `Up to ${formatBytes(MAX_DOCUMENT_BYTES)}.`}
               {oversized ? " — too large to store in the browser." : ""}
             </p>
           </div>
@@ -216,6 +211,24 @@ export function UploadDocumentDialog({
               </Select>
             </div>
           </div>
+
+          {needsAccount ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="doc-account">Account</Label>
+              <Select value={accountId} onValueChange={setAccountId}>
+                <SelectTrigger id="doc-account">
+                  <SelectValue placeholder="Whose document is this?" />
+                </SelectTrigger>
+                <SelectContent>
+                  {fleetClients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
 
           {/* Only shown for kinds that actually renew — an expiry on an invoice
               would be noise, and would raise meaningless alerts. */}

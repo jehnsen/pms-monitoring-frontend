@@ -1,15 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { startOfMonth } from "date-fns";
 import { Building2, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { ClientFormDialog } from "@/components/shop/client-form-dialog";
-import { useFleet } from "@/lib/store";
-import { rollupClients } from "@/lib/shop";
+import { QueryError } from "@/components/ui/query-error";
+import { useFleetClients, useShopClients } from "@/lib/store";
 import { formatCurrency } from "@/lib/utils";
 
 const HEADINGS = [
@@ -24,7 +23,13 @@ const HEADINGS = [
 ];
 
 export default function ShopClientsPage() {
-  const { ready, fleetClients, vehicles, workOrders } = useFleet();
+  // The book: vehicles, open work, turnaround, spend recognised this month and
+  // uncollected work per account are the API's (`GET /shop/clients`).
+  const { data: book, error, refetch } = useShopClients();
+  const { fleetClients } = useFleetClients();
+  const ready = Boolean(book);
+
+  if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
 
   if (!ready) {
     return (
@@ -38,14 +43,14 @@ export default function ShopClientsPage() {
     );
   }
 
-  const now = new Date();
-  const rollups = rollupClients(
-    fleetClients,
-    vehicles,
-    workOrders,
-    startOfMonth(now),
-    now
-  ).sort((a, b) => b.spendThisPeriod - a.spendThisPeriod);
+  const byId = new Map(fleetClients.map((client) => [client.id, client]));
+  // Biggest account this month first (ordering is presentation).
+  const rollups = (book ?? [])
+    .flatMap((row) => {
+      const client = byId.get(row.customerAccountId);
+      return client ? [{ ...row, client }] : [];
+    })
+    .sort((a, b) => b.spendThisPeriod - a.spendThisPeriod);
 
   return (
     <>

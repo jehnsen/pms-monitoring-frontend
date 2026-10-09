@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { useFleet } from "@/lib/store";
+import { useBranding } from "@/lib/store";
+import { useSession } from "@/lib/auth";
 import { useTheme } from "@/components/theme-provider";
 import { brandForegroundTriplet, hexToHslTriplet } from "@/lib/tenant";
 
@@ -9,11 +10,12 @@ import { brandForegroundTriplet, hexToHslTriplet } from "@/lib/tenant";
  * Applies tenant branding to the two surfaces that live outside React's
  * render tree: the document title and the `--brand`/`--brand-foreground` CSS
  * custom properties `Button`'s primary variant reads. Renders nothing —
- * mount once, inside `AuthGuard`, since tenant settings only exist once the
- * fleet store has hydrated.
+ * mount once, inside `AuthGuard`: branding is the session's (`GET /me`).
  */
 export function TenantBranding() {
-  const { ready, tenant } = useFleet();
+  const { session } = useSession();
+  const ready = Boolean(session);
+  const tenant = useBranding();
   const { theme } = useTheme();
 
   useEffect(() => {

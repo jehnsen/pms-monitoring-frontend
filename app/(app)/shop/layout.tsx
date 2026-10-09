@@ -5,7 +5,6 @@ import { Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useCan } from "@/lib/rbac";
-import { isProviderRole } from "@/lib/tenancy";
 import { homeHrefFor } from "@/lib/nav";
 
 /**
@@ -14,14 +13,13 @@ import { homeHrefFor } from "@/lib/nav";
  * other client's work — so the whole route group is gated in one place rather
  * than page by page.
  *
- * As ever this is a UI affordance; the data itself is narrowed by
- * `lib/tenancy.ts`, which is what actually keeps a client's session from
- * seeing across the boundary.
+ * As ever this is a UI affordance; the API refuses the shop endpoints to a
+ * portal session (403), which is what actually keeps it out.
  */
 export default function ShopLayout({ children }: { children: React.ReactNode }) {
-  const { role } = useCan();
+  const { role, side } = useCan();
 
-  if (role && !isProviderRole(role)) {
+  if (side && side !== "staff") {
     return (
       <div className="card">
         <EmptyState
@@ -30,7 +28,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           description="The shop floor belongs to the provider. Your account is scoped to a single fleet, which has its own dashboard."
           action={
             <Button asChild variant="primary">
-              <Link href={homeHrefFor(role)}>Go to my dashboard</Link>
+              <Link href={homeHrefFor(side, role)}>Go to my dashboard</Link>
             </Button>
           }
         />

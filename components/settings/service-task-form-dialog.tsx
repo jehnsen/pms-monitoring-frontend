@@ -25,6 +25,7 @@ import {
 import { DeniedAction } from "@/components/auth/denied-action";
 import { CATEGORY_LABEL } from "@/lib/service-tasks";
 import { useFleetActions } from "@/lib/store";
+import { pesosToCents } from "@/lib/mappers";
 import { useCan } from "@/lib/rbac";
 import type { ServiceTask, TaskCategory } from "@/types";
 
@@ -62,6 +63,15 @@ function fromTask(task: ServiceTask): FormState {
   };
 }
 
+
+/** "Brake fluid flush" → "brake-fluid-flush": the catalogue code the API keys a task on. */
+function taskCode(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+}
 /**
  * Adds or edits one row of the provider's PMS interval catalogue.
  *
@@ -74,7 +84,7 @@ function fromTask(task: ServiceTask): FormState {
 export function ServiceTaskFormDialog({ task }: { task?: ServiceTask }) {
   const isEdit = Boolean(task);
   const { addServiceTask, updateServiceTask } = useFleetActions();
-  const { can, reason } = useCan();
+  const { canAsStaff, staffReason } = useCan();
   const [open, setOpen] = React.useState(false);
   const [form, setForm] = React.useState<FormState>(task ? fromTask(task) : blank());
   const [error, setError] = React.useState<string | null>(null);
@@ -113,25 +123,20 @@ export function ServiceTaskFormDialog({ task }: { task?: ServiceTask }) {
     const shared = {
       name: form.name.trim(),
       category: form.category,
-      intervalKm: km,
-      intervalMonths: months,
-      estimatedCost: cost,
-      estimatedHours: hours,
+      interval_km: km,
+      interval_months: months,
+      estimated_cost_cents: pesosToCents(cost),
+      estimated_hours: hours,
       critical: form.critical,
     };
 
-    if (isEdit && task) {
-      // Fire-and-forget, like `updateFleetClient`/`updateVehicle`: the guard
-      // above (`can("settings:manage")`) already covers who may call this, and
-      // an optimistic update rolls itself back on failure.
-      updateServiceTask(task.id, shared);
-      setOpen(false);
-      return;
-    }
-
-    const result = await addServiceTask(shared);
+    const result =
+      isEdit && task
+        ? await updateServiceTask(task.id, shared)
+        : // A new task's code (its stable key) is derived from its name.
+          await addServiceTask({ ...shared, code: taskCode(form.name) });
     if (!result.ok) {
-      setError(result.error);
+      setError(result.fields ? Object.values(result.fields)[0]?.[0] ?? result.error : result.error);
       return;
     }
     setOpen(false);
@@ -148,8 +153,8 @@ export function ServiceTaskFormDialog({ task }: { task?: ServiceTask }) {
     </Button>
   );
 
-  if (!can("settings:manage")) {
-    return <DeniedAction reason={reason("settings:manage")}>{trigger}</DeniedAction>;
+  if (!canAsStaff("settings:manage")) {
+    return <DeniedAction reason={staffReason("settings:manage")}>{trigger}</DeniedAction>;
   }
 
   return (

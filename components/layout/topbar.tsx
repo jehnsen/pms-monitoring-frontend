@@ -30,10 +30,9 @@ import {
 } from "@/components/layout/command-palette";
 import { useAuthActions, useSession } from "@/lib/auth";
 import { AlertsPanel } from "@/components/alerts/alerts-panel";
-import { ROLE_LABEL } from "@/lib/rbac";
-import { useFleet } from "@/lib/store";
+import { useBranding } from "@/lib/store";
 import { homeHrefFor } from "@/lib/nav";
-import { isProviderRole } from "@/lib/tenancy";
+import { BranchSwitcher } from "@/components/layout/branch-switcher";
 
 export function Topbar() {
   const router = useRouter();
@@ -41,12 +40,12 @@ export function Topbar() {
   const [mobileNav, setMobileNav] = React.useState(false);
   const { session } = useSession();
   const { signOut } = useAuthActions();
-  const { tenant } = useFleet();
+  const tenant = useBranding();
   const [today, setToday] = React.useState<string | null>(null);
 
   // The shell only renders behind AuthGuard, so a session is always present by
   // the time this paints; the fallback is purely for type narrowing.
-  const user = session ?? { name: "Signed out", title: "—", role: "viewer" as const };
+  const user = session ?? { name: "Signed out", title: "—", role: "viewer" as const, side: "portal" as const };
 
   // Rendered after mount so the server and client don't disagree about "today".
   React.useEffect(() => setToday(format(new Date(), "EEEE, dd MMMM yyyy")), []);
@@ -64,11 +63,11 @@ export function Topbar() {
           <Menu />
         </Button>
 
-        <Link href={homeHrefFor(user.role)} className="min-w-0 [&>span>span:last-child]:hidden sm:[&>span>span:last-child]:flex lg:hidden">
+        <Link href={homeHrefFor(user.side, user.role)} className="min-w-0 [&>span>span:last-child]:hidden sm:[&>span>span:last-child]:flex lg:hidden">
           <Logo
             name={tenant.displayName}
             logoUrl={tenant.logoUrl}
-            tagline={isProviderRole(user.role) ? "Service Centre" : "Fleet PMS"}
+            tagline={user.side === "staff" ? "Service Centre" : "Fleet PMS"}
           />
         </Link>
 
@@ -91,6 +90,9 @@ export function Topbar() {
         </p>
 
         <div className="flex items-center gap-1 lg:ml-auto xl:ml-2">
+          <div className="mr-1 hidden md:block">
+            <BranchSwitcher />
+          </div>
           <AlertsPanel />
 
           <ThemeToggle />
@@ -114,7 +116,7 @@ export function Topbar() {
                 <p className="px-2 pb-1.5 text-2xs text-subtle-foreground">
                   {session.email}
                   <span className="mt-0.5 block font-medium text-muted-foreground">
-                    {ROLE_LABEL[session.role]}
+                    {session.roleLabel}
                   </span>
                 </p>
               ) : null}
@@ -134,8 +136,8 @@ export function Topbar() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 destructive
-                onSelect={() => {
-                  signOut();
+                onSelect={async () => {
+                  await signOut();
                   router.replace("/login");
                 }}
               >
@@ -156,7 +158,7 @@ export function Topbar() {
             Move between the monitoring, maintenance, and configuration areas.
           </DialogDescription>
           <div className="flex h-[76px] items-center border-b border-chrome-border px-5">
-            <Logo tone="inverted" name={tenant.displayName} logoUrl={tenant.logoUrl} tagline={isProviderRole(user.role) ? "Service Centre" : "Fleet PMS"} />
+            <Logo tone="inverted" name={tenant.displayName} logoUrl={tenant.logoUrl} tagline={user.side === "staff" ? "Service Centre" : "Fleet PMS"} />
           </div>
           <div className="overflow-y-auto">
             <SidebarNav onNavigate={() => setMobileNav(false)} />

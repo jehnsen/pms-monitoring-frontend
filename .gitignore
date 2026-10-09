@@ -14,3 +14,9 @@ npm-debug.log*
 .vercel
 next-env.d.ts
 *.tsbuildinfo
+clipboard.md
+
+# Playwright
+/test-results/
+/playwright-report/
+/parity-log/

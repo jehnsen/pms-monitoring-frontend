@@ -22,9 +22,10 @@ function Holding() {
 }
 
 /**
- * Gates the application shell. The session lives in localStorage, so the first
- * paint genuinely doesn't know whether anyone is signed in — `ready` has to be
- * respected or every load would flash the login screen.
+ * Gates the application shell. The session is `GET /me` (a cookie session),
+ * so the first paint genuinely doesn't know whether anyone is signed in —
+ * `ready` has to be respected or every load would flash the login screen. A
+ * 401 anywhere later clears the session, which lands here and redirects.
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { session, ready } = useSession();

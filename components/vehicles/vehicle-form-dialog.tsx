@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFleetActions, type NewVehicleDraft } from "@/lib/store";
+import { useFleetActions, useFleetClients, type NewVehicleDraft } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
 import { DeniedAction } from "@/components/auth/denied-action";
 import { formatKm } from "@/lib/utils";
@@ -64,7 +64,7 @@ type FormState = {
   assignedTo: string;
   department: string;
   location: string;
-  avgDailyKm: string;
+  fleetClientId: string;
   odometer: string;
   acquiredOn: string;
   registrationExpiry: string;
@@ -87,7 +87,7 @@ function blankForm(): FormState {
     assignedTo: "",
     department: "",
     location: "",
-    avgDailyKm: "40",
+    fleetClientId: "",
     odometer: "0",
     acquiredOn: today,
     registrationExpiry: today,
@@ -101,20 +101,20 @@ function formFromVehicle(vehicle: Vehicle): FormState {
     plateNumber: vehicle.plateNumber,
     make: vehicle.make,
     model: vehicle.model,
-    year: String(vehicle.year),
+    year: vehicle.year === null ? "" : String(vehicle.year),
     vin: vehicle.vin,
-    vehicleClass: vehicle.vehicleClass,
-    fuelType: vehicle.fuelType,
+    vehicleClass: vehicle.vehicleClass ?? "sedan",
+    fuelType: vehicle.fuelType ?? "gasoline",
     color: vehicle.color,
     status: vehicle.status,
     assignedTo: vehicle.assignedTo,
     department: vehicle.department,
     location: vehicle.location,
-    avgDailyKm: String(vehicle.avgDailyKm),
+    fleetClientId: vehicle.fleetClientId,
     odometer: String(vehicle.odometer),
-    acquiredOn: vehicle.acquiredOn,
-    registrationExpiry: vehicle.registrationExpiry,
-    insuranceExpiry: vehicle.insuranceExpiry,
+    acquiredOn: vehicle.acquiredOn ?? "",
+    registrationExpiry: vehicle.registrationExpiry ?? "",
+    insuranceExpiry: vehicle.insuranceExpiry ?? "",
     driverLicenceExpiry: vehicle.driverLicenceExpiry ?? "",
   };
 }
@@ -124,20 +124,31 @@ function formFromVehicle(vehicle: Vehicle): FormState {
  * specs, assignment, and compliance dates. The odometer is only editable here
  * for a brand-new vehicle (its starting baseline); once a vehicle exists,
  * every distance-based interval depends on readings going through
- * `OdometerDialog`'s validation, so this dialog leaves it alone.
+ * `OdometerDialog`'s validation, so this dialog leaves it alone. The daily
+ * rate is derived by the API from readings, never entered. Staff name the
+ * customer account a new vehicle belongs to; a portal user's is their own.
  */
 export function VehicleFormDialog({ vehicle }: { vehicle?: Vehicle }) {
   const isEdit = Boolean(vehicle);
   const router = useRouter();
   const { addVehicle, updateVehicle } = useFleetActions();
-  const { can, reason } = useCan();
+  const { can, reason, side } = useCan();
   const [open, setOpen] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
+  const [pending, setPending] = React.useState(false);
+  const staffCreating = !vehicle && side === "staff";
+  const { fleetClients } = useFleetClients({ enabled: open && staffCreating });
   const [form, setForm] = React.useState<FormState>(
     vehicle ? formFromVehicle(vehicle) : blankForm()
   );
 
   React.useEffect(() => {
-    if (open) setForm(vehicle ? formFromVehicle(vehicle) : blankForm());
+    if (open) {
+      setForm(vehicle ? formFromVehicle(vehicle) : blankForm());
+      setError(null);
+      setFieldErrors({});
+    }
   }, [open, vehicle]);
 
   function patch(fields: Partial<FormState>) {
@@ -145,7 +156,6 @@ export function VehicleFormDialog({ vehicle }: { vehicle?: Vehicle }) {
   }
 
   const year = Number(form.year);
-  const avgDailyKm = Number(form.avgDailyKm);
   const odometer = Number(form.odometer);
 
   const canSubmit =
@@ -159,13 +169,16 @@ export function VehicleFormDialog({ vehicle }: { vehicle?: Vehicle }) {
     Number.isFinite(year) &&
     year >= 1990 &&
     year <= new Date().getFullYear() + 1 &&
-    Number.isFinite(avgDailyKm) &&
-    avgDailyKm > 0 &&
+    (!staffCreating || form.fleetClientId !== "") &&
     Number.isFinite(odometer) &&
-    odometer >= 0;
+    odometer >= 0 &&
+    !pending;
 
-  function submit() {
+  async function submit() {
     if (!canSubmit) return;
+    setPending(true);
+    setError(null);
+    setFieldErrors({});
 
     const shared = {
       plateNumber: form.plateNumber.trim().toUpperCase(),
@@ -180,29 +193,41 @@ export function VehicleFormDialog({ vehicle }: { vehicle?: Vehicle }) {
       assignedTo: form.assignedTo.trim(),
       department: form.department.trim(),
       location: form.location.trim(),
-      avgDailyKm,
-      acquiredOn: form.acquiredOn,
-      registrationExpiry: form.registrationExpiry,
-      insuranceExpiry: form.insuranceExpiry,
+      acquiredOn: form.acquiredOn || null,
+      registrationExpiry: form.registrationExpiry || null,
+      insuranceExpiry: form.insuranceExpiry || null,
       driverLicenceExpiry: form.driverLicenceExpiry || null,
     };
 
     if (isEdit && vehicle) {
-      updateVehicle(vehicle.id, shared);
+      const result = await updateVehicle(vehicle.id, shared);
+      setPending(false);
+      if (!result.ok) {
+        setError(result.error);
+        setFieldErrors(result.fields ?? {});
+        return;
+      }
       setOpen(false);
       return;
     }
 
     const draft: NewVehicleDraft = {
       ...shared,
+      fleetClientId: staffCreating ? form.fleetClientId : null,
       odometer,
-      odometerReadAt: formatISO(new Date(), { representation: "date" }),
+      odometerReadOn: formatISO(new Date(), { representation: "date" }),
     };
-    const created = addVehicle(draft);
+    const created = await addVehicle(draft);
+    setPending(false);
+    if (!created.ok) {
+      setError(created.error);
+      setFieldErrors(created.fields ?? {});
+      return;
+    }
     setOpen(false);
     // The confirmation is a query param the detail page reads on mount, since
     // this dialog's own state does not survive the navigation away from it.
-    if (created) router.push(`/vehicles/${created.id}?created=1`);
+    router.push(`/vehicles/${created.data.id}?created=1`);
   }
 
   const trigger = isEdit ? (
@@ -359,18 +384,25 @@ export function VehicleFormDialog({ vehicle }: { vehicle?: Vehicle }) {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="veh-daily-km">Average use (km / day)</Label>
-              <Input
-                id="veh-daily-km"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                value={form.avgDailyKm}
-                className="tabular"
-                onChange={(event) => patch({ avgDailyKm: event.target.value })}
-              />
-            </div>
+            {staffCreating ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="veh-account">Customer account</Label>
+                <Select value={form.fleetClientId} onValueChange={(value) => patch({ fleetClientId: value })}>
+                  <SelectTrigger id="veh-account">
+                    <SelectValue placeholder="Whose vehicle is it?" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {fleetClients
+                      .filter((client) => client.status === "active")
+                      .map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
           </div>
 
           {isEdit ? (
@@ -461,14 +493,22 @@ export function VehicleFormDialog({ vehicle }: { vehicle?: Vehicle }) {
               onChange={(event) => patch({ driverLicenceExpiry: event.target.value })}
             />
           </div>
+
+          {Object.keys(fieldErrors).length > 0 || error ? (
+            <div role="alert" className="space-y-1 rounded-md border border-critical/25 bg-critical/[0.07] px-3 py-2 text-xs text-critical">
+              {Object.keys(fieldErrors).length > 0
+                ? Object.values(fieldErrors).map((messages) => <p key={messages[0]}>{messages[0]}</p>)
+                : <p>{error}</p>}
+            </div>
+          ) : null}
         </DialogBody>
 
         <DialogFooter>
           <Button variant="secondary" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button variant="primary" disabled={!canSubmit} onClick={submit}>
-            {isEdit ? "Save changes" : "Add vehicle"}
+          <Button variant="primary" disabled={!canSubmit} onClick={() => void submit()}>
+            {pending ? "Saving…" : isEdit ? "Save changes" : "Add vehicle"}
           </Button>
         </DialogFooter>
       </DialogContent>

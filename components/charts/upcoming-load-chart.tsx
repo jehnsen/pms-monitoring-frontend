@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { ChartFrame, ChartTable, TooltipShell } from "@/components/charts/chart-frame";
 import { axisProps, useChartColors } from "@/lib/chart-theme";
-import type { UpcomingBucket } from "@/lib/analytics";
+import type { UpcomingBucket } from "@/lib/api/views";
 
 /**
  * Forward workload. The three bands are service *states*, not data series, so

@@ -18,8 +18,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import { isProviderRole } from "@/lib/tenancy";
-import type { UserRole } from "@/types";
+import type { UserRole, UserSide } from "@/types";
 
 export interface NavItem {
   href: string;
@@ -218,14 +217,14 @@ export const PROVIDER_NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-/** The nav for whichever side of the tenancy boundary this role sits on. */
-export function navSectionsFor(role: UserRole | undefined): NavSection[] {
-  return isProviderRole(role) ? PROVIDER_NAV_SECTIONS : CLIENT_NAV_SECTIONS;
+/** The nav for whichever side of the tenancy boundary the session sits on (`/me` → `side`). */
+export function navSectionsFor(side: UserSide | undefined): NavSection[] {
+  return side === "staff" ? PROVIDER_NAV_SECTIONS : CLIENT_NAV_SECTIONS;
 }
 
 /** Where a bare sign-in lands. The two sides have different home screens. */
-export function homeHrefFor(role: UserRole | undefined): string {
-  if (isProviderRole(role)) return "/shop";
+export function homeHrefFor(side: UserSide | undefined, role?: UserRole): string {
+  if (side === "staff") return "/shop";
   // Purchasing officers live in the approval queue, not the dashboard.
   return role === "purchasing_officer" ? "/requests" : "/dashboard";
 }

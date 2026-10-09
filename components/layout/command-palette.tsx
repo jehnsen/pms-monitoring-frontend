@@ -10,9 +10,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PmsStatusBadge } from "@/components/status";
-import { useFleet } from "@/lib/store";
+import { useVehiclePage } from "@/lib/store";
+import { useSession } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "@/lib/nav";
+import { navSectionsFor } from "@/lib/nav";
 
 interface Result {
   key: string;
@@ -31,32 +32,25 @@ export function CommandPalette({
   onOpenChange: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const { health } = useFleet();
+  const { session } = useSession();
   const [query, setQuery] = React.useState("");
   const [cursor, setCursor] = React.useState(0);
+  const q = query.trim().toLowerCase();
+  // The API searches plate, make, model, driver and department.
+  const { data: found } = useVehiclePage({ search: q, per_page: 6 }, { enabled: open && q.length > 0 });
 
   const results = React.useMemo<Result[]>(() => {
-    const q = query.trim().toLowerCase();
+    const vehicles = (q ? (found?.data ?? []) : []).map<Result>((vehicle) => ({
+      key: vehicle.id,
+      href: `/vehicles/${vehicle.id}`,
+      title: `${vehicle.plateNumber} — ${vehicle.make} ${vehicle.model}`,
+      subtitle: [vehicle.department, vehicle.assignedTo].filter(Boolean).join(" · "),
+      icon: <Car className="size-4 text-subtle-foreground" />,
+      trailing: vehicle.pms ? <PmsStatusBadge status={vehicle.pms.status} /> : undefined,
+    }));
 
-    const vehicles = health
-      .filter((entry) => {
-        if (!q) return false;
-        const v = entry.vehicle;
-        return `${v.plateNumber} ${v.make} ${v.model} ${v.assignedTo} ${v.department}`
-          .toLowerCase()
-          .includes(q);
-      })
-      .slice(0, 6)
-      .map<Result>((entry) => ({
-        key: entry.vehicle.id,
-        href: `/vehicles/${entry.vehicle.id}`,
-        title: `${entry.vehicle.plateNumber} — ${entry.vehicle.make} ${entry.vehicle.model}`,
-        subtitle: `${entry.vehicle.department} · ${entry.vehicle.assignedTo}`,
-        icon: <Car className="size-4 text-subtle-foreground" />,
-        trailing: <PmsStatusBadge status={entry.status} />,
-      }));
-
-    const pages = NAV_ITEMS.filter((item) =>
+    const navItems = navSectionsFor(session?.side).flatMap((section) => section.items);
+    const pages = navItems.filter((item) =>
       q ? item.label.toLowerCase().includes(q) : true
     ).map<Result>((item) => ({
       key: item.href,
@@ -67,7 +61,7 @@ export function CommandPalette({
     }));
 
     return [...vehicles, ...pages];
-  }, [health, query]);
+  }, [found, q, session?.side]);
 
   // Reset the highlight whenever the candidate list changes underneath it.
   React.useEffect(() => setCursor(0), [query]);

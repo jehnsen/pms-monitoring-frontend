@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import { ChartFrame, ChartTable, TooltipShell } from "@/components/charts/chart-frame";
 import { axisProps, useChartColors } from "@/lib/chart-theme";
-import type { UtilisationPoint } from "@/lib/shop";
+import type { UtilisationPoint } from "@/lib/api/views";
 
 /**
  * Utilisation over time — one series, one y-axis, in percent.

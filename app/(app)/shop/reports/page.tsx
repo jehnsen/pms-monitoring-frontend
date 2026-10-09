@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { subMonths } from "date-fns";
 import { PageHeader } from "@/components/layout/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Meter } from "@/components/ui/progress";
@@ -15,16 +14,8 @@ import {
 import { SpendRankingChart } from "@/components/charts/spend-ranking-chart";
 import { MaintenanceMixChart } from "@/components/charts/maintenance-mix-chart";
 import { BayUtilisationChart } from "@/components/charts/bay-utilisation-chart";
-import { useFleet } from "@/lib/store";
-import { monthlyCosts } from "@/lib/analytics";
-import {
-  PARTS_MARKUP,
-  approvalTurnaroundByClient,
-  partsMargin,
-  revenueByClient,
-  revenueByServiceItem,
-  utilisationSeries,
-} from "@/lib/shop";
+import { QueryError } from "@/components/ui/query-error";
+import { useShopReports } from "@/lib/store";
 import { formatCurrency } from "@/lib/utils";
 
 const RANGES = [
@@ -34,10 +25,13 @@ const RANGES = [
 ];
 
 export default function ShopReportsPage() {
-  const { ready, workOrders, vehicles, fleetClients } = useFleet();
   const [months, setMonths] = useState("6");
+  // Every figure below is computed by the API (`GET /shop/reports`).
+  const { data: report, error, refetch } = useShopReports(Number(months));
 
-  if (!ready) {
+  if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
+
+  if (!report) {
     return (
       <>
         <PageHeader
@@ -49,19 +43,16 @@ export default function ShopReportsPage() {
     );
   }
 
-  const now = new Date();
-  const window = Number(months);
-  const from = subMonths(now, window);
+  const byClient = report.revenueByCustomer;
+  const byService = report.revenueByServiceItem;
+  const utilisation = report.utilisation;
+  const turnaround = report.turnaroundByCustomer;
+  const mix = report.maintenanceMix;
+  const margin = report.partsMargin;
 
-  const byClient = revenueByClient(fleetClients, vehicles, workOrders, from, now);
-  const byService = revenueByServiceItem(workOrders, from, now).slice(0, 10);
-  const utilisation = utilisationSeries(workOrders, 21, now);
-  const turnaround = approvalTurnaroundByClient(fleetClients, vehicles, workOrders);
-  const mix = monthlyCosts(workOrders, window);
-  const margin = partsMargin(workOrders);
-
-  const partsTotal = margin.supplierProvidedValue + margin.ownStockValue;
-  const ownStockShare = partsTotal ? margin.ownStockValue / partsTotal : 0;
+  // A share for the meter — presentation of two API figures, not a business value.
+  const partsTotal = margin.supplierProvided + margin.ownStock;
+  const ownStockShare = partsTotal ? margin.ownStock / partsTotal : 0;
 
   return (
     <>
@@ -136,7 +127,7 @@ export default function ShopReportsPage() {
                 Supplier-provided
               </p>
               <p className="mt-2 text-[26px] font-semibold leading-none tracking-tight">
-                {formatCurrency(margin.supplierProvidedValue)}
+                {formatCurrency(margin.supplierProvided)}
               </p>
               <p className="mt-2 text-2xs text-subtle-foreground">
                 Parts the shop sourced and marked up.
@@ -148,7 +139,7 @@ export default function ShopReportsPage() {
                 Client&apos;s own stock
               </p>
               <p className="mt-2 text-[26px] font-semibold leading-none tracking-tight">
-                {formatCurrency(margin.ownStockValue)}
+                {formatCurrency(margin.ownStock)}
               </p>
               <p className="mt-2 text-2xs text-subtle-foreground">
                 Fitted at cost. No margin to the shop.
@@ -160,10 +151,10 @@ export default function ShopReportsPage() {
                 Margin earned
               </p>
               <p className="mt-2 text-[26px] font-semibold leading-none tracking-tight">
-                {formatCurrency(Math.round(margin.margin))}
+                {formatCurrency(margin.margin)}
               </p>
               <p className="mt-2 text-2xs text-subtle-foreground">
-                At the shop&apos;s {Math.round(PARTS_MARKUP * 100)}% markup.
+                At the shop&apos;s {margin.markupPct}% markup.
               </p>
             </div>
           </div>

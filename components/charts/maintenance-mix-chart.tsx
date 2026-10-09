@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { ChartFrame, ChartTable, TooltipShell } from "@/components/charts/chart-frame";
 import { axisProps, useChartColors } from "@/lib/chart-theme";
-import type { MonthlyCostPoint } from "@/lib/analytics";
+import type { MonthlyCostPoint } from "@/lib/api/views";
 
 /**
  * Planned versus unplanned work over time. A fleet running its PMS properly

@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { Building2, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -8,19 +9,22 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DeniedAction } from "@/components/auth/denied-action";
 import { VendorFormDialog } from "@/components/settings/vendor-form-dialog";
-import { useFleet, useFleetActions } from "@/lib/store";
+import { QueryError } from "@/components/ui/query-error";
+import { useFleetActions, useVendors } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
 
 /**
  * The provider's approved vendor list. Shop-wide like the technician roster
  * and the PMS interval catalogue — a fleet client's work order can name a
- * vendor but not add to this list; see `settings:manage` and
- * `pms_vendors`' RLS policies.
+ * vendor but not add to this list (`settings:manage`, staff only).
  */
 export default function ShopVendorsPage() {
-  const { ready, vendors } = useFleet();
+  const { vendors, isSuccess: ready, error, refetch } = useVendors();
   const { deleteVendor } = useFleetActions();
-  const { can, reason } = useCan();
+  const { canAsStaff, staffReason } = useCan();
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
+  if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
 
   if (!ready) {
     return (
@@ -41,6 +45,12 @@ export default function ShopVendorsPage() {
         description="Approved repair vendors, shared across every fleet client this provider serves."
         actions={<VendorFormDialog />}
       />
+
+      {deleteError ? (
+        <p role="alert" className="mb-5 rounded-lg border border-critical/25 bg-critical/[0.06] px-4 py-3 text-xs text-critical">
+          {deleteError}
+        </p>
+      ) : null}
 
       {vendors.length === 0 ? (
         <div className="card">
@@ -65,25 +75,27 @@ export default function ShopVendorsPage() {
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <VendorFormDialog vendor={vendor} />
-                  {can("settings:manage") ? (
+                  {canAsStaff("settings:manage") ? (
                     <Button
                       variant="ghost"
                       size="sm"
                       aria-label={`Remove ${vendor.name}`}
-                      onClick={() => {
+                      onClick={async () => {
                         if (
                           window.confirm(
                             `Remove "${vendor.name}" from the vendor list? Past work orders keep their record of who did the job.`
                           )
                         ) {
-                          deleteVendor(vendor.id);
+                          setDeleteError(null);
+                          const result = await deleteVendor(vendor.id);
+                          if (!result.ok) setDeleteError(`${vendor.name}: ${result.error}`);
                         }
                       }}
                     >
                       <Trash2 className="text-critical" />
                     </Button>
                   ) : (
-                    <DeniedAction reason={reason("settings:manage")}>
+                    <DeniedAction reason={staffReason("settings:manage")}>
                       <Button variant="ghost" size="sm" aria-label={`Remove ${vendor.name}`}>
                         <Trash2 />
                       </Button>

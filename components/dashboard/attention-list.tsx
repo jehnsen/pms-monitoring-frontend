@@ -5,22 +5,23 @@ import { ArrowRight, ShieldCheck } from "lucide-react";
 import { Meter } from "@/components/ui/progress";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PmsStatusBadge } from "@/components/status";
-import { urgentItems } from "@/lib/analytics";
-import type { VehicleHealth } from "@/types";
+import type { UrgentRow } from "@/lib/api/views";
 import { formatDayDelta, formatKm } from "@/lib/utils";
 
 /**
  * The queue a fleet manager works down: every breached or nearly-breached
- * interval across the fleet, most urgent first.
+ * interval across the fleet, most urgent first — the API's ranking
+ * (`/analytics/dashboard` → `attention`).
  */
 export function AttentionList({
-  health,
+  items,
+  total,
   limit = 7,
 }: {
-  health: VehicleHealth[];
+  items: UrgentRow[];
+  total: number;
   limit?: number;
 }) {
-  const items = urgentItems(health);
   const shown = items.slice(0, limit);
 
   return (
@@ -36,7 +37,7 @@ export function AttentionList({
           href="/schedule"
           className="inline-flex shrink-0 items-center gap-1 rounded text-xs font-medium text-brand transition-colors hover:underline"
         >
-          View all {items.length}
+          View all {total}
           <ArrowRight className="size-3.5" />
         </Link>
       </header>

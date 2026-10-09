@@ -47,7 +47,7 @@ function fromVendor(vendor: ProviderVendor): FormState {
 export function VendorFormDialog({ vendor }: { vendor?: ProviderVendor }) {
   const isEdit = Boolean(vendor);
   const { addVendor, updateVendor } = useFleetActions();
-  const { can, reason } = useCan();
+  const { canAsStaff, staffReason } = useCan();
   const [open, setOpen] = React.useState(false);
   const [form, setForm] = React.useState<FormState>(vendor ? fromVendor(vendor) : blank());
   const [error, setError] = React.useState<string | null>(null);
@@ -70,13 +70,7 @@ export function VendorFormDialog({ vendor }: { vendor?: ProviderVendor }) {
 
     const shared = { name: form.name.trim(), active: form.active };
 
-    if (isEdit && vendor) {
-      updateVendor(vendor.id, shared);
-      setOpen(false);
-      return;
-    }
-
-    const result = await addVendor(shared);
+    const result = isEdit && vendor ? await updateVendor(vendor.id, shared) : await addVendor(shared);
     if (!result.ok) {
       setError(result.error);
       return;
@@ -95,8 +89,8 @@ export function VendorFormDialog({ vendor }: { vendor?: ProviderVendor }) {
     </Button>
   );
 
-  if (!can("settings:manage")) {
-    return <DeniedAction reason={reason("settings:manage")}>{trigger}</DeniedAction>;
+  if (!canAsStaff("settings:manage")) {
+    return <DeniedAction reason={staffReason("settings:manage")}>{trigger}</DeniedAction>;
   }
 
   return (

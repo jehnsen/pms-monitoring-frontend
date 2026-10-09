@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { WorkOrderTable } from "@/components/work-orders/work-order-table";
@@ -16,8 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFleet } from "@/lib/store";
-import { workOrderCost } from "@/lib/pms";
+import { QueryError } from "@/components/ui/query-error";
+import { useAllVehicles, useWorkOrderPage, useWorkOrderSummary, type WorkOrderQuery } from "@/lib/store";
 import { formatCurrency } from "@/lib/utils";
 import type { WorkOrderType } from "@/types";
 
@@ -33,59 +33,26 @@ const BUCKETS: { value: Bucket; label: string }[] = [
 const DEFAULT_PAGE_SIZE = 25;
 
 export default function WorkOrdersPage() {
-  const { ready, workOrders, vehicles } = useFleet();
   const [bucket, setBucket] = useState<Bucket>("active");
   const [type, setType] = useState<WorkOrderType | "all">("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  const vehiclesById = useMemo(
-    () => new Map(vehicles.map((v) => [v.id, v])),
-    [vehicles]
-  );
-
-  const counts = useMemo(() => {
-    const active = workOrders.filter(
-      (o) => o.status !== "closed" && o.status !== "cancelled"
-    ).length;
-    return {
-      active,
-      completed: workOrders.filter((o) => o.status === "closed").length,
-      cancelled: workOrders.filter((o) => o.status === "cancelled").length,
-      all: workOrders.length,
-    };
-  }, [workOrders]);
-
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-
-    return workOrders
-      .filter((order) => {
-        if (bucket === "active")
-          if (order.status === "closed" || order.status === "cancelled")
-            return false;
-        if (bucket === "completed" && order.status !== "closed") return false;
-        if (bucket === "cancelled" && order.status !== "cancelled") return false;
-        if (type !== "all" && order.type !== type) return false;
-        if (!q) return true;
-
-        const vehicle = vehiclesById.get(order.vehicleId);
-        return `${order.reference} ${order.title} ${order.technician} ${order.vendor} ${vehicle?.plateNumber ?? ""}`
-          .toLowerCase()
-          .includes(q);
-      })
-      .sort((a, b) =>
-        bucket === "completed"
-          ? (b.completedOn ?? "").localeCompare(a.completedOn ?? "")
-          : a.scheduledFor.localeCompare(b.scheduledFor)
-      );
-  }, [workOrders, bucket, type, query, vehiclesById]);
-
-  const filteredValue = filtered.reduce(
-    (total, order) => total + workOrderCost(order),
-    0
-  );
+  // Buckets, search (reference, title, technician, vendor, plate, customer),
+  // ordering, counts and the filtered value are all the API's.
+  const filters: WorkOrderQuery = {
+    stage: bucket === "all" ? undefined : bucket,
+    type: type === "all" ? undefined : type,
+    q: query.trim() || undefined,
+    sort: bucket === "completed" ? "completed" : "scheduled",
+  };
+  const { data, error, refetch } = useWorkOrderPage({ ...filters, page, per_page: pageSize });
+  const { data: summary } = useWorkOrderSummary(filters);
+  const { vehiclesById } = useAllVehicles();
+  const ready = Boolean(data);
+  const counts = summary?.buckets ?? { active: 0, completed: 0, cancelled: 0, all: 0 };
+  const total = data?.meta.total ?? 0;
 
   // A changed filter can leave `page` pointing past the new, shorter result
   // set — jump back to the first page rather than render an empty table with
@@ -94,12 +61,9 @@ export default function WorkOrdersPage() {
     setPage(1);
   }, [bucket, type, query]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const currentPage = Math.min(page, pageCount);
-  const paginated = useMemo(
-    () => filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-    [filtered, currentPage, pageSize]
-  );
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+
+  if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
 
   return (
     <>
@@ -155,23 +119,23 @@ export default function WorkOrdersPage() {
           </div>
 
           <p className="mb-4 text-xs text-subtle-foreground">
-            {filtered.length} {filtered.length === 1 ? "order" : "orders"} ·{" "}
-            {formatCurrency(filteredValue)} total value
+            {summary?.filtered.count ?? total} {(summary?.filtered.count ?? total) === 1 ? "order" : "orders"} ·{" "}
+            {formatCurrency(summary?.filtered.value ?? 0)} total value
           </p>
 
           <div className="card-raised">
             <WorkOrderTable
-              orders={paginated}
+              orders={data?.data ?? []}
               vehiclesById={vehiclesById}
               emptyTitle="No work orders here"
               emptyDescription="Nothing matches this combination of filters."
             />
             <div className="px-4 pb-3">
               <Pagination
-                page={currentPage}
+                page={page}
                 pageCount={pageCount}
                 pageSize={pageSize}
-                totalItems={filtered.length}
+                totalItems={total}
                 onPageChange={setPage}
                 onPageSizeChange={(size) => {
                   setPageSize(size);

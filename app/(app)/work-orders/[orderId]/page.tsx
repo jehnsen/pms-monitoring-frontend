@@ -35,13 +35,9 @@ import { CompleteWorkOrderDialog } from "@/components/work-orders/complete-work-
 import { DocumentList } from "@/components/documents/document-list";
 import { UploadDocumentDialog } from "@/components/documents/upload-document-dialog";
 import { DeniedAction } from "@/components/auth/denied-action";
-import { useFleet, useFleetActions } from "@/lib/store";
+import { QueryError } from "@/components/ui/query-error";
+import { useDocumentPage, useFleetActions, useServiceTasks, useVehicle, useWorkOrder } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
-import { isProviderRole } from "@/lib/tenancy";
-import { approvedValue, declinedValue, pendingValue } from "@/lib/approvals";
-import { computeTotals, totalsFromSubtotal } from "@/lib/billing";
-import { resolvePartsCost } from "@/lib/pms";
-import { TASK_BY_ID } from "@/lib/service-tasks";
 import { formatCurrency, formatDate, formatKm, titleCase } from "@/lib/utils";
 import type { ApprovalAction, WorkOrderEvent, ApprovalLogEntry } from "@/types";
 
@@ -67,13 +63,29 @@ export default function WorkOrderDetailPage({
 }: {
   params: { orderId: string };
 }) {
-  const { ready, workOrders, vehiclesById, documents, approvalSettings } = useFleet();
-  const { updateWorkOrder, sendForApproval } = useFleetActions();
-  const { can, reason, role } = useCan();
+  const orderQuery = useWorkOrder(params.orderId);
+  const order = orderQuery.data;
+  const { data: vehicle } = useVehicle(order?.vehicleId);
+  const { data: attachedPage } = useDocumentPage({ work_order_id: params.orderId, per_page: 100 });
+  const { tasksById } = useServiceTasks();
+  const { startWorkOrder, sendForApproval } = useFleetActions();
+  const { can, reason, side } = useCan();
   const [sendError, setSendError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [closing, setClosing] = useState(false);
 
-  if (!ready) {
+  /** A step, with its error shown above the page. */
+  async function step(action: () => Promise<{ ok: boolean; error?: string }>) {
+    setBusy(true);
+    setSendError(null);
+    const result = await action();
+    setBusy(false);
+    if (!result.ok) setSendError(result.error ?? "That didn't work.");
+  }
+
+  if (orderQuery.error) return <QueryError error={orderQuery.error} onRetry={() => void orderQuery.refetch()} />;
+
+  if (!order) {
     return (
       <>
         <Skeleton className="h-8 w-72" />
@@ -82,40 +94,16 @@ export default function WorkOrderDetailPage({
     );
   }
 
-  const order = workOrders.find((entry) => entry.id === params.orderId);
-
-  if (!order) {
-    return (
-      <div className="card">
-        <EmptyState
-          icon={ClipboardList}
-          title="Work order not found"
-          description="It may have been reset with the demo data, or the link is out of date."
-          action={
-            <Button asChild variant="secondary">
-              <Link href="/work-orders">Back to work orders</Link>
-            </Button>
-          }
-        />
-      </div>
-    );
-  }
-
-  const vehicle = vehiclesById.get(order.vehicleId);
-  const attached = documents.filter((doc) => doc.workOrderId === order.id);
+  const vehicleRef = vehicle ?? order.vehicle;
+  const attached = attachedPage?.data ?? [];
   const closed = order.status === "closed" || order.status === "cancelled";
-  const partsCost = resolvePartsCost(order);
 
-  // Billing runs off the lines, which are the source of truth once they exist.
-  // Seeded and pre-approval-workflow orders have none and carry only aggregate
-  // costs, so those roll up from the stored figures instead of reading zero.
-  const billing =
-    order.lines.length > 0
-      ? computeTotals(order.lines, approvalSettings)
-      : totalsFromSubtotal(partsCost, order.laborCost, approvalSettings);
-  const { labourTotal: labourCost, subTotal, taxTotal, grandTotal } = billing;
+  // Every figure is the API's: it prices the lines (in centavos) and rolls up
+  // an aggregate-only record from its stored costs.
+  const billing = order.totals;
+  const { partsTotal: partsCost, labourTotal: labourCost, subTotal, taxTotal, grandTotal } = billing;
 
-  const canSchedule = order.status === "approved" || order.status === "partially_approved";
+  const canSchedule = order.status === "approved" || order.status === "partially_approved" || order.status === "scheduled";
 
   const timeline: TimelineRow[] = [
     ...order.history.map((event): TimelineRow => ({ kind: "status", at: event.at, event })),
@@ -127,11 +115,11 @@ export default function WorkOrderDetailPage({
       <PageHeader
         breadcrumb={[
           { label: "Work orders", href: "/work-orders" },
-          { label: order.reference },
+          { label: order.displayReference },
         ]}
         title={
           <span className="flex flex-wrap items-center gap-3">
-            <span className="tabular">{order.reference}</span>
+            <span className="tabular">{order.displayReference}</span>
             <WorkOrderStatusBadge status={order.status} size="md" />
           </span>
         }
@@ -143,13 +131,7 @@ export default function WorkOrderDetailPage({
                 clock starts. */}
             {order.status === "draft" ? (
               can("workorder:update") ? (
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    const result = sendForApproval(order.id);
-                    setSendError(result.ok ? null : result.error);
-                  }}
-                >
+                <Button variant="primary" disabled={busy} onClick={() => void step(() => sendForApproval(order.id))}>
                   <Send />
                   Send for approval
                 </Button>
@@ -163,13 +145,11 @@ export default function WorkOrderDetailPage({
               )
             ) : null}
 
-            {canSchedule && can("workorder:update") ? <ScheduleDialog order={order} /> : null}
+            {/* Booking a bay is the shop's (staff only). */}
+            {canSchedule && side === "staff" && can("workorder:update") ? <ScheduleDialog order={order} /> : null}
 
-            {order.status === "scheduled" && can("workorder:update") ? (
-              <Button
-                variant="secondary"
-                onClick={() => updateWorkOrder(order.id, { status: "in_progress" })}
-              >
+            {order.nextStatuses.includes("in_progress") && order.status === "scheduled" && can("workorder:update") ? (
+              <Button variant="secondary" disabled={busy} onClick={() => void step(() => startWorkOrder(order.id))}>
                 <Play />
                 Start job
               </Button>
@@ -203,12 +183,14 @@ export default function WorkOrderDetailPage({
       {/* Provider-side only: the client already sees this as their own queue.
           What the shop needs is the clock, because it is the shop that has to
           answer for the delay. */}
-      {isProviderRole(role) &&
+      {side === "staff" &&
       order.status === "pending_approval" &&
-      order.pendingApprovalEnteredAt ? (
+      order.approval.pendingApprovalEnteredAt ? (
         <ApprovalWaitBanner
-          since={order.pendingApprovalEnteredAt}
-          slaHours={approvalSettings.slaHours}
+          since={order.approval.pendingApprovalEnteredAt}
+          waited={order.approval.waitingHours ?? 0}
+          slaHours={order.approval.slaHours}
+          breached={order.approval.slaBreached}
         />
       ) : null}
 
@@ -390,19 +372,19 @@ export default function WorkOrderDetailPage({
                 <div>
                   <dt className="text-subtle-foreground">Approved</dt>
                   <dd className="tabular mt-0.5 font-medium text-ok">
-                    {formatCurrency(approvedValue(order.lines))}
+                    {formatCurrency(order.approval.approvedValue)}
                   </dd>
                 </div>
                 <div>
                   <dt className="text-subtle-foreground">Pending</dt>
                   <dd className="tabular mt-0.5 font-medium">
-                    {formatCurrency(pendingValue(order.lines))}
+                    {formatCurrency(order.approval.pendingValue)}
                   </dd>
                 </div>
                 <div>
                   <dt className="text-subtle-foreground">Declined</dt>
                   <dd className="tabular mt-0.5 font-medium text-critical">
-                    {formatCurrency(declinedValue(order.lines))}
+                    {formatCurrency(order.approval.declinedValue)}
                   </dd>
                 </div>
               </dl>
@@ -415,12 +397,12 @@ export default function WorkOrderDetailPage({
               <div>
                 <dt className="text-subtle-foreground">Vehicle</dt>
                 <dd className="mt-0.5">
-                  {vehicle ? (
+                  {vehicleRef ? (
                     <Link
-                      href={`/vehicles/${vehicle.id}`}
+                      href={`/vehicles/${vehicleRef.id}`}
                       className="font-medium transition-colors hover:text-brand"
                     >
-                      {vehicle.plateNumber} · {vehicle.make} {vehicle.model}
+                      {vehicleRef.plateNumber} · {vehicleRef.make} {vehicleRef.model}
                     </Link>
                   ) : (
                     "—"
@@ -437,18 +419,18 @@ export default function WorkOrderDetailPage({
               <div>
                 <dt className="text-subtle-foreground">Technician</dt>
                 <dd className="mt-1 flex items-center gap-2 font-medium">
-                  <Avatar name={order.technician} size="sm" />
-                  {order.technician}
+                  <Avatar name={order.technician || "—"} size="sm" />
+                  {order.technician || "Not assigned yet"}
                 </dd>
               </div>
               <div>
                 <dt className="text-subtle-foreground">Service provider</dt>
-                <dd className="mt-0.5 font-medium">{order.vendor}</dd>
+                <dd className="mt-0.5 font-medium">{order.vendor || "In-house"}</dd>
               </div>
               <div>
                 <dt className="text-subtle-foreground">Odometer at service</dt>
                 <dd className="tabular mt-0.5 font-medium">
-                  {formatKm(order.odometerAtService)}
+                  {order.odometerAtService === null ? "—" : formatKm(order.odometerAtService)}
                 </dd>
               </div>
               {order.taskIds.length ? (
@@ -457,7 +439,7 @@ export default function WorkOrderDetailPage({
                   <dd className="mt-1 space-y-1">
                     {order.taskIds.map((id) => (
                       <span key={id} className="block font-medium">
-                        {TASK_BY_ID.get(id)?.name ?? id}
+                        {tasksById.get(id)?.name ?? "A retired catalogue task"}
                       </span>
                     ))}
                   </dd>
@@ -557,7 +539,7 @@ export default function WorkOrderDetailPage({
 
       <CompleteWorkOrderDialog
         order={order}
-        vehicle={vehicle}
+        vehicle={vehicleRef}
         open={closing}
         onOpenChange={setClosing}
       />

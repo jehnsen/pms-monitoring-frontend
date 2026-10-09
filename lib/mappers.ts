@@ -1,793 +1,970 @@
 /**
- * Row <-> domain mapping for the `pms_` tables.
+ * The seam between the API's resources and the app's domain types.
  *
- * This is where `normalise()` from the localStorage store moved to. Its job is
- * unchanged: guarantee that every field the app's types promise is actually
- * present, so a null column or an absent relation can never surface as a
- * `.length` of undefined three components deep.
+ * Components never see a raw API payload; everything passes through here:
  *
- * Two conventions:
- *  - Postgres is snake_case, the domain is camelCase. Nothing else differs.
- *  - `date` columns come back as "YYYY-MM-DD" and `timestamptz` as ISO
- *    datetimes, which is exactly what the domain types already expect, so
- *    dates pass through as strings rather than becoming Date objects. The PMS
- *    engine parses them itself.
+ *  - snake_case → camelCase;
+ *  - money: the API sends integer centavos, mapped to pesos here for DISPLAY
+ *    only (`centsToPesos`); nothing in the app computes an authoritative total;
+ *  - nullable API fields get the defaults components have always relied on
+ *    ("" for text, [] for lists), so a null never surfaces as a runtime error
+ *    deep in a component.
+ *
+ * The raw shapes below are the API's resources (checked against its
+ * responses; `types/api.ts` holds the generated OpenAPI types).
  */
-import { withRates } from "@/lib/billing";
 import type {
+  Alert,
+  AlertKind,
+  AlertSeverity,
+  ApprovalAction,
   ApprovalLogEntry,
   ApprovalSettings,
+  ApproverBand,
+  Bay,
+  ComplianceStatus,
+  DocumentKind,
   FleetClient,
   FleetDocument,
+  FleetSummary,
+  FuelType,
+  Invitation,
+  LifecycleStage,
+  LineApprovalStatus,
+  LineUrgency,
+  Member,
+  MeterReading,
   Part,
   PartLine,
-  Provider,
+  PartsSource,
+  PmsItem,
+  PmsStatus,
+  Priority,
   ProviderTechnician,
   ProviderVendor,
   PurchaseOrder,
-  PurchaseOrderLine,
+  PurchaseOrderStatus,
   ServiceTask,
-  TaskState,
+  TaskCategory,
+  UserRole,
+  UserSide,
   Vehicle,
+  VehicleClass,
+  VehicleHealth,
+  VehicleOperationalStatus,
+  VehiclePms,
+  VehicleRef,
   WorkOrder,
-  WorkOrderEvent,
   WorkOrderLine,
+  WorkOrderStatus,
+  WorkOrderTotals,
+  WorkOrderType,
 } from "@/types";
 
-/* ----------------------------------------------------------------- helpers */
+/* ---------------------------------------------------------------- money */
 
-const str = (v: unknown, fallback = ""): string =>
-  typeof v === "string" ? v : fallback;
+/** Centavos → pesos, for display. Exact for any amount the API sends. */
+export function centsToPesos(cents: number): number {
+  return cents / 100;
+}
 
-const num = (v: unknown, fallback = 0): number => {
-  // Postgres `numeric` arrives as a string to preserve precision.
-  if (typeof v === "number") return Number.isFinite(v) ? v : fallback;
-  if (typeof v === "string") {
-    const parsed = Number(v);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-};
+/** Pesos typed in a form → centavos for the API (rounded once, half away from zero). */
+export function pesosToCents(pesos: number): number {
+  return Math.sign(pesos) * Math.round(Math.abs(pesos) * 100);
+}
 
-const nullableNum = (v: unknown): number | null => {
-  if (v === null || v === undefined) return null;
-  const parsed = num(v, NaN);
-  return Number.isFinite(parsed) ? parsed : null;
-};
+function pesos(cents: number | null | undefined): number {
+  return typeof cents === "number" ? centsToPesos(cents) : 0;
+}
 
-const nullableStr = (v: unknown): string | null =>
-  typeof v === "string" && v.length > 0 ? v : null;
+function num(value: string | number | null | undefined): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value !== "") return Number(value);
+  return 0;
+}
 
-const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+function numOrNull(value: string | number | null | undefined): number | null {
+  return value === null || value === undefined || value === "" ? null : num(value);
+}
 
-type Row = Record<string, unknown>;
+/* ----------------------------------------------------------- raw shapes */
 
-/* --------------------------------------------------------------- providers */
+export interface RawVehicle {
+  id: string;
+  customer_account_id: string;
+  plate_number: string;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  vin: string | null;
+  vehicle_class: string | null;
+  fuel_type: string | null;
+  color: string | null;
+  status: string;
+  assigned_to: string | null;
+  department: string | null;
+  location: string | null;
+  acquired_on: string | null;
+  registration_expiry: string | null;
+  insurance_expiry: string | null;
+  driver_licence_expiry: string | null;
+  lto_renewal_month: string | null;
+  odometer: { value: number; label: string; read_on: string; age_days: number; stale: boolean; avg_daily_km: number };
+  pms: {
+    status: string;
+    health_score: number;
+    overdue_count: number;
+    due_soon_count: number;
+    next_item: {
+      service_task_id: string;
+      name: string;
+      status: string;
+      due_date: string;
+      days_remaining: number;
+      due_label: string;
+      governed_by: string;
+      km_remaining: number;
+      due_odometer: number;
+      progress: number;
+    } | null;
+  } | null;
+  compliance_status: string;
+  archived_at: string | null;
+}
 
-export function toProvider(row: Row): Provider {
-  return {
-    id: str(row.id),
-    name: str(row.name),
-    slug: str(row.slug),
-    logoUrl: nullableStr(row.logo_url),
-    brandColor: str(row.brand_color, "#1d5ba6"),
-    supportEmail: str(row.support_email),
-    createdAt: str(row.created_at),
+export interface RawPmsItem {
+  service_task_id: string;
+  task: { id: string; code: string; name: string; category: string; critical: boolean; interval_km: number; interval_months: number };
+  status: string;
+  km_remaining: number;
+  days_remaining: number;
+  due_label: string;
+  progress: number;
+  due_odometer: number;
+  due_date: string;
+  governed_by: string;
+  last_done_on: string;
+  last_done_odometer: number;
+}
+
+export interface RawVehicleHealth {
+  vehicle_id: string;
+  evaluated_on: string;
+  status: string;
+  health_score: number;
+  overdue_count: number;
+  due_soon_count: number;
+  next_item: RawPmsItem | null;
+  items: RawPmsItem[];
+  thresholds: { due_soon_km: number; due_soon_days: number };
+}
+
+export interface RawTotals {
+  parts_total_cents: number;
+  labour_total_cents: number;
+  sub_total_cents: number;
+  misc_total_cents: number;
+  tax_total_cents: number;
+  vat_rate_pct: string;
+  grand_total_cents: number;
+}
+
+export interface RawWorkOrderLine {
+  id: string;
+  service_task_id: string | null;
+  description: string;
+  category: string;
+  quantity: string;
+  unit_part_rate_cents: number;
+  part_cost_cents: number;
+  labour_hours: string;
+  labour_rate_cents: number;
+  labour_cost_cents: number;
+  line_cost_cents: number;
+  urgency: string;
+  parts_source: string;
+  approval_status: string;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  decline_reason: string | null;
+  photos: string[];
+}
+
+export interface RawVehicleRef {
+  id: string;
+  plate_number: string;
+  make: string | null;
+  model: string | null;
+}
+
+export interface RawWorkOrder {
+  id: string;
+  reference: string;
+  display_reference: string;
+  title: string;
+  type: string;
+  status: string;
+  lifecycle_stage: string;
+  next_statuses: string[];
+  priority: string;
+  customer_account_id: string;
+  vehicle_id: string;
+  branch_id: string | null;
+  bay_id: string | null;
+  technician_id: string | null;
+  technician_name: string | null;
+  vendor: string;
+  in_house: boolean;
+  opened_on: string;
+  scheduled_for: string | null;
+  scheduled_time: string | null;
+  odometer_at_intake: string | null;
+  odometer_at_service: string | null;
+  findings: string;
+  notes: string;
+  cancellation_reason: string | null;
+  labor_cost_cents: number;
+  parts_cost_cents: number;
+  totals: RawTotals;
+  approved_totals: RawTotals;
+  approval: {
+    pending_value_cents: number;
+    approved_value_cents: number;
+    declined_value_cents: number;
+    required_approver: string;
+    pending_approval_entered_at: string | null;
+    approval_wait_hours: string | number | null;
+    sla_hours: number;
+    waiting_hours?: number | null;
+    sla_breached?: boolean;
+    can_approve?: boolean;
+  };
+  lines: RawWorkOrderLine[];
+  task_ids: string[];
+  parts: { id: string; part_number: string | null; name: string; quantity: string | number; unit_cost_cents: number }[];
+  history: { id: string; status: string; at: string; actor_name: string }[];
+  approval_log: {
+    id: string;
+    line_id: string | null;
+    action: string;
+    actor_name: string;
+    at: string;
+    note: string | null;
+    amount_at_time_cents: number;
+  }[];
+  completed_on: string | null;
+  collected_at: string | null;
+  created_at: string;
+  vehicle?: RawVehicleRef | null;
+  customer_name?: string | null;
+}
+
+export interface RawDocument {
+  id: string;
+  customer_account_id: string;
+  vehicle_id: string | null;
+  work_order_id: string | null;
+  kind: string;
+  kind_label: string;
+  name: string;
+  mime_type: string | null;
+  size_bytes: number;
+  has_file: boolean;
+  expires_on: string | null;
+  expiry_status: string;
+  reference_number: string | null;
+  issued_on: string | null;
+  issuing_body: string | null;
+  notes: string | null;
+  uploaded_by_name: string | null;
+  uploaded_on: string;
+}
+
+export interface RawAlert {
+  id: string;
+  kind: string;
+  severity: string;
+  title: string;
+  body: string;
+  vehicle_id: string | null;
+  href: string;
+  days_remaining: number;
+  read: boolean;
+  dismissed: boolean;
+}
+
+export interface RawServiceTask {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  interval_km: number;
+  interval_months: number;
+  estimated_cost_cents: number;
+  estimated_hours: string;
+  critical: boolean;
+  is_active: boolean;
+}
+
+export interface RawTechnician {
+  id: string;
+  branch_id: string;
+  name: string;
+  skill_tags: string[];
+  specialty: string | null;
+  home_bay_id: string | null;
+  user_id: string | null;
+  status: string;
+}
+
+export interface RawBay {
+  id: string;
+  branch_id: string;
+  name: string;
+  focus: string | null;
+  capacity_hours_per_day: string;
+  status: string;
+}
+
+export interface RawVendor {
+  id: string;
+  name: string;
+  is_active: boolean;
+}
+
+export interface RawSettings {
+  auto_approve_under_cents?: number | null;
+  ops_approval_under_cents?: number | null;
+  sla_hours?: number | null;
+  variance_threshold_pct?: string | number | null;
+  default_parts_source?: string | null;
+  monthly_budget_cents?: number | null;
+  vat_rate_pct?: string | number | null;
+  misc_fee_flat_cents?: number | null;
+  default_labour_rate_cents?: number | null;
+}
+
+export interface RawCustomerAccount {
+  id: string;
+  account_type: string;
+  display_name: string;
+  registered_name: string | null;
+  tin: string | null;
+  address: string | null;
+  mobile: string | null;
+  email: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  payment_terms_days: number;
+  credit_limit_cents: number | null;
+  approval_threshold_overrides: RawSettings | null;
+  logo_url: string | null;
+  brand_color: string | null;
+  status: string;
+  notes?: string | null;
+  tags?: string[];
+  created_at: string;
+}
+
+export interface RawUser {
+  id: string;
+  name: string;
+  first_name: string;
+  last_name: string;
+  username: string | null;
+  email: string;
+  title: string | null;
+  side: string;
+  role: string;
+  role_label: string;
+  customer_account_id: string | null;
+  branch_ids: string[];
+  status: string;
+  last_login_at: string | null;
+  created_at: string;
+}
+
+export interface RawInvitation {
+  id: string;
+  email: string;
+  name: string;
+  side: string;
+  role: string;
+  title: string | null;
+  customer_account_id: string | null;
+  branch_ids: string[];
+  status: "accepted" | "revoked" | "expired" | "pending";
+  expires_at: string;
+  created_at: string;
+}
+
+export interface RawPurchaseOrder {
+  id: string;
+  customer_account_id: string;
+  reference: string;
+  vendor: string;
+  status: string;
+  next_statuses: string[];
+  can_send: boolean;
+  created_on: string;
+  created_by_name: string;
+  notes: string;
+  total_cents: number;
+  lines: {
+    id: string;
+    fleet_part_id: string | null;
+    description: string;
+    quantity: number;
+    unit_cost_cents: number;
+    line_total_cents: number;
+    service_task_ids: string[];
+    vehicle_ids: string[];
+  }[];
+  sent_at: string | null;
+  received_at: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+  events: { status: string; at: string; actor_name: string; note: string | null }[];
+}
+
+export interface RawFleetPart {
+  id: string;
+  customer_account_id: string;
+  sku: string;
+  name: string;
+  category: string;
+  unit: string;
+  unit_cost_cents: number;
+  current_stock: number;
+  reorder_point: number;
+  needs_reorder: boolean;
+  preferred_vendor: string;
+  lead_time_days: number;
+  is_active: boolean;
+  usages: { service_task_id: string; quantity_per_service: number }[];
+}
+
+export interface RawMeterReading {
+  id: string;
+  value: string | null;
+  read_on: string;
+  source: string;
+  recorded_by: string | null;
+  voids_reading_id: string | null;
+  void_reason: string | null;
+  created_at: string;
+}
+
+export interface RawFleetSummary {
+  evaluated_on: string;
+  total: number;
+  compliant: number;
+  due_soon: number;
+  overdue: number;
+  in_service: number;
+  down: number;
+  compliance_rate: number;
+  avg_health_score: number;
+  total_odometer: number;
+  documents: { expired: number; expiring: number; ok: number };
+  expiring_documents: { window_days: number; total: number; by_kind: { label: string; count: number }[] };
+  thresholds: {
+    due_soon_km: number;
+    due_soon_days: number;
+    odometer_stale_days: number;
+    dashboard_expiry_window_days: number;
+    badge_warning_days: number;
+    document_expiry_warning_days: number;
   };
 }
 
-export function toFleetClient(row: Row): FleetClient {
-  const overrides = row.approval_threshold_overrides;
+/* -------------------------------------------------------------- mappers */
+
+export function toVehicle(v: RawVehicle): Vehicle {
   return {
-    id: str(row.id),
-    providerId: str(row.provider_id),
-    name: str(row.name),
-    slug: str(row.slug),
-    contactName: str(row.contact_name),
-    contactEmail: str(row.contact_email),
-    contractTerms: str(row.contract_terms),
-    paymentTermsDays: num(row.payment_terms_days, 30),
-    // Null means "inherit every band from the provider" and must stay null —
-    // an empty object would read the same here, but the distinction matters
-    // to `approvalSettingsForClient`, so it is preserved rather than coerced.
-    approvalThresholdOverrides:
-      overrides && typeof overrides === "object"
-        ? (overrides as Partial<ApprovalSettings>)
-        : null,
-    logoUrl: nullableStr(row.logo_url),
-    brandColor: nullableStr(row.brand_color),
-    status: row.status === "suspended" ? "suspended" : "active",
-    createdAt: str(row.created_at),
+    id: v.id,
+    fleetClientId: v.customer_account_id,
+    plateNumber: v.plate_number,
+    make: v.make ?? "",
+    model: v.model ?? "",
+    year: v.year,
+    vin: v.vin ?? "",
+    vehicleClass: (v.vehicle_class as VehicleClass | null) ?? null,
+    fuelType: (v.fuel_type as FuelType | null) ?? null,
+    color: v.color ?? "",
+    driverLicenceExpiry: v.driver_licence_expiry,
+    odometer: v.odometer.value,
+    odometerLabel: v.odometer.label,
+    odometerReadAt: v.odometer.read_on,
+    odometerAgeDays: v.odometer.age_days,
+    odometerStale: v.odometer.stale,
+    avgDailyKm: v.odometer.avg_daily_km,
+    status: v.status as VehicleOperationalStatus,
+    assignedTo: v.assigned_to ?? "",
+    department: v.department ?? "",
+    location: v.location ?? "",
+    acquiredOn: v.acquired_on,
+    registrationExpiry: v.registration_expiry,
+    insuranceExpiry: v.insurance_expiry,
+    ltoRenewalMonth: v.lto_renewal_month,
+    complianceStatus: v.compliance_status as ComplianceStatus,
+    pms: v.pms ? toVehiclePms(v.pms) : null,
+    archivedAt: v.archived_at,
   };
 }
 
-export function fleetClientToRow(
-  client: Partial<FleetClient>
-): Record<string, unknown> {
-  const row: Record<string, unknown> = {};
-  if (client.id !== undefined) row.id = client.id;
-  if (client.providerId !== undefined) row.provider_id = client.providerId;
-  if (client.name !== undefined) row.name = client.name;
-  if (client.slug !== undefined) row.slug = client.slug;
-  if (client.contactName !== undefined) row.contact_name = client.contactName;
-  if (client.contactEmail !== undefined) row.contact_email = client.contactEmail;
-  if (client.contractTerms !== undefined) row.contract_terms = client.contractTerms;
-  if (client.paymentTermsDays !== undefined) {
-    row.payment_terms_days = client.paymentTermsDays;
-  }
-  if (client.approvalThresholdOverrides !== undefined) {
-    row.approval_threshold_overrides = client.approvalThresholdOverrides;
-  }
-  if (client.logoUrl !== undefined) row.logo_url = client.logoUrl;
-  if (client.brandColor !== undefined) row.brand_color = client.brandColor;
-  if (client.status !== undefined) row.status = client.status;
-  if (client.createdAt !== undefined) row.created_at = client.createdAt;
-  return row;
-}
-
-/* ---------------------------------------------------------------- vehicles */
-
-export function toVehicle(row: Row): Vehicle {
-  const taskState =
-    row.task_state && typeof row.task_state === "object"
-      ? (row.task_state as Record<string, TaskState>)
-      : {};
-
+function toVehiclePms(p: NonNullable<RawVehicle["pms"]>): VehiclePms {
   return {
-    id: str(row.id),
-    fleetClientId: str(row.fleet_client_id),
-    plateNumber: str(row.plate_number),
-    make: str(row.make),
-    model: str(row.model),
-    year: num(row.year),
-    vin: str(row.vin),
-    vehicleClass: (row.vehicle_class as Vehicle["vehicleClass"]) ?? "sedan",
-    fuelType: (row.fuel_type as Vehicle["fuelType"]) ?? "gasoline",
-    color: str(row.color),
-    driverLicenceExpiry: nullableStr(row.driver_licence_expiry),
-    odometer: num(row.odometer),
-    // Readings are not always same-day; an absent one is treated as current,
-    // matching the old normalise().
-    odometerReadAt:
-      nullableStr(row.odometer_read_at) ?? new Date().toISOString().slice(0, 10),
-    avgDailyKm: num(row.avg_daily_km),
-    status: (row.status as Vehicle["status"]) ?? "active",
-    assignedTo: str(row.assigned_to),
-    department: str(row.department),
-    location: str(row.location),
-    acquiredOn: str(row.acquired_on),
-    registrationExpiry: str(row.registration_expiry),
-    insuranceExpiry: str(row.insurance_expiry),
-    taskState,
+    status: p.status as PmsStatus,
+    healthScore: p.health_score,
+    overdueCount: p.overdue_count,
+    dueSoonCount: p.due_soon_count,
+    nextItem: p.next_item
+      ? {
+          serviceTaskId: p.next_item.service_task_id,
+          name: p.next_item.name,
+          status: p.next_item.status as PmsStatus,
+          dueDate: p.next_item.due_date,
+          daysRemaining: p.next_item.days_remaining,
+          dueLabel: p.next_item.due_label,
+          governedBy: p.next_item.governed_by as "distance" | "time",
+          kmRemaining: p.next_item.km_remaining,
+          dueOdometer: p.next_item.due_odometer,
+          progress: p.next_item.progress,
+        }
+      : null,
   };
 }
 
-export function vehicleToRow(
-  vehicle: Partial<Vehicle>
-): Record<string, unknown> {
-  const row: Record<string, unknown> = {};
-  if (vehicle.id !== undefined) row.id = vehicle.id;
-  if (vehicle.fleetClientId !== undefined) row.fleet_client_id = vehicle.fleetClientId;
-  if (vehicle.plateNumber !== undefined) row.plate_number = vehicle.plateNumber;
-  if (vehicle.make !== undefined) row.make = vehicle.make;
-  if (vehicle.model !== undefined) row.model = vehicle.model;
-  if (vehicle.year !== undefined) row.year = vehicle.year;
-  if (vehicle.vin !== undefined) row.vin = vehicle.vin;
-  if (vehicle.vehicleClass !== undefined) row.vehicle_class = vehicle.vehicleClass;
-  if (vehicle.fuelType !== undefined) row.fuel_type = vehicle.fuelType;
-  if (vehicle.color !== undefined) row.color = vehicle.color;
-  if (vehicle.driverLicenceExpiry !== undefined) {
-    row.driver_licence_expiry = vehicle.driverLicenceExpiry || null;
-  }
-  if (vehicle.odometer !== undefined) row.odometer = vehicle.odometer;
-  if (vehicle.odometerReadAt !== undefined) {
-    row.odometer_read_at = vehicle.odometerReadAt || null;
-  }
-  if (vehicle.avgDailyKm !== undefined) row.avg_daily_km = vehicle.avgDailyKm;
-  if (vehicle.status !== undefined) row.status = vehicle.status;
-  if (vehicle.assignedTo !== undefined) row.assigned_to = vehicle.assignedTo;
-  if (vehicle.department !== undefined) row.department = vehicle.department;
-  if (vehicle.location !== undefined) row.location = vehicle.location;
-  if (vehicle.acquiredOn !== undefined) row.acquired_on = vehicle.acquiredOn || null;
-  if (vehicle.registrationExpiry !== undefined) {
-    row.registration_expiry = vehicle.registrationExpiry || null;
-  }
-  if (vehicle.insuranceExpiry !== undefined) {
-    row.insurance_expiry = vehicle.insuranceExpiry || null;
-  }
-  if (vehicle.taskState !== undefined) row.task_state = vehicle.taskState;
-  return row;
-}
-
-/* ------------------------------------------------------------- work orders */
-
-export function toWorkOrderEvent(row: Row): WorkOrderEvent {
+export function toPmsItem(i: RawPmsItem): PmsItem {
   return {
-    id: str(row.id),
-    status: row.status as WorkOrderEvent["status"],
-    at: str(row.at),
-    actor: str(row.actor, "—"),
+    task: {
+      id: i.task.id,
+      code: i.task.code,
+      name: i.task.name,
+      category: i.task.category as TaskCategory,
+      critical: i.task.critical,
+      intervalKm: i.task.interval_km,
+      intervalMonths: i.task.interval_months,
+    },
+    status: i.status as PmsStatus,
+    kmRemaining: i.km_remaining,
+    daysRemaining: i.days_remaining,
+    dueLabel: i.due_label,
+    progress: i.progress,
+    dueOdometer: i.due_odometer,
+    dueDate: i.due_date,
+    governedBy: i.governed_by as "distance" | "time",
+    lastDoneOn: i.last_done_on,
+    lastDoneOdometer: i.last_done_odometer,
   };
 }
 
-/**
- * @param taskNames catalogue names by service-task id, used to resolve a
- *   line's label from its FK. A line with no `service_task_id` is ad-hoc work
- *   that was never in the catalogue, and falls back to its stored text.
- */
-export function toWorkOrderLine(
-  row: Row,
-  taskNames?: ReadonlyMap<string, string>
-): WorkOrderLine {
-  const serviceTaskId = nullableStr(row.service_task_id);
-  const catalogueName = serviceTaskId ? taskNames?.get(serviceTaskId) : undefined;
-
-  // Rows written before the qty/rate columns existed carry only the extended
-  // amounts. `withRates` reconstructs inputs that reproduce those totals
-  // exactly rather than inventing a rate, so an old line renders and edits
-  // correctly without a backfill guess.
-  return withRates({
-    id: str(row.id),
-    serviceTaskId,
-    // The catalogue is authoritative when the line points at it: renaming a
-    // task must rename it everywhere, which was the whole point of the FK.
-    description: catalogueName ?? str(row.description),
-    category: (row.category as WorkOrderLine["category"]) ?? "other",
-    quantity: row.quantity == null ? undefined : num(row.quantity),
-    unitPartRate: row.unit_part_rate == null ? undefined : num(row.unit_part_rate),
-    labourHours: row.labour_hours == null ? undefined : num(row.labour_hours),
-    labourRate: row.labour_rate == null ? undefined : num(row.labour_rate),
-    partCost: num(row.part_cost),
-    labourCost: num(row.labour_cost),
-    urgency: (row.urgency as WorkOrderLine["urgency"]) ?? "recommended",
-    partsSource: (row.parts_source as WorkOrderLine["partsSource"]) ?? "supplier_provided",
-    approvalStatus:
-      (row.approval_status as WorkOrderLine["approvalStatus"]) ?? "pending",
-    approvedBy: nullableStr(row.approved_by),
-    approvedAt: nullableStr(row.approved_at),
-    declineReason: nullableStr(row.decline_reason),
-    photoUrls: arr<string>(row.photo_urls),
-  });
-}
-
-export function workOrderLineToRow(
-  line: WorkOrderLine,
-  workOrderId: string
-): Record<string, unknown> {
+export function toVehicleHealth(h: RawVehicleHealth): VehicleHealth {
   return {
-    id: line.id,
-    work_order_id: workOrderId,
-    service_task_id: line.serviceTaskId ?? null,
-    // Still written even when the FK is set: it is the historical label, and
-    // what a line falls back to if its catalogue task is later deleted.
-    description: line.description,
-    category: line.category,
-    quantity: line.quantity,
-    unit_part_rate: line.unitPartRate,
-    labour_hours: line.labourHours,
-    labour_rate: line.labourRate,
-    // Extended amounts are stored, not derived on read: they are the price the
-    // client approved, and must not shift when a rate later changes.
-    part_cost: line.partCost,
-    labour_cost: line.labourCost,
-    urgency: line.urgency,
-    parts_source: line.partsSource,
-    approval_status: line.approvalStatus,
-    approved_by: line.approvedBy,
-    approved_at: line.approvedAt,
-    decline_reason: line.declineReason,
-    photo_urls: line.photoUrls ?? [],
+    vehicleId: h.vehicle_id,
+    evaluatedOn: h.evaluated_on,
+    items: h.items.map(toPmsItem),
+    status: h.status as PmsStatus,
+    overdueCount: h.overdue_count,
+    dueSoonCount: h.due_soon_count,
+    nextItem: h.next_item ? toPmsItem(h.next_item) : null,
+    healthScore: h.health_score,
+    thresholds: { dueSoonKm: h.thresholds.due_soon_km, dueSoonDays: h.thresholds.due_soon_days },
   };
 }
 
-export function toApprovalLogEntry(row: Row): ApprovalLogEntry {
+export function toVehicleRef(v: RawVehicleRef): VehicleRef {
+  return { id: v.id, plateNumber: v.plate_number, make: v.make ?? "", model: v.model ?? "" };
+}
+
+export function toTotals(t: RawTotals): WorkOrderTotals {
   return {
-    id: str(row.id),
-    fleetClientId: str(row.fleet_client_id),
-    lineId: nullableStr(row.line_id),
-    action: row.action as ApprovalLogEntry["action"],
-    actorId: str(row.actor_id),
-    actorName: str(row.actor_name),
-    at: str(row.at),
-    note: nullableStr(row.note),
-    amountAtTime: num(row.amount_at_time),
+    partsTotal: pesos(t.parts_total_cents),
+    labourTotal: pesos(t.labour_total_cents),
+    subTotal: pesos(t.sub_total_cents),
+    miscTotal: pesos(t.misc_total_cents),
+    taxTotal: pesos(t.tax_total_cents),
+    vatRatePct: num(t.vat_rate_pct),
+    grandTotal: pesos(t.grand_total_cents),
   };
 }
 
-export function approvalLogEntryToRow(
-  entry: ApprovalLogEntry,
-  workOrderId: string
-): Record<string, unknown> {
+export function toWorkOrderLine(l: RawWorkOrderLine): WorkOrderLine {
   return {
-    id: entry.id,
-    work_order_id: workOrderId,
-    fleet_client_id: entry.fleetClientId,
-    line_id: entry.lineId,
-    action: entry.action,
-    actor_id: entry.actorId,
-    actor_name: entry.actorName,
-    at: entry.at,
-    note: entry.note,
-    amount_at_time: entry.amountAtTime,
+    id: l.id,
+    serviceTaskId: l.service_task_id,
+    description: l.description,
+    category: l.category as TaskCategory | "other",
+    quantity: num(l.quantity),
+    unitPartRate: pesos(l.unit_part_rate_cents),
+    labourHours: num(l.labour_hours),
+    labourRate: pesos(l.labour_rate_cents),
+    partCost: pesos(l.part_cost_cents),
+    labourCost: pesos(l.labour_cost_cents),
+    lineCost: pesos(l.line_cost_cents),
+    urgency: l.urgency as LineUrgency,
+    partsSource: l.parts_source as PartsSource,
+    approvalStatus: l.approval_status as LineApprovalStatus,
+    approvedBy: l.approved_by_name,
+    approvedAt: l.approved_at,
+    declineReason: l.decline_reason,
+    photoUrls: l.photos ?? [],
   };
 }
 
-/**
- * Everything a work order needs from the normalised child tables.
- *
- * These were an array column and a jsonb blob before; they are rows now, but
- * the domain type is deliberately unchanged — `order.taskIds` is still a
- * `string[]` at every call site. Normalising storage should not ripple into
- * fifteen components.
- */
-export interface WorkOrderRelations {
-  events: WorkOrderEvent[];
-  lines: WorkOrderLine[];
-  approvalLog: ApprovalLogEntry[];
-  /** From `pms_work_order_tasks`, replacing the old `task_ids` array. */
-  taskIds: string[];
-  /** From `pms_work_order_parts`, replacing the old `parts` jsonb. */
-  parts: PartLine[];
-  /** Resolved through `technician_id`; falls back to the stored text. */
-  technicianName: string | null;
-  /** Resolved through `vendor_id`; falls back to the stored text. */
-  vendorName: string | null;
-}
-
-/**
- * Assembles a work order from its own row plus its child collections.
- *
- * The children arrive as separate queries rather than a nested select because
- * `history` and `approvalLog` are append-only and ordered, and PostgREST's
- * embedded resources do not guarantee child ordering — the sequence columns do.
- */
-export function toWorkOrder(row: Row, relations: WorkOrderRelations): WorkOrder {
-  const { events, lines, approvalLog } = relations;
-  const status = row.status as WorkOrder["status"];
-  const openedOn = str(row.opened_on);
-
+export function toWorkOrder(o: RawWorkOrder): WorkOrder {
   return {
-    id: str(row.id),
-    reference: str(row.reference),
-    vehicleId: str(row.vehicle_id),
-    title: str(row.title),
-    type: (row.type as WorkOrder["type"]) ?? "corrective",
-    status,
-    priority: (row.priority as WorkOrder["priority"]) ?? "medium",
-    openedOn,
-    scheduledFor: str(row.scheduled_for),
-    // Never fabricate a time from a bare date.
-    scheduledTime: nullableStr(row.scheduled_time),
-    completedOn: nullableStr(row.completed_on),
-    odometerAtService: num(row.odometer_at_service),
-    // The catalogue row wins when the FK resolves; the text column is the
-    // historical label for a technician who has since left the shop.
-    technician: relations.technicianName ?? str(row.technician),
-    vendor: relations.vendorName ?? str(row.vendor),
-    assignedProviderId: nullableStr(row.assigned_provider_id),
-    bayId: nullableStr(row.bay_id),
-    collectedAt: nullableStr(row.collected_at),
-    collectedBy: nullableStr(row.collected_by),
-    laborCost: num(row.labor_cost),
-    partsCost: num(row.parts_cost),
-    parts: relations.parts,
-    findings: str(row.findings),
-    taskIds: relations.taskIds,
-    notes: str(row.notes),
-    // A record with no stored history still carries its status; give it one
-    // synthesized entry rather than an empty timeline.
-    history:
-      events.length > 0
-        ? events
-        : [{ id: `${str(row.id)}-legacy`, status, at: openedOn, actor: "—" }],
-    lines,
-    approvalLog,
-    pendingApprovalEnteredAt: nullableStr(row.pending_approval_entered_at),
-    approvalWaitHours: nullableNum(row.approval_wait_hours),
-  };
-}
-
-/**
- * Name → id for a provider-scoped catalogue (technicians, vendors).
- *
- * The domain still carries names, so a write has to resolve one back to its
- * row. An unmatched name resolves to null rather than inventing a row: the
- * text column keeps the label, and the FK stays empty until the provider adds
- * the person to the catalogue.
- */
-export type CatalogueIndex = ReadonlyMap<string, string>;
-
-export function catalogueIndex(rows: Row[]): CatalogueIndex {
-  const index = new Map<string, string>();
-  for (const row of rows) {
-    const name = str(row.name);
-    if (name) index.set(name.toLowerCase(), str(row.id));
-  }
-  return index;
-}
-
-export function workOrderToRow(
-  order: Partial<WorkOrder>,
-  catalogues?: { technicians?: CatalogueIndex; vendors?: CatalogueIndex }
-): Record<string, unknown> {
-  const row: Record<string, unknown> = {};
-  if (order.id !== undefined) row.id = order.id;
-  if (order.reference !== undefined) row.reference = order.reference;
-  if (order.vehicleId !== undefined) row.vehicle_id = order.vehicleId;
-  if (order.title !== undefined) row.title = order.title;
-  if (order.type !== undefined) row.type = order.type;
-  if (order.status !== undefined) row.status = order.status;
-  if (order.priority !== undefined) row.priority = order.priority;
-  if (order.openedOn !== undefined) row.opened_on = order.openedOn || null;
-  if (order.scheduledFor !== undefined) row.scheduled_for = order.scheduledFor || null;
-  if (order.scheduledTime !== undefined) row.scheduled_time = order.scheduledTime;
-  if (order.completedOn !== undefined) row.completed_on = order.completedOn || null;
-  if (order.odometerAtService !== undefined) {
-    row.odometer_at_service = order.odometerAtService;
-  }
-  // Both the FK and the text: the id is the relation, the text is the label
-  // that survives the catalogue row being renamed or removed.
-  if (order.technician !== undefined) {
-    row.technician = order.technician;
-    row.technician_id =
-      catalogues?.technicians?.get(order.technician.toLowerCase()) ?? null;
-  }
-  if (order.vendor !== undefined) {
-    row.vendor = order.vendor;
-    row.vendor_id = catalogues?.vendors?.get(order.vendor.toLowerCase()) ?? null;
-  }
-  if (order.assignedProviderId !== undefined) {
-    row.assigned_provider_id = order.assignedProviderId;
-  }
-  if (order.bayId !== undefined) row.bay_id = order.bayId;
-  if (order.collectedAt !== undefined) row.collected_at = order.collectedAt;
-  if (order.collectedBy !== undefined) row.collected_by = order.collectedBy;
-  if (order.laborCost !== undefined) row.labor_cost = order.laborCost;
-  if (order.partsCost !== undefined) row.parts_cost = order.partsCost;
-  if (order.findings !== undefined) row.findings = order.findings;
-  if (order.notes !== undefined) row.notes = order.notes;
-  // `parts` and `taskIds` are deliberately absent: they are rows in
-  // pms_work_order_parts / pms_work_order_tasks now, written by
-  // `workOrderPartRows` / `workOrderTaskRows` alongside this row rather than
-  // as columns on it. Including them here would send unknown columns.
-  if (order.pendingApprovalEnteredAt !== undefined) {
-    row.pending_approval_entered_at = order.pendingApprovalEnteredAt;
-  }
-  if (order.approvalWaitHours !== undefined) {
-    row.approval_wait_hours = order.approvalWaitHours;
-  }
-  return row;
-}
-
-/* ------------------------------------- work order child rows (normalised) */
-
-/** One `pms_work_order_parts` row per fitted part. */
-export function toPartLine(row: Row): PartLine {
-  return {
-    id: str(row.id),
-    // The catalogue SKU when the part resolves, else the label recorded at the
-    // time — a part fitted off the shelf may never have had a pms_parts row.
-    partNumber: str(row.part_number),
-    name: str(row.name),
-    quantity: num(row.quantity),
-    unitCost: num(row.unit_cost),
-  };
-}
-
-/**
- * Fitted parts as rows.
- *
- * Ids are positional and deterministic so a re-write of the same order
- * replaces its parts rather than accumulating duplicates — the caller deletes
- * by `work_order_id` and re-inserts.
- */
-export function workOrderPartRows(
-  parts: PartLine[],
-  workOrderId: string,
-  /** SKU → `pms_parts.id`, so a fitted part resolves to the catalogue row. */
-  partsBySku?: ReadonlyMap<string, string>
-): Record<string, unknown>[] {
-  return parts.map((part, index) => ({
-    id: part.id || `${workOrderId}-part-${index + 1}`,
-    work_order_id: workOrderId,
-    part_id: partsBySku?.get(part.partNumber) ?? null,
-    part_number: part.partNumber,
-    name: part.name,
-    quantity: part.quantity,
-    unit_cost: part.unitCost,
-  }));
-}
-
-/** The `pms_work_order_tasks` junction rows for one order. */
-export function workOrderTaskRows(
-  taskIds: string[],
-  workOrderId: string
-): Record<string, unknown>[] {
-  // Deduplicated: the junction's primary key would reject a repeat, and the
-  // old array column had no such guard, so seeded data may carry one.
-  return [...new Set(taskIds)].map((taskId) => ({
-    work_order_id: workOrderId,
-    service_task_id: taskId,
-  }));
-}
-
-/** The `pms_purchase_order_line_tasks` / `_vehicles` junction rows. */
-export function purchaseOrderLineTaskRows(
-  line: PurchaseOrderLine
-): Record<string, unknown>[] {
-  return [...new Set(line.serviceTaskIds ?? [])].map((taskId) => ({
-    purchase_order_line_id: line.id,
-    service_task_id: taskId,
-  }));
-}
-
-export function purchaseOrderLineVehicleRows(
-  line: PurchaseOrderLine
-): Record<string, unknown>[] {
-  return [...new Set(line.vehicleIds ?? [])].map((vehicleId) => ({
-    purchase_order_line_id: line.id,
-    vehicle_id: vehicleId,
-  }));
-}
-
-/* ---------------------------------------------------------------- documents */
-
-export function toDocument(row: Row): FleetDocument {
-  return {
-    id: str(row.id),
-    fleetClientId: str(row.fleet_client_id),
-    name: str(row.name),
-    kind: (row.kind as FleetDocument["kind"]) ?? "other",
-    vehicleId: nullableStr(row.vehicle_id),
-    workOrderId: nullableStr(row.work_order_id),
-    uploadedBy: str(row.uploaded_by),
-    uploadedOn: str(row.uploaded_on),
-    sizeBytes: num(row.size_bytes),
-    mimeType: str(row.mime_type),
-    dataUrl: nullableStr(row.data_url),
-    expiresOn: nullableStr(row.expires_on),
-    referenceNumber: nullableStr(row.reference_number),
-    issuedOn: nullableStr(row.issued_on),
-    issuingBody: nullableStr(row.issuing_body),
-    notes: str(row.notes),
-  };
-}
-
-export function documentToRow(doc: FleetDocument): Record<string, unknown> {
-  return {
-    id: doc.id,
-    fleet_client_id: doc.fleetClientId,
-    name: doc.name,
-    kind: doc.kind,
-    vehicle_id: doc.vehicleId,
-    work_order_id: doc.workOrderId,
-    uploaded_by: doc.uploadedBy,
-    uploaded_on: doc.uploadedOn,
-    size_bytes: doc.sizeBytes,
-    mime_type: doc.mimeType,
-    data_url: doc.dataUrl,
-    expires_on: doc.expiresOn,
-    reference_number: doc.referenceNumber,
-    issued_on: doc.issuedOn,
-    issuing_body: doc.issuingBody,
-    notes: doc.notes,
-  };
-}
-
-/* -------------------------------------------------------- parts & purchasing */
-
-export function toPart(row: Row): Part {
-  return {
-    id: str(row.id),
-    fleetClientId: str(row.fleet_client_id),
-    sku: str(row.sku),
-    name: str(row.name),
-    category: (row.category as Part["category"]) ?? "other",
-    unit: str(row.unit, "pc"),
-    unitCost: num(row.unit_cost),
-    currentStock: num(row.current_stock),
-    reorderPoint: num(row.reorder_point),
-    preferredVendor: str(row.preferred_vendor),
-    leadTimeDays: num(row.lead_time_days),
-  };
-}
-
-/**
- * @param taskIds  from `pms_purchase_order_line_tasks`, replacing the old array
- * @param vehicleIds from `pms_purchase_order_line_vehicles`, likewise
- * @param taskNames catalogue names, so a line labelled from the catalogue
- *   follows a rename instead of keeping a stale copy
- */
-export function toPurchaseOrderLine(
-  row: Row,
-  taskIds: string[] = [],
-  vehicleIds: string[] = [],
-  taskNames?: ReadonlyMap<string, string>
-): PurchaseOrderLine {
-  const serviceTaskId = nullableStr(row.service_task_id);
-  const catalogueName = serviceTaskId ? taskNames?.get(serviceTaskId) : undefined;
-
-  return {
-    id: str(row.id),
-    // `part_ref` is the enforced FK added in 0006; `part_id` is the original
-    // unconstrained column, kept as the fallback for rows whose part has since
-    // been deleted.
-    partId: str(row.part_ref) || str(row.part_id),
-    description: catalogueName ?? str(row.description),
-    quantity: num(row.quantity),
-    unitCost: num(row.unit_cost),
-    serviceTaskIds: taskIds,
-    vehicleIds,
-  };
-}
-
-export function purchaseOrderLineToRow(
-  line: PurchaseOrderLine,
-  purchaseOrderId: string
-): Record<string, unknown> {
-  return {
-    id: line.id,
-    purchase_order_id: purchaseOrderId,
-    part_id: line.partId,
-    part_ref: line.partId || null,
-    description: line.description,
-    quantity: line.quantity,
-    unit_cost: line.unitCost,
-    // `serviceTaskIds` / `vehicleIds` are junction rows now — see
-    // `purchaseOrderLineTaskRows` / `purchaseOrderLineVehicleRows`.
-  };
-}
-
-export function toPurchaseOrder(row: Row, lines: PurchaseOrderLine[]): PurchaseOrder {
-  return {
-    id: str(row.id),
-    fleetClientId: str(row.fleet_client_id),
-    reference: str(row.reference),
-    vendor: str(row.vendor),
-    status: (row.status as PurchaseOrder["status"]) ?? "draft",
-    createdOn: str(row.created_on),
-    createdBy: str(row.created_by),
-    lines,
-    notes: str(row.notes),
-  };
-}
-
-export function purchaseOrderToRow(po: PurchaseOrder): Record<string, unknown> {
-  return {
-    id: po.id,
-    fleet_client_id: po.fleetClientId,
-    reference: po.reference,
-    vendor: po.vendor,
-    status: po.status,
-    created_on: po.createdOn,
-    created_by: po.createdBy,
-    notes: po.notes,
-  };
-}
-
-/* ----------------------------------------------------------- service tasks */
-
-export function toServiceTask(row: Row): ServiceTask {
-  return {
-    id: str(row.id),
-    name: str(row.name),
-    category: (row.category as ServiceTask["category"]) ?? "other",
-    intervalKm: num(row.interval_km),
-    intervalMonths: num(row.interval_months),
-    estimatedCost: num(row.estimated_cost),
-    estimatedHours: num(row.estimated_hours),
-    critical: Boolean(row.critical),
-  };
-}
-
-export function serviceTaskToRow(
-  task: Partial<ServiceTask>,
-  providerId: string
-): Record<string, unknown> {
-  const row: Record<string, unknown> = { provider_id: providerId };
-  if (task.id !== undefined) row.id = task.id;
-  if (task.name !== undefined) row.name = task.name;
-  if (task.category !== undefined) row.category = task.category;
-  if (task.intervalKm !== undefined) row.interval_km = task.intervalKm;
-  if (task.intervalMonths !== undefined) row.interval_months = task.intervalMonths;
-  if (task.estimatedCost !== undefined) row.estimated_cost = task.estimatedCost;
-  if (task.estimatedHours !== undefined) row.estimated_hours = task.estimatedHours;
-  if (task.critical !== undefined) row.critical = task.critical;
-  return row;
-}
-
-/* -------------------------------------------------------- provider staff */
-
-export function toProviderTechnician(row: Row): ProviderTechnician {
-  return {
-    id: str(row.id),
-    name: str(row.name),
-    specialty: str(row.specialty, "general"),
-    homeBayId: nullableStr(row.home_bay_id),
-    active: row.active !== false,
-  };
-}
-
-export function providerTechnicianToRow(
-  technician: Partial<ProviderTechnician>,
-  providerId: string
-): Record<string, unknown> {
-  const row: Record<string, unknown> = { provider_id: providerId };
-  if (technician.id !== undefined) row.id = technician.id;
-  if (technician.name !== undefined) row.name = technician.name;
-  if (technician.specialty !== undefined) row.specialty = technician.specialty;
-  if (technician.homeBayId !== undefined) row.home_bay_id = technician.homeBayId;
-  if (technician.active !== undefined) row.active = technician.active;
-  return row;
-}
-
-export function toProviderVendor(row: Row): ProviderVendor {
-  return {
-    id: str(row.id),
-    name: str(row.name),
-    active: row.active !== false,
-  };
-}
-
-export function providerVendorToRow(
-  vendor: Partial<ProviderVendor>,
-  providerId: string
-): Record<string, unknown> {
-  const row: Record<string, unknown> = { provider_id: providerId };
-  if (vendor.id !== undefined) row.id = vendor.id;
-  if (vendor.name !== undefined) row.name = vendor.name;
-  if (vendor.active !== undefined) row.active = vendor.active;
-  return row;
-}
-
-/* ------------------------------------------------------- approval settings */
-
-export function toApprovalSettings(
-  row: Row,
-  defaults: ApprovalSettings
-): ApprovalSettings {
-  return {
-    autoApproveUnder: num(row.auto_approve_under, defaults.autoApproveUnder),
-    opsApprovalUnder: num(row.ops_approval_under, defaults.opsApprovalUnder),
-    slaHours: num(row.sla_hours, defaults.slaHours),
-    varianceThresholdPct: num(
-      row.variance_threshold_pct,
-      defaults.varianceThresholdPct
+    id: o.id,
+    reference: o.reference,
+    displayReference: o.display_reference,
+    fleetClientId: o.customer_account_id,
+    vehicleId: o.vehicle_id,
+    title: o.title,
+    type: o.type as WorkOrderType,
+    status: o.status as WorkOrderStatus,
+    lifecycleStage: o.lifecycle_stage as LifecycleStage,
+    nextStatuses: o.next_statuses as WorkOrderStatus[],
+    priority: o.priority as Priority,
+    branchId: o.branch_id,
+    bayId: o.bay_id,
+    technicianId: o.technician_id,
+    technician: o.technician_name ?? "",
+    vendor: o.vendor ?? "",
+    inHouse: o.in_house,
+    openedOn: o.opened_on,
+    scheduledFor: o.scheduled_for,
+    scheduledTime: o.scheduled_time,
+    completedOn: o.completed_on,
+    collectedAt: o.collected_at,
+    odometerAtIntake: numOrNull(o.odometer_at_intake),
+    odometerAtService: numOrNull(o.odometer_at_service),
+    findings: o.findings ?? "",
+    notes: o.notes ?? "",
+    cancellationReason: o.cancellation_reason,
+    laborCost: pesos(o.labor_cost_cents),
+    partsCost: pesos(o.parts_cost_cents),
+    totals: toTotals(o.totals),
+    approvedTotals: toTotals(o.approved_totals),
+    approval: {
+      pendingValue: pesos(o.approval.pending_value_cents),
+      approvedValue: pesos(o.approval.approved_value_cents),
+      declinedValue: pesos(o.approval.declined_value_cents),
+      requiredApprover: o.approval.required_approver as ApproverBand,
+      pendingApprovalEnteredAt: o.approval.pending_approval_entered_at,
+      approvalWaitHours: numOrNull(o.approval.approval_wait_hours),
+      slaHours: o.approval.sla_hours,
+      waitingHours: o.approval.waiting_hours ?? null,
+      slaBreached: o.approval.sla_breached ?? false,
+      canApprove: o.approval.can_approve ?? false,
+    },
+    lines: (o.lines ?? []).map(toWorkOrderLine),
+    taskIds: o.task_ids ?? [],
+    parts: (o.parts ?? []).map(
+      (p): PartLine => ({
+        id: p.id,
+        partNumber: p.part_number ?? "",
+        name: p.name,
+        quantity: num(p.quantity),
+        unitCost: pesos(p.unit_cost_cents),
+      })
     ),
-    defaultPartsSource:
-      (row.default_parts_source as ApprovalSettings["defaultPartsSource"]) ??
-      defaults.defaultPartsSource,
-    monthlyBudget: num(row.monthly_budget, defaults.monthlyBudget),
-    // A provider that has set 0% VAT means it; `num` only falls back when the
-    // column is genuinely absent, so a deliberate zero is not overwritten.
-    vatRatePct: num(row.vat_rate_pct, defaults.vatRatePct),
-    miscFeeFlat: num(row.misc_fee_flat, defaults.miscFeeFlat),
-    defaultLabourRate: num(row.default_labour_rate, defaults.defaultLabourRate),
+    history: (o.history ?? []).map((e) => ({ id: e.id, status: e.status as WorkOrderStatus, at: e.at, actor: e.actor_name })),
+    approvalLog: (o.approval_log ?? []).map(
+      (e): ApprovalLogEntry => ({
+        id: e.id,
+        lineId: e.line_id,
+        action: e.action as ApprovalAction,
+        actorName: e.actor_name,
+        at: e.at,
+        note: e.note,
+        amountAtTime: pesos(e.amount_at_time_cents),
+      })
+    ),
+    vehicle: o.vehicle ? toVehicleRef(o.vehicle) : null,
+    customerName: o.customer_name ?? null,
+    createdAt: o.created_at,
   };
 }
 
-export function approvalSettingsToRow(
-  patch: Partial<ApprovalSettings>
-): Record<string, unknown> {
-  const row: Record<string, unknown> = {};
-  if (patch.autoApproveUnder !== undefined) {
-    row.auto_approve_under = patch.autoApproveUnder;
-  }
-  if (patch.opsApprovalUnder !== undefined) {
-    row.ops_approval_under = patch.opsApprovalUnder;
-  }
-  if (patch.slaHours !== undefined) row.sla_hours = patch.slaHours;
-  if (patch.varianceThresholdPct !== undefined) {
-    row.variance_threshold_pct = patch.varianceThresholdPct;
-  }
-  if (patch.defaultPartsSource !== undefined) {
-    row.default_parts_source = patch.defaultPartsSource;
-  }
-  if (patch.monthlyBudget !== undefined) row.monthly_budget = patch.monthlyBudget;
-  if (patch.vatRatePct !== undefined) row.vat_rate_pct = patch.vatRatePct;
-  if (patch.miscFeeFlat !== undefined) row.misc_fee_flat = patch.miscFeeFlat;
-  if (patch.defaultLabourRate !== undefined) {
-    row.default_labour_rate = patch.defaultLabourRate;
-  }
-  return row;
+export function toDocument(d: RawDocument): FleetDocument {
+  return {
+    id: d.id,
+    fleetClientId: d.customer_account_id,
+    name: d.name,
+    kind: d.kind as DocumentKind,
+    kindLabel: d.kind_label,
+    vehicleId: d.vehicle_id,
+    workOrderId: d.work_order_id,
+    uploadedBy: d.uploaded_by_name ?? "",
+    uploadedOn: d.uploaded_on,
+    sizeBytes: d.size_bytes,
+    mimeType: d.mime_type ?? "",
+    hasFile: d.has_file,
+    expiresOn: d.expires_on,
+    expiryStatus: d.expiry_status as ComplianceStatus,
+    referenceNumber: d.reference_number,
+    issuedOn: d.issued_on,
+    issuingBody: d.issuing_body,
+    notes: d.notes ?? "",
+  };
+}
+
+export function toAlert(a: RawAlert): Alert {
+  return {
+    id: a.id,
+    kind: a.kind as AlertKind,
+    severity: a.severity as AlertSeverity,
+    title: a.title,
+    body: a.body,
+    vehicleId: a.vehicle_id,
+    href: a.href,
+    daysRemaining: a.days_remaining,
+    read: a.read,
+    dismissed: a.dismissed,
+  };
+}
+
+export function toServiceTask(t: RawServiceTask): ServiceTask {
+  return {
+    id: t.id,
+    code: t.code,
+    name: t.name,
+    category: t.category as TaskCategory,
+    intervalKm: t.interval_km,
+    intervalMonths: t.interval_months,
+    estimatedCost: pesos(t.estimated_cost_cents),
+    estimatedHours: num(t.estimated_hours),
+    critical: t.critical,
+    active: t.is_active,
+  };
+}
+
+export function toTechnician(t: RawTechnician): ProviderTechnician {
+  return {
+    id: t.id,
+    branchId: t.branch_id,
+    name: t.name,
+    specialty: t.specialty ?? "",
+    skillTags: t.skill_tags ?? [],
+    homeBayId: t.home_bay_id,
+    userId: t.user_id,
+    active: t.status === "active",
+  };
+}
+
+export function toBay(b: RawBay): Bay {
+  return {
+    id: b.id,
+    branchId: b.branch_id,
+    name: b.name,
+    focus: b.focus ?? "",
+    capacityHoursPerDay: num(b.capacity_hours_per_day),
+    status: b.status,
+  };
+}
+
+export function toVendor(v: RawVendor): ProviderVendor {
+  return { id: v.id, name: v.name, active: v.is_active };
+}
+
+/** A full settings set (organization or effective). */
+export function toApprovalSettings(s: RawSettings): ApprovalSettings {
+  return {
+    autoApproveUnder: pesos(s.auto_approve_under_cents),
+    opsApprovalUnder: pesos(s.ops_approval_under_cents),
+    slaHours: num(s.sla_hours),
+    varianceThresholdPct: num(s.variance_threshold_pct),
+    defaultPartsSource: (s.default_parts_source ?? "supplier_provided") as PartsSource,
+    monthlyBudget: pesos(s.monthly_budget_cents),
+    vatRatePct: num(s.vat_rate_pct),
+    miscFeeFlat: pesos(s.misc_fee_flat_cents),
+    defaultLabourRate: pesos(s.default_labour_rate_cents),
+  };
+}
+
+/** A sparse override set: only the keys present (an unset key inherits). */
+export function toSettingsOverrides(s: RawSettings | null | undefined): Partial<ApprovalSettings> | null {
+  if (!s) return null;
+  const out: Partial<ApprovalSettings> = {};
+  if (s.auto_approve_under_cents != null) out.autoApproveUnder = pesos(s.auto_approve_under_cents);
+  if (s.ops_approval_under_cents != null) out.opsApprovalUnder = pesos(s.ops_approval_under_cents);
+  if (s.sla_hours != null) out.slaHours = num(s.sla_hours);
+  if (s.variance_threshold_pct != null) out.varianceThresholdPct = num(s.variance_threshold_pct);
+  if (s.default_parts_source != null) out.defaultPartsSource = s.default_parts_source as PartsSource;
+  if (s.monthly_budget_cents != null) out.monthlyBudget = pesos(s.monthly_budget_cents);
+  if (s.vat_rate_pct != null) out.vatRatePct = num(s.vat_rate_pct);
+  if (s.misc_fee_flat_cents != null) out.miscFeeFlat = pesos(s.misc_fee_flat_cents);
+  if (s.default_labour_rate_cents != null) out.defaultLabourRate = pesos(s.default_labour_rate_cents);
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Settings edits → the API's body. Money keys go to centavos; `null` clears
+ * an override (it inherits again).
+ */
+export function settingsToApi(patch: { [K in keyof ApprovalSettings]?: ApprovalSettings[K] | null }): RawSettings {
+  const out: RawSettings = {};
+  const money = (v: number | null | undefined) => (v === null ? null : v === undefined ? undefined : pesosToCents(v));
+  if ("autoApproveUnder" in patch) out.auto_approve_under_cents = money(patch.autoApproveUnder);
+  if ("opsApprovalUnder" in patch) out.ops_approval_under_cents = money(patch.opsApprovalUnder);
+  if ("slaHours" in patch) out.sla_hours = patch.slaHours ?? null;
+  if ("varianceThresholdPct" in patch) out.variance_threshold_pct = patch.varianceThresholdPct == null ? null : String(patch.varianceThresholdPct);
+  if ("defaultPartsSource" in patch) out.default_parts_source = patch.defaultPartsSource ?? null;
+  if ("monthlyBudget" in patch) out.monthly_budget_cents = money(patch.monthlyBudget);
+  if ("vatRatePct" in patch) out.vat_rate_pct = patch.vatRatePct == null ? null : String(patch.vatRatePct);
+  if ("miscFeeFlat" in patch) out.misc_fee_flat_cents = money(patch.miscFeeFlat);
+  if ("defaultLabourRate" in patch) out.default_labour_rate_cents = money(patch.defaultLabourRate);
+  return out;
+}
+
+export function toFleetClient(a: RawCustomerAccount): FleetClient {
+  return {
+    id: a.id,
+    name: a.display_name,
+    accountType: a.account_type,
+    registeredName: a.registered_name ?? "",
+    contactName: a.contact_name ?? "",
+    contactEmail: a.contact_email ?? a.email ?? "",
+    mobile: a.mobile ?? "",
+    address: a.address ?? "",
+    tin: a.tin ?? "",
+    paymentTermsDays: a.payment_terms_days,
+    creditLimit: a.credit_limit_cents === null ? null : pesos(a.credit_limit_cents),
+    approvalThresholdOverrides: toSettingsOverrides(a.approval_threshold_overrides),
+    logoUrl: a.logo_url,
+    brandColor: a.brand_color,
+    status: a.status as "active" | "suspended",
+    notes: a.notes ?? "",
+    tags: a.tags ?? [],
+    createdAt: a.created_at,
+  };
+}
+
+export function toMember(u: RawUser): Member {
+  return {
+    id: u.id,
+    name: u.name,
+    firstName: u.first_name,
+    lastName: u.last_name,
+    username: u.username ?? "",
+    email: u.email,
+    title: u.title ?? "",
+    side: u.side as UserSide,
+    role: u.role as UserRole,
+    roleLabel: u.role_label,
+    fleetClientId: u.customer_account_id,
+    branchIds: u.branch_ids ?? [],
+    status: u.status,
+    lastLoginAt: u.last_login_at,
+    createdAt: u.created_at,
+  };
+}
+
+export function toInvitation(i: RawInvitation): Invitation {
+  return {
+    id: i.id,
+    email: i.email,
+    name: i.name,
+    side: i.side as UserSide,
+    role: i.role as UserRole,
+    title: i.title ?? "",
+    fleetClientId: i.customer_account_id,
+    branchIds: i.branch_ids ?? [],
+    status: i.status,
+    expiresAt: i.expires_at,
+    createdAt: i.created_at,
+  };
+}
+
+export function toPurchaseOrder(p: RawPurchaseOrder): PurchaseOrder {
+  return {
+    id: p.id,
+    fleetClientId: p.customer_account_id,
+    reference: p.reference,
+    vendor: p.vendor,
+    status: p.status as PurchaseOrderStatus,
+    nextStatuses: p.next_statuses as PurchaseOrderStatus[],
+    canSend: p.can_send,
+    createdOn: p.created_on,
+    createdBy: p.created_by_name,
+    notes: p.notes ?? "",
+    total: pesos(p.total_cents),
+    lines: (p.lines ?? []).map((l) => ({
+      id: l.id,
+      partId: l.fleet_part_id,
+      description: l.description,
+      quantity: l.quantity,
+      unitCost: pesos(l.unit_cost_cents),
+      lineTotal: pesos(l.line_total_cents),
+      serviceTaskIds: l.service_task_ids ?? [],
+      vehicleIds: l.vehicle_ids ?? [],
+    })),
+    sentAt: p.sent_at,
+    receivedAt: p.received_at,
+    cancelledAt: p.cancelled_at,
+    cancellationReason: p.cancellation_reason,
+    events: (p.events ?? []).map((e) => ({ status: e.status as PurchaseOrderStatus, at: e.at, actorName: e.actor_name, note: e.note })),
+  };
+}
+
+export function toPart(p: RawFleetPart): Part {
+  return {
+    id: p.id,
+    fleetClientId: p.customer_account_id,
+    sku: p.sku,
+    name: p.name,
+    category: p.category as TaskCategory | "other",
+    unit: p.unit,
+    unitCost: pesos(p.unit_cost_cents),
+    currentStock: p.current_stock,
+    reorderPoint: p.reorder_point,
+    needsReorder: p.needs_reorder,
+    preferredVendor: p.preferred_vendor,
+    leadTimeDays: p.lead_time_days,
+    active: p.is_active,
+    usages: (p.usages ?? []).map((u) => ({ serviceTaskId: u.service_task_id, quantityPerService: u.quantity_per_service })),
+  };
+}
+
+export function toMeterReading(r: RawMeterReading): MeterReading {
+  return {
+    id: r.id,
+    value: numOrNull(r.value),
+    readOn: r.read_on,
+    source: r.source,
+    recordedBy: r.recorded_by,
+    voidsReadingId: r.voids_reading_id,
+    voidReason: r.void_reason,
+    createdAt: r.created_at,
+  };
+}
+
+export function toFleetSummary(s: RawFleetSummary): FleetSummary {
+  return {
+    evaluatedOn: s.evaluated_on,
+    total: s.total,
+    compliant: s.compliant,
+    dueSoon: s.due_soon,
+    overdue: s.overdue,
+    inService: s.in_service,
+    down: s.down,
+    complianceRate: s.compliance_rate,
+    avgHealthScore: s.avg_health_score,
+    totalOdometer: s.total_odometer,
+    documents: s.documents,
+    expiringDocuments: {
+      windowDays: s.expiring_documents.window_days,
+      total: s.expiring_documents.total,
+      byKind: s.expiring_documents.by_kind ?? [],
+    },
+    thresholds: {
+      dueSoonKm: s.thresholds.due_soon_km,
+      dueSoonDays: s.thresholds.due_soon_days,
+      odometerStaleDays: s.thresholds.odometer_stale_days,
+      dashboardExpiryWindowDays: s.thresholds.dashboard_expiry_window_days,
+      badgeWarningDays: s.thresholds.badge_warning_days,
+      documentExpiryWarningDays: s.thresholds.document_expiry_warning_days,
+    },
+  };
 }

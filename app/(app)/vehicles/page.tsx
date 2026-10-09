@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Car, LayoutGrid, List, Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
@@ -19,15 +19,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFleet } from "@/lib/store";
-import { isOdometerStale } from "@/lib/pms";
+import { Pagination } from "@/components/ui/pagination";
+import { QueryError } from "@/components/ui/query-error";
+import { useAllVehicles, useVehiclePage } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import type { PmsStatus } from "@/types";
 
 type PmsFilter = PmsStatus | "all" | "stale";
 
 function VehiclesView() {
-  const { ready, health } = useFleet();
   const searchParams = useSearchParams();
 
   const [query, setQuery] = useState("");
@@ -36,32 +36,34 @@ function VehiclesView() {
   );
   const [department, setDepartment] = useState("all");
   const [layout, setLayout] = useState<"grid" | "table">("grid");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
+  // Filters, the PMS band, staleness and "least healthy first" are the API's.
+  const { data, error, refetch, isPlaceholderData } = useVehiclePage({
+    page,
+    per_page: pageSize,
+    search: query.trim() || undefined,
+    pms: pms === "all" ? undefined : pms,
+    department: department === "all" ? undefined : department,
+    sort: "health",
+  });
+  // Department options come from the fleet's own records (presentational).
+  const { vehicles: allVehicles } = useAllVehicles();
   const departments = useMemo(
-    () => [...new Set(health.map((entry) => entry.vehicle.department))].sort(),
-    [health]
+    () => [...new Set(allVehicles.map((vehicle) => vehicle.department).filter(Boolean))].sort(),
+    [allVehicles]
   );
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+  // A narrower filter starts again from the first page.
+  useEffect(() => setPage(1), [query, pms, department, pageSize]);
 
-    return health
-      .filter((entry) => {
-        if (pms === "stale" && !isOdometerStale(entry.vehicle)) return false;
-        if (pms !== "all" && pms !== "stale" && entry.status !== pms) return false;
-        if (department !== "all" && entry.vehicle.department !== department)
-          return false;
-        if (!q) return true;
-        const v = entry.vehicle;
-        return `${v.plateNumber} ${v.make} ${v.model} ${v.assignedTo} ${v.location}`
-          .toLowerCase()
-          .includes(q);
-      })
-      // Worst first — the list should open on the vehicles that need work.
-      .sort((a, b) => a.healthScore - b.healthScore);
-  }, [health, query, pms, department]);
+  const filtered = data?.data ?? [];
+  const total = data?.meta.total ?? 0;
 
-  if (!ready) {
+  if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
+
+  if (!data) {
     return (
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, index) => (
@@ -143,7 +145,7 @@ function VehiclesView() {
       </div>
 
       <p className="mb-4 text-xs text-subtle-foreground">
-        Showing {filtered.length} of {health.length} vehicles, least healthy first.
+        {total} {total === 1 ? "vehicle" : "vehicles"}{allVehicles.length ? ` of ${allVehicles.length}` : ""}, least healthy first.
       </p>
 
       {filtered.length === 0 ? (
@@ -167,16 +169,27 @@ function VehiclesView() {
           />
         </div>
       ) : layout === "grid" ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((entry) => (
-            <VehicleCard key={entry.vehicle.id} entry={entry} />
+        <div className={cn("grid gap-4 sm:grid-cols-2 xl:grid-cols-3", isPlaceholderData && "opacity-70")}>
+          {filtered.map((vehicle) => (
+            <VehicleCard key={vehicle.id} vehicle={vehicle} />
           ))}
         </div>
       ) : (
-        <div className="card-raised">
-          <VehicleTable entries={filtered} />
+        <div className={cn("card-raised", isPlaceholderData && "opacity-70")}>
+          <VehicleTable vehicles={filtered} />
         </div>
       )}
+
+      <div className="mt-4">
+        <Pagination
+          page={page}
+          pageCount={Math.max(1, Math.ceil(total / pageSize))}
+          pageSize={pageSize}
+          totalItems={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </div>
     </>
   );
 }
