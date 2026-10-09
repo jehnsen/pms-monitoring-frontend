@@ -72,6 +72,9 @@ its endpoint, with the Phase 5 verification results.
   invalidated (`AFFECTS` groups). A caller that shows success must check
   `result.ok`. Every query key carries the user and the selected branch, so
   switching either refetches.
+- **Inventory** has its own seam: `lib/api/inventory.ts` (raw resources and
+  mappers) and `lib/inventory.ts` (hooks, actions); its query-key roots live in
+  `lib/api/inventory-keys.ts` so a work-order write can refresh them.
 - **`lib/mappers.ts`** — the seam between API resources and `types/index.ts`:
   snake_case → camelCase, centavos → pesos (**display only**), and the defaults
   components rely on (`""`, `[]`) for nullable fields. A new field on a domain
@@ -128,6 +131,24 @@ its endpoint, with the Phase 5 verification results.
   with `confirm_warning` — show the warning, ask, resend), then create → send →
   schedule per chosen job. Check-out lists `/shop/ready-for-collection` and
   releases all-or-none.
+- **The stock room** (`/shop/inventory/*`, staff only; `inventory:view` to read,
+  `inventory:manage` to change): Items, Stock on hand, Item movements, Receive PO,
+  Stock count, Transfers, Reorder. Data is `lib/inventory.ts` (hooks and
+  `useInventoryActions()`, keyed like `lib/store.ts`) over `lib/api/inventory.ts`
+  (the raw resources and their mappers; types in `types/inventory.ts`). It renders
+  the API's figures only: on hand, average cost, value, "low" / "negative", a
+  purchase order's derived status and `can_*` flags, a count's variances, the
+  Reorder suggestion. Stock only ever changes through a document (a receipt,
+  a job, a count, a transfer) or an opening balance; there is no "edit quantity".
+  A refused move (409 `conflict`, `details.reason = insufficient_stock`) shows in
+  the dialog that made it.
+- **Parts source on work-order lines** (`lib/parts-source.ts`): new lines choose
+  Shop stock (names an inventory item, priced at the branch's price by the API
+  unless typed over), Bought for this job, or Customer supplied (no part charge:
+  the rate is disabled and 0). `own_stock` / `supplier_provided` still display on
+  existing lines. The new-work-order dialog's estimate stays a labelled preview;
+  staff see a job's `stock` cost and margin on its page (the API sends it to
+  staff only).
 - **Documents** upload as multipart to the API (10 MB); a document on no vehicle
   is filed against an account (the portal user's own, or one staff pick).
   Downloads open a short-lived signed URL.

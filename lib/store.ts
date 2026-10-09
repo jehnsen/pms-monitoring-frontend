@@ -29,6 +29,7 @@ import type {
 import { api, apiAll, apiBlob, apiData, apiPage, newIdempotencyKey, saveBlob, type Page } from "@/lib/api/client";
 import { describeApiError, isApiError } from "@/lib/api/errors";
 import { useSelectedBranch } from "@/lib/api/branch";
+import { INVENTORY_ROOTS } from "@/lib/api/inventory-keys";
 import { useSession } from "@/lib/auth";
 import { DEFAULT_TENANT_SETTINGS } from "@/lib/tenant";
 import {
@@ -116,9 +117,9 @@ import {
 
 /* ------------------------------------------------------------ query core */
 
-type Params = Record<string, string | number | boolean | null | undefined | (string | number)[]>;
+export type Params = Record<string, string | number | boolean | null | undefined | (string | number)[]>;
 
-function useApiQuery<T>(key: QueryKey, fn: () => Promise<T>, options: { enabled?: boolean; keepPrevious?: boolean } = {}) {
+export function useApiQuery<T>(key: QueryKey, fn: () => Promise<T>, options: { enabled?: boolean; keepPrevious?: boolean } = {}) {
   const branch = useSelectedBranch();
   const { session } = useSession();
   return useQuery({
@@ -505,7 +506,7 @@ export type ActionResult<T = undefined> =
   | { ok: true; data: T }
   | { ok: false; error: string; code?: string; reason?: string | null; fields?: Record<string, string[]> };
 
-async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
+export async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
   try {
     return { ok: true, data: await fn() };
   } catch (error) {
@@ -521,7 +522,8 @@ async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
 
 /** What a write can change, as query-key roots to refetch. */
 const AFFECTS = {
-  work: ["work-order", "work-orders", "work-orders-summary", "analytics", "shop", "requests", "alerts", "demand-forecast", "vehicle", "vehicles", "vehicle-health", "fleet-summary", "documents", "check-in"],
+  // Closing or cancelling a job moves the shop's stock (issues and returns), so the inventory refreshes too.
+  work: ["work-order", "work-orders", "work-orders-summary", "analytics", "shop", "requests", "alerts", "demand-forecast", "vehicle", "vehicles", "vehicle-health", "fleet-summary", "documents", "check-in", ...INVENTORY_ROOTS],
   fleet: ["vehicle", "vehicles", "vehicle-health", "vehicle-readings", "fleet-summary", "analytics", "alerts", "demand-forecast", "shop", "work-orders", "check-in"],
   documents: ["documents", "documents-summary", "alerts", "fleet-summary", "analytics", "vehicle", "vehicles"],
   alerts: ["alerts"],
@@ -537,6 +539,10 @@ const AFFECTS = {
 export interface NewWorkOrderLine {
   id?: string;
   serviceTaskId?: string | null;
+  /** The inventory item a shop-stock line issues. */
+  itemId?: string | null;
+  /** The rate shown is the item's price for the branch: leave it to the API to apply (it prices from its own branch). */
+  priceFromItem?: boolean;
   description: string;
   category?: TaskCategory | "other";
   quantity: number;
@@ -571,11 +577,14 @@ function lineToApi(line: NewWorkOrderLine) {
     description: line.description,
     ...(line.category ? { category: line.category } : {}),
     quantity: line.quantity,
-    unit_part_rate_cents: pesosToCents(line.unitPartRate),
+    // A part the customer brings is not charged, and a shop-stock price the advisor left alone comes from the API.
+    ...(line.partsSource === "shop_stock" && line.priceFromItem ? {} : { unit_part_rate_cents: pesosToCents(line.partsSource === "customer_supplied" ? 0 : line.unitPartRate) }),
     labour_hours: line.labourHours,
     labour_rate_cents: pesosToCents(line.labourRate),
     urgency: line.urgency,
     parts_source: line.partsSource,
+    // Only a shop-stock line names an item; the API refuses it on any other.
+    ...(line.partsSource === "shop_stock" && line.itemId ? { item_id: line.itemId } : {}),
   };
 }
 

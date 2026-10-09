@@ -37,12 +37,8 @@ import { DeniedAction } from "@/components/auth/denied-action";
 import { useTheme } from "@/components/theme-provider";
 import { cn, formatKm } from "@/lib/utils";
 import { hexToHslTriplet } from "@/lib/tenant";
+import { DEFAULT_SOURCE_CHOICES, PARTS_SOURCE_LABEL } from "@/lib/parts-source";
 import type { ApprovalSettings, PartsSource, TenantSettings } from "@/types";
-
-const PARTS_SOURCE_LABEL: Record<PartsSource, string> = {
-  own_stock: "Own stock",
-  supplier_provided: "Supplier provided",
-};
 
 /**
  * Approval bands. Staff with organization rights edit the organization's
@@ -154,13 +150,12 @@ function ApprovalThresholdsCard() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {(Object.entries(PARTS_SOURCE_LABEL) as [PartsSource, string][]).map(
-                ([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                )
-              )}
+              {/* A default cannot be shop stock: that source needs a particular item. */}
+              {DEFAULT_SOURCE_CHOICES.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {PARTS_SOURCE_LABEL[value]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

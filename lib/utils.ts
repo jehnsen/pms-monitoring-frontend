@@ -16,6 +16,32 @@ export function formatCurrency(value: number) {
   return peso.format(value);
 }
 
+const pesoExact = new Intl.NumberFormat("en-PH", {
+  style: "currency",
+  currency: "PHP",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+/** Pesos with centavos, for unit costs and stock values (the API's figure, shown whole). */
+export function formatPesos(value: number) {
+  return pesoExact.format(value);
+}
+
+const manilaTime = new Intl.DateTimeFormat("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" });
+
+/** The Manila wall-clock time of a timestamp (the API sends UTC; business time is Asia/Manila). */
+export function formatManilaTime(iso: string) {
+  return manilaTime.format(new Date(iso));
+}
+
+const quantity = new Intl.NumberFormat("en-PH", { maximumFractionDigits: 3 });
+
+/** A stock quantity: up to three decimals, none trailing. */
+export function formatQuantity(value: number) {
+  return quantity.format(value);
+}
+
 /** Compact form for axis ticks and tiles, e.g. ₱1.2M. */
 export function formatCurrencyCompact(value: number) {
   if (Math.abs(value) >= 1_000_000) return `₱${(value / 1_000_000).toFixed(1)}M`;

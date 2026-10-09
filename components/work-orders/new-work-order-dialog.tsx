@@ -25,6 +25,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SuccessDialog } from "@/components/ui/success-dialog";
+import { useItemOptions } from "@/lib/inventory";
+import { useSelectedBranch } from "@/lib/api/branch";
+import { PARTS_SOURCE_HINT, PARTS_SOURCE_LABEL, sourceChoices } from "@/lib/parts-source";
 import { CATEGORY_LABEL } from "@/lib/service-tasks";
 import {
   useAllVehicles,
@@ -36,19 +39,15 @@ import {
 } from "@/lib/store";
 import { computeTotals, recalcLine } from "@/lib/billing";
 import { useCan } from "@/lib/rbac";
+import { useSession } from "@/lib/auth";
 import { DeniedAction } from "@/components/auth/denied-action";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatQuantity } from "@/lib/utils";
 import type { LineUrgency, PartsSource, Priority, TaskCategory, WorkOrder, WorkOrderType } from "@/types";
 
 const URGENCY_LABEL: Record<LineUrgency, string> = {
   safety_critical: "Safety critical",
   recommended: "Recommended",
   optional: "Optional",
-};
-
-const PARTS_SOURCE_LABEL: Record<PartsSource, string> = {
-  own_stock: "Own stock",
-  supplier_provided: "Supplier provided",
 };
 
 const CATEGORY_OPTIONS: { value: TaskCategory | "other"; label: string }[] = [
@@ -60,8 +59,11 @@ const CATEGORY_OPTIONS: { value: TaskCategory | "other"; label: string }[] = [
 const IN_HOUSE = "__in_house__";
 
 let draftLineSeq = 0;
-/** @param labourRate the shop rate quoted by default, from the effective settings. */
-function blankDraftLine(labourRate: number): NewWorkOrderLine & { key: string } {
+/**
+ * @param labourRate the shop rate quoted by default, from the effective settings.
+ * @param partsSource the settings' default source for a new line.
+ */
+function blankDraftLine(labourRate: number, partsSource: PartsSource = "supplier_provided"): NewWorkOrderLine & { key: string } {
   draftLineSeq += 1;
   return {
     key: `draft-${draftLineSeq}`,
@@ -72,7 +74,7 @@ function blankDraftLine(labourRate: number): NewWorkOrderLine & { key: string } 
     labourHours: 0,
     labourRate,
     urgency: "recommended",
-    partsSource: "supplier_provided",
+    partsSource,
   };
 }
 
@@ -103,6 +105,16 @@ export function NewWorkOrderDialog({
   const { createWorkOrder, sendForApproval } = useFleetActions();
 
   const defaultLabourRate = settings?.defaultLabourRate ?? 0;
+  const defaultSource = settings?.defaultPartsSource ?? "supplier_provided";
+
+  // The shop's items, for lines issued from the branch store (staff only; the API refuses the rest).
+  const stockAccess = side === "staff" && can("inventory:view");
+  const { items: stockItems } = useItemOptions({ enabled: open && stockAccess });
+  const selectedBranch = useSelectedBranch();
+  const shelfItems = React.useMemo(() => stockItems.filter((item) => item.isStocked && item.isActive), [stockItems]);
+  // The branch the order will be raised in: the one picked in the switcher, else the first the user works in.
+  const { session } = useSession();
+  const orderBranch = selectedBranch && selectedBranch !== "all" ? selectedBranch : (session?.branches[0]?.id ?? null);
   const activeTasks = React.useMemo(() => serviceTasks.filter((task) => task.active), [serviceTasks]);
   const activeVendors = React.useMemo(() => vendors.filter((vendor) => vendor.active), [vendors]);
 
@@ -124,7 +136,7 @@ export function NewWorkOrderDialog({
   });
 
   const [correctiveLines, setCorrectiveLines] = React.useState<(NewWorkOrderLine & { key: string })[]>([
-    blankDraftLine(defaultLabourRate),
+    blankDraftLine(defaultLabourRate, defaultSource),
   ]);
 
   // Reopening with different props (e.g. from another vehicle) should not keep
@@ -139,8 +151,24 @@ export function NewWorkOrderDialog({
       taskId: taskId ?? (current.taskId || activeTasks[0]?.id || ""),
       type: taskId ? "preventive" : current.type,
     }));
-    setCorrectiveLines([blankDraftLine(defaultLabourRate)]);
-  }, [open, vehicleId, taskId, activeTasks, defaultLabourRate]);
+  }, [open, vehicleId, taskId, activeTasks]);
+
+  // A fresh draft starts with one blank line, once per opening: settings and
+  // catalogue queries that land later must not wipe what has been typed. A line
+  // still untouched just takes the defaults when they arrive.
+  const defaultsRef = React.useRef({ defaultLabourRate, defaultSource });
+  defaultsRef.current = { defaultLabourRate, defaultSource };
+  React.useEffect(() => {
+    if (!open) return;
+    setCorrectiveLines([blankDraftLine(defaultsRef.current.defaultLabourRate, defaultsRef.current.defaultSource)]);
+  }, [open, vehicleId, taskId]);
+  React.useEffect(() => {
+    setCorrectiveLines((current) =>
+      current.map((line) =>
+        line.description === "" && !line.itemId ? { ...line, labourRate: defaultLabourRate, partsSource: defaultSource } : line
+      )
+    );
+  }, [defaultLabourRate, defaultSource]);
 
   const task = activeTasks.find((t) => t.id === form.taskId);
   const isPreventive = form.type !== "corrective";
@@ -176,7 +204,9 @@ export function NewWorkOrderDialog({
 
   const title = isPreventive ? (task?.name ?? "") : form.title.trim();
   const correctiveLinesValid = isPreventive || correctiveLines.some((line) => line.description.trim().length > 0);
-  const canSubmit = Boolean(form.vehicleId && title && correctiveLinesValid) && !pending;
+  // A shop-stock line must say which item comes off the shelf.
+  const itemsChosen = isPreventive || correctiveLines.every((line) => line.description.trim().length === 0 || line.partsSource !== "shop_stock" || Boolean(line.itemId));
+  const canSubmit = Boolean(form.vehicleId && title && correctiveLinesValid && itemsChosen) && !pending;
 
   function patchLine(key: string, patch: Partial<NewWorkOrderLine>) {
     setCorrectiveLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)));
@@ -212,7 +242,7 @@ export function NewWorkOrderDialog({
     setPending(false);
     setOpen(false);
     setForm((current) => ({ ...current, title: "", notes: "" }));
-    setCorrectiveLines([blankDraftLine(defaultLabourRate)]);
+    setCorrectiveLines([blankDraftLine(defaultLabourRate, defaultSource)]);
     if (sent.ok) {
       setCreated(sent.data);
     } else {
@@ -335,7 +365,7 @@ export function NewWorkOrderDialog({
                       type="button"
                       variant="secondary"
                       size="sm"
-                      onClick={() => setCorrectiveLines((current) => [...current, blankDraftLine(defaultLabourRate)])}
+                      onClick={() => setCorrectiveLines((current) => [...current, blankDraftLine(defaultLabourRate, defaultSource)])}
                     >
                       <Plus />
                       Add line
@@ -392,16 +422,29 @@ export function NewWorkOrderDialog({
                             </SelectContent>
                           </Select>
 
-                          <Select value={line.partsSource} onValueChange={(value) => patchLine(line.key, { partsSource: value as PartsSource })}>
-                            <SelectTrigger aria-label="Parts source" className="text-xs">
+                          <Select
+                            value={line.partsSource}
+                            onValueChange={(value) => {
+                              const source = value as PartsSource;
+                              patchLine(line.key, {
+                                partsSource: source,
+                                // The customer's own part is not charged; the item only belongs to a shop-stock line.
+                                ...(source === "customer_supplied" ? { unitPartRate: 0, priceFromItem: false } : {}),
+                                ...(source !== "shop_stock" ? { itemId: null, priceFromItem: false } : {}),
+                              });
+                            }}
+                          >
+                            <SelectTrigger aria-label="Parts source" className="text-xs" title={PARTS_SOURCE_HINT[line.partsSource]}>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {(Object.entries(PARTS_SOURCE_LABEL) as [PartsSource, string][]).map(([value, label]) => (
-                                <SelectItem key={value} value={value}>
-                                  {label}
-                                </SelectItem>
-                              ))}
+                              {sourceChoices(line.partsSource)
+                                .filter((value) => value !== "shop_stock" || stockAccess)
+                                .map((value) => (
+                                  <SelectItem key={value} value={value} title={PARTS_SOURCE_HINT[value]}>
+                                    {PARTS_SOURCE_LABEL[value]}
+                                  </SelectItem>
+                                ))}
                             </SelectContent>
                           </Select>
 
@@ -411,8 +454,10 @@ export function NewWorkOrderDialog({
                               type="number"
                               min={0}
                               value={line.unitPartRate}
+                              disabled={line.partsSource === "customer_supplied"}
+                              title={line.partsSource === "customer_supplied" ? "The customer brings the part: it is not charged." : undefined}
                               className="tabular text-xs"
-                              onChange={(event) => patchLine(line.key, { unitPartRate: Math.max(0, Number(event.target.value) || 0) })}
+                              onChange={(event) => patchLine(line.key, { unitPartRate: Math.max(0, Number(event.target.value) || 0), priceFromItem: false })}
                             />
                             <Input
                               aria-label="Labour hours"
@@ -424,6 +469,50 @@ export function NewWorkOrderDialog({
                               onChange={(event) => patchLine(line.key, { labourHours: Math.max(0, Number(event.target.value) || 0) })}
                             />
                           </div>
+                        </div>
+
+                        <div className="grid grid-cols-[1fr_6rem] gap-2">
+                          {line.partsSource === "shop_stock" ? (
+                            <Select
+                              value={line.itemId ?? ""}
+                              onValueChange={(value) => {
+                                const item = shelfItems.find((candidate) => candidate.id === value);
+                                const here = item?.branches.find((branch) => branch.branchId === orderBranch);
+                                patchLine(line.key, {
+                                  itemId: value,
+                                  // The branch's price, as the API reports it; left to the API to apply unless typed over.
+                                  unitPartRate: here?.effectivePrice ?? item?.defaultPrice ?? 0,
+                                  priceFromItem: true,
+                                  description: line.description.trim() === "" && item ? item.name : line.description,
+                                });
+                              }}
+                            >
+                              <SelectTrigger aria-label="Inventory item" className="text-xs">
+                                <SelectValue placeholder="Pick the item from the shelf" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {shelfItems.map((item) => {
+                                  const here = item.branches.find((branch) => branch.branchId === orderBranch);
+                                  return (
+                                    <SelectItem key={item.id} value={item.id}>
+                                      {item.sku} — {item.name} ({formatQuantity(here?.onHand ?? 0)} {item.uom} on hand)
+                                    </SelectItem>
+                                  );
+                                })}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <p className="self-center text-2xs text-subtle-foreground">{PARTS_SOURCE_HINT[line.partsSource]}</p>
+                          )}
+                          <Input
+                            aria-label="Quantity"
+                            type="number"
+                            min={0}
+                            step={0.5}
+                            value={line.quantity}
+                            className="tabular text-xs"
+                            onChange={(event) => patchLine(line.key, { quantity: Math.max(0, Number(event.target.value) || 0) })}
+                          />
                         </div>
                       </div>
                     ))}

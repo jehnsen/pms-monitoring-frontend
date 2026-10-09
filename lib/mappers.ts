@@ -183,6 +183,10 @@ export interface RawWorkOrderLine {
   line_cost_cents: number;
   urgency: string;
   parts_source: string;
+  /** Staff only. */
+  item_id?: string | null;
+  item?: { id: string; sku: string; name: string; uom: string; item_type: string } | null;
+  stock_cost_cents?: number | null;
   approval_status: string;
   approved_by_name: string | null;
   approved_at: string | null;
@@ -239,6 +243,8 @@ export interface RawWorkOrder {
     sla_breached?: boolean;
     can_approve?: boolean;
   };
+  /** Staff only: null for a portal session, and for a job with no ledger-costed parts. */
+  stock?: { cost_cents: number; price_cents: number; margin_cents: number } | null;
   lines: RawWorkOrderLine[];
   task_ids: string[];
   parts: { id: string; part_number: string | null; name: string; quantity: string | number; unit_cost_cents: number }[];
@@ -605,6 +611,10 @@ export function toWorkOrderLine(l: RawWorkOrderLine): WorkOrderLine {
     lineCost: pesos(l.line_cost_cents),
     urgency: l.urgency as LineUrgency,
     partsSource: l.parts_source as PartsSource,
+    itemId: l.item_id ?? null,
+    itemName: l.item?.name ?? null,
+    itemSku: l.item?.sku ?? null,
+    stockCost: typeof l.stock_cost_cents === "number" ? pesos(l.stock_cost_cents) : null,
     approvalStatus: l.approval_status as LineApprovalStatus,
     approvedBy: l.approved_by_name,
     approvedAt: l.approved_at,
@@ -658,6 +668,7 @@ export function toWorkOrder(o: RawWorkOrder): WorkOrder {
       slaBreached: o.approval.sla_breached ?? false,
       canApprove: o.approval.can_approve ?? false,
     },
+    stock: o.stock ? { cost: pesos(o.stock.cost_cents), price: pesos(o.stock.price_cents), margin: pesos(o.stock.margin_cents) } : null,
     lines: (o.lines ?? []).map(toWorkOrderLine),
     taskIds: o.task_ids ?? [],
     parts: (o.parts ?? []).map(

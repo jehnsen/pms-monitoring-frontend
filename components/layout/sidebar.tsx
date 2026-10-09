@@ -34,7 +34,7 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             {section.items.map((item) => {
               const active =
                 pathname === item.href ||
-                (item.href !== "/shop" && pathname.startsWith(`${item.href}/`));
+                (item.href !== "/shop" && item.href !== "/shop/inventory" && pathname.startsWith(`${item.href}/`));
               const Icon = item.icon;
 
               return (

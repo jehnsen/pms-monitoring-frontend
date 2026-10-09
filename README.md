@@ -144,3 +144,18 @@ fixed order and never cycled; the reserved status palette (good / warning /
 critical) never used for a data series; a legend whenever there are two or more
 series; 2px surface gaps rather than borders between stacked segments; and a
 table view on every chart, so no value is reachable only by hovering.
+
+
+## credentials
+demo1234
+
+Email	Role	Account
+--------------------
+donmiguel@mekanikomor.ph	Fleet Manager	Actimed
+ops@mekanikomore.ph	      Operations Supervisor	Actimed
+tech@mekanikomore.ph	      Lead Technician	Actimed
+purchasing@mekanikomor.ph	Purchasing Officer (lands on /requests)	Actimed
+viewer@mekanikomore.ph	   Authorised Viewer	Actimed
+fleet@northwind.ph	      Fleet Manager	Northwind Logistics
+operations@sagrada.ph	   Operations Director	Sagrada Medical Transport
+yard@bayanicon.ph	         Yard Manager (sign-in is refused because the account is suspended)	Bayani Construction

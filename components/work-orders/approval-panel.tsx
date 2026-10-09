@@ -8,13 +8,10 @@ import { Textarea } from "@/components/ui/input";
 import { LineApprovalStatusBadge } from "@/components/status";
 import { useFleetActions } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
+import { PARTS_SOURCE_LABEL } from "@/lib/parts-source";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { WorkOrder } from "@/types";
 
-const PARTS_SOURCE_LABEL = {
-  own_stock: "Own stock",
-  supplier_provided: "Supplier provided",
-} as const;
 
 /**
  * Per-line approve/decline/defer — the actual decision-making UI. Approval
@@ -109,6 +106,7 @@ export function ApprovalPanel({ order }: { order: WorkOrder }) {
                       rather than after the invoice. */}
                   <p className="mt-0.5 text-2xs text-subtle-foreground">
                     {PARTS_SOURCE_LABEL[line.partsSource]}
+                    {line.itemName ? <> ({line.itemName})</> : null}
                     {line.quantity > 0 && line.unitPartRate > 0 ? (
                       <>
                         {" · "}

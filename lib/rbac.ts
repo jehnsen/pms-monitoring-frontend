@@ -41,7 +41,7 @@ export const ROLE_DESCRIPTION: Record<UserRole, string> = {
     "Works assigned jobs across all clients: records findings and parts, and closes jobs. Cannot approve spend.",
   branch_manager:
     "Runs the branches they are pinned to: everything the provider admin can do there except organization settings.",
-  cashier: "Front counter: registers customers. No access to jobs or spend.",
+  cashier: "Front counter: registers customers and looks up stock. No access to jobs or spend.",
   fleet_manager:
     "Full control of their own fleet: schedules, work orders, documents, and settings. Unlimited approval authority within that one client. Cannot view or add users — only the provider admin manages accounts.",
   operations:
@@ -83,6 +83,8 @@ export const ALL_CAPABILITIES: Capability[] = [
   "access:manage",
   "customer:manage",
   "organization:manage",
+  "inventory:view",
+  "inventory:manage",
 ];
 
 /** The API's labels (`Capability::label()`). */
@@ -100,6 +102,8 @@ export const CAPABILITY_LABEL: Record<Capability, string> = {
   "access:manage": "Manage user access",
   "customer:manage": "Manage customer accounts",
   "organization:manage": "Manage the organization",
+  "inventory:view": "View the shop inventory",
+  "inventory:manage": "Manage the shop inventory",
 };
 
 /**
@@ -133,7 +137,7 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "settings:manage",
     "customer:manage",
   ],
-  provider_technician: ["vehicle:update", "workorder:update", "workorder:complete", "document:upload"],
+  provider_technician: ["vehicle:update", "workorder:update", "workorder:complete", "document:upload", "inventory:view"],
   service_advisor: [
     "vehicle:update",
     "vehicle:manage",
@@ -141,8 +145,9 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "workorder:update",
     "document:upload",
     "customer:manage",
+    "inventory:view",
   ],
-  cashier: ["customer:manage"],
+  cashier: ["customer:manage", "inventory:view"],
   branch_manager: ALL_CAPABILITIES.filter((c) => c !== "organization:manage"),
   provider_admin: [...ALL_CAPABILITIES],
 };

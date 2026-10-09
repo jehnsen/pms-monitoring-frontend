@@ -38,7 +38,7 @@ import { DeniedAction } from "@/components/auth/denied-action";
 import { QueryError } from "@/components/ui/query-error";
 import { useDocumentPage, useFleetActions, useServiceTasks, useVehicle, useWorkOrder } from "@/lib/store";
 import { useCan } from "@/lib/rbac";
-import { formatCurrency, formatDate, formatKm, titleCase } from "@/lib/utils";
+import { formatCurrency, formatDate, formatKm, formatPesos, titleCase } from "@/lib/utils";
 import type { ApprovalAction, WorkOrderEvent, ApprovalLogEntry } from "@/types";
 
 type TimelineRow =
@@ -386,6 +386,24 @@ export default function WorkOrderDetailPage({
                   <dd className="tabular mt-0.5 font-medium text-critical">
                     {formatCurrency(order.approval.declinedValue)}
                   </dd>
+                </div>
+              </dl>
+            ) : null}
+
+            {/* What the parts cost the shop (stock moves, goods received) against what they were approved at: staff only, from the API. */}
+            {order.stock ? (
+              <dl className="mt-4 space-y-2 border-t border-border pt-3.5 text-xs" aria-label="Parts cost to the shop">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Parts cost to the shop</dt>
+                  <dd className="tabular font-medium">{formatPesos(order.stock.cost)}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Approved parts price</dt>
+                  <dd className="tabular font-medium">{formatPesos(order.stock.price)}</dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Margin on parts</dt>
+                  <dd className={`tabular font-medium ${order.stock.margin < 0 ? "text-critical" : "text-ok"}`}>{formatPesos(order.stock.margin)}</dd>
                 </div>
               </dl>
             ) : null}

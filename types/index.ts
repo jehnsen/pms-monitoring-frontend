@@ -43,7 +43,9 @@ export type Capability =
   | "settings:manage"
   | "access:manage"
   | "customer:manage"
-  | "organization:manage";
+  | "organization:manage"
+  | "inventory:view"
+  | "inventory:manage";
 
 /** A module the API gates screens behind. */
 export type ModuleKey = "repair_pms" | "detailing" | "equipment" | "cafe_pos";
@@ -376,8 +378,15 @@ export type Priority = "low" | "medium" | "high" | "critical";
 /** How much a line's absence would matter, worst-first. */
 export type LineUrgency = "safety_critical" | "recommended" | "optional";
 
-/** Whether the shop or the fleet's own stock supplies the part. */
-export type PartsSource = "own_stock" | "supplier_provided";
+/**
+ * Where a line's part comes from. `own_stock` and `supplier_provided` are
+ * Phase 3's values and still mean what they did (charged, no stock moves);
+ * the other three say what the shop's inventory does: `customer_supplied`
+ * (no stock move, no part charge), `shop_stock` (issued from the branch
+ * store, charged) and `purchased_for_job` (bought on a purchase order for
+ * this job, charged).
+ */
+export type PartsSource = "own_stock" | "supplier_provided" | "customer_supplied" | "shop_stock" | "purchased_for_job";
 
 export type LineApprovalStatus = "pending" | "approved" | "declined" | "deferred";
 
@@ -420,6 +429,12 @@ export interface WorkOrderLine {
   lineCost: number;
   urgency: LineUrgency;
   partsSource: PartsSource;
+  /** The inventory item a shop-stock line issues (staff only; null for a portal session). */
+  itemId: string | null;
+  itemName: string | null;
+  itemSku: string | null;
+  /** Pesos: what the line's stock moves (or goods received) cost the shop. Staff only; null until something has moved. */
+  stockCost: number | null;
   approvalStatus: LineApprovalStatus;
   approvedBy: string | null;
   approvedAt: string | null;
@@ -520,6 +535,8 @@ export interface WorkOrder {
   totals: WorkOrderTotals;
   approvedTotals: WorkOrderTotals;
   approval: WorkOrderApproval;
+  /** What the job's ledger-costed parts cost against what they were approved at (pesos; staff only). */
+  stock: { cost: number; price: number; margin: number } | null;
   lines: WorkOrderLine[];
   taskIds: string[];
   parts: PartLine[];

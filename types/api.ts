@@ -826,6 +826,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/goods-receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List goods receipts
+         * @description `inventory:view`. Newest first; `status` is `posted` or `voided`.
+         */
+        get: operations["goods-receipts.index"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/goods-receipts/{goodsReceipt}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a goods receipt */
+        get: operations["goods-receipts.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/goods-receipts/{goodsReceipt}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void a goods receipt
+         * @description `inventory:manage`, with a reason. The receipt stays on record, marked
+         *     void; every move it made is undone by a compensating `return` move, and
+         *     the purchase order's status follows. Under a branch that blocks
+         *     negative stock this is refused if the goods have already been used.
+         */
+        post: operations["goods-receipts.void"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -909,6 +969,78 @@ export interface paths {
          *     as `GET /me`. Rate-limited.
          */
         post: operations["auth.invitations.accept"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List items
+         * @description `inventory:view`. By SKU; active items unless `include_inactive`. Each
+         *     item carries, for every branch the caller may see, its reorder point,
+         *     bin, the price that applies there and what is on hand.
+         */
+        get: operations["items.index"];
+        put?: never;
+        /**
+         * Add an item
+         * @description `inventory:manage`. The SKU (and barcode) are unique in the organization.
+         *     A service fee is never stocked.
+         */
+        post: operations["items.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{item}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show an item */
+        get: operations["items.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update an item
+         * @description `inventory:manage`. Once stock has moved in an item its stock unit and
+         *     whether it is stocked are fixed. Items are never deleted: set
+         *     `is_active` to false.
+         */
+        patch: operations["items.update"];
+        trace?: never;
+    };
+    "/items/{item}/branch-settings/{branch}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set an item's settings for a branch
+         * @description `inventory:manage` in that branch. Reorder point and quantity (stock
+         *     units), the bin it is kept in, and a price that overrides the item's
+         *     for this branch. Send `null` to clear one.
+         */
+        put: operations["items.branch-settings"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1628,6 +1760,438 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/shop-purchase-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List shop purchase orders
+         * @description `inventory:view`. Newest first. `status` is `draft`, `cancelled`, or
+         *     one of the derived ones: `issued` (nothing in yet), `partially_received`,
+         *     `received`, or `open` (issued or partially received).
+         */
+        get: operations["shop-purchase-orders.index"];
+        put?: never;
+        /**
+         * Raise a purchase order
+         * @description `inventory:manage` in `branch_id`. A draft, numbered from the
+         *     organization's `shop_purchase_order` series (`SPO-…`) in this transaction. Lines are in
+         *     the purchase unit (quantity × unit cost, rounded once to a centavo by the
+         *     server): a stocked `item_id`, or a line bought for a job
+         *     (`work_order_line_id` of a line marked "purchased for job").
+         */
+        post: operations["shop-purchase-orders.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop-purchase-orders/{shopPurchaseOrder}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a purchase order */
+        get: operations["shop-purchase-orders.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit a draft
+         * @description `inventory:manage`. Only a draft; an issued order's lines never change.
+         */
+        patch: operations["shop-purchase-orders.update"];
+        trace?: never;
+    };
+    "/shop-purchase-orders/{shopPurchaseOrder}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a purchase order
+         * @description `inventory:manage`. Sends the draft to the vendor; its lines freeze.
+         */
+        post: operations["shop-purchase-orders.issue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop-purchase-orders/{shopPurchaseOrder}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a purchase order
+         * @description `inventory:manage`, with a reason, while nothing has been received
+         *     against it.
+         */
+        post: operations["shop-purchase-orders.cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/shop-purchase-orders/{shopPurchaseOrder}/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive goods
+         * @description `inventory:manage`. Takes in some or all of the outstanding quantity of
+         *     an issued order: one numbered goods receipt, and for each stocked line a
+         *     `receipt` move into the branch's store (the purchase unit converted to
+         *     the stock unit; the average cost moves with it). More than is
+         *     outstanding is refused. Partial receipts leave the order
+         *     `partially_received`.
+         */
+        post: operations["shop-purchase-orders.receive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock-locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List stock locations
+         * @description `inventory:view`. The locations of the branches the caller may see
+         *     (each branch has one store).
+         */
+        get: operations["stock-locations.index"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock/on-hand": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stock on hand
+         * @description `inventory:view`. Every item in every location of the selected branch
+         *     (or `branch_id`), by SKU: quantity, average cost, value (on hand ×
+         *     average, rounded once), the branch's reorder point and bin.
+         *     `summary` covers the whole filtered set: its value is summed exactly
+         *     and rounded once, so it can differ by a centavo from the rows added up.
+         */
+        get: operations["stock.on-hand"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock/moves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Item movements
+         * @description `inventory:view`. The stock ledger, newest first, cursor-paged. Filter
+         *     by item, location, type, source and Manila business dates (`from`,
+         *     `to`). Quantity is signed; `source_reference` is the receipt,
+         *     transfer, count or work order behind the move.
+         */
+        get: operations["stock.moves"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Low-stock alerts
+         * @description `inventory:view`. Derived on read from the balances and each branch's
+         *     reorder points; never stored. Worst first: out of stock (critical),
+         *     then at or under the reorder point (warning). An alert's id is
+         *     `stock:<item>:<location>`.
+         */
+        get: operations["stock.alerts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reorder
+         * @description `inventory:view`. For each active stocked item, per branch: on hand, on
+         *     order (issued purchase orders still to arrive), the reorder point and
+         *     quantity, and the fleet forecast's shortfall for the same SKU over
+         *     `horizon_weeks` (default 6; Phase 4's forecast, per active customer
+         *     account). From those: `reason` (`stockout`, `below_reorder_point`,
+         *     `forecast_shortfall`) and what to buy, in stock and in purchase units.
+         *     Only rows that need something, unless `all`. The forecast is the
+         *     fleet's, so it is counted once, against the first branch in scope.
+         */
+        get: operations["stock.reorder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock/opening": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record an opening balance
+         * @description `inventory:manage` in the location's branch. The first count of items
+         *     in a location, each at a stated cost (an `opening` move). Refused for
+         *     an item that already has stock history there: correct it with a stock
+         *     count instead.
+         */
+        post: operations["stock.opening"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List stock counts
+         * @description `inventory:view`. Newest first; `status` is `open`, `posted` or `cancelled`.
+         */
+        get: operations["stock-counts.index"];
+        put?: never;
+        /**
+         * Draw a count sheet
+         * @description `inventory:manage` in the location's branch. Lists the items the books
+         *     hold there (and any in `item_ids`), each with what the books say now.
+         *     Numbered from the `stock_count` series.
+         */
+        post: operations["stock-counts.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock-counts/{stockCount}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a count */
+        get: operations["stock-counts.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock-counts/{stockCount}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Enter counted quantities
+         * @description `inventory:manage`, while the count is open. A line may carry its own
+         *     reason; `counted_quantity: null` un-counts it.
+         */
+        put: operations["stock-counts.lines"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock-counts/{stockCount}/post": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post a count
+         * @description `inventory:manage`. Every counted line's variance against what the books
+         *     hold now becomes an `adjustment` move carrying a reason (the line's, else
+         *     the count's; a variance with neither is refused). Uncounted lines are
+         *     left alone.
+         */
+        post: operations["stock-counts.post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock-counts/{stockCount}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a count
+         * @description `inventory:manage`. Only an open sheet; nothing moves.
+         */
+        post: operations["stock-counts.cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock-transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List transfers
+         * @description `inventory:view`. Transfers into or out of the branches the caller may
+         *     see, newest first.
+         */
+        get: operations["stock-transfers.index"];
+        put?: never;
+        /**
+         * Transfer stock
+         * @description `inventory:manage` in the branch the goods leave. One numbered document:
+         *     a `transfer_out` at the source's average cost and a `transfer_in` of the
+         *     same quantity and cost at the destination, in one transaction. A source
+         *     that would go negative is refused if its branch blocks negative stock.
+         */
+        post: operations["stock-transfers.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock-transfers/{stockTransfer}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a transfer */
+        get: operations["stock-transfers.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock-transfers/{stockTransfer}/reverse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reverse a transfer
+         * @description `inventory:manage` in the branch the goods are now in. A new transfer,
+         *     the other way, naming this one. A transfer is reversed at most once, and
+         *     a reversal is not itself reversed (make a new transfer).
+         */
+        post: operations["stock-transfers.reverse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/technicians": {
         parameters: {
             query?: never;
@@ -2236,6 +2800,7 @@ export interface components {
             branch_code: string | null;
             is_vat_registered: boolean;
             prices_include_vat: boolean;
+            negative_stock_policy: string;
             timezone: string;
             brand_name: string | null;
             logo_url: string | null;
@@ -2433,6 +2998,15 @@ export interface components {
             uploaded_on: string;
             created_at: string;
         };
+        /** EnterStockCountRequest */
+        EnterStockCountRequest: {
+            lines: {
+                item_id: string;
+                /** @description null un-counts a line. */
+                counted_quantity: number | null;
+                reason?: string | null;
+            }[];
+        };
         /** FleetPartCollection */
         FleetPartCollection: components["schemas"]["FleetPartResource"][];
         /** FleetPartResource */
@@ -2501,6 +3075,30 @@ export interface components {
             /** Format: email */
             email: string;
         };
+        /** GoodsReceiptCollection */
+        GoodsReceiptCollection: components["schemas"]["GoodsReceiptResource"][];
+        /** GoodsReceiptResource */
+        GoodsReceiptResource: {
+            id: string;
+            reference: string;
+            branch_id: string;
+            location_id: string;
+            shop_purchase_order_id: string;
+            order_reference: string;
+            vendor_name: string;
+            status: string;
+            received_on: string;
+            supplier_ref: string | null;
+            notes: string;
+            total_cents: number;
+            received_by_name: string;
+            voided_at: string | null;
+            voided_by_name: string | null;
+            void_reason: string | null;
+            can_void: boolean;
+            lines: unknown[];
+            created_at: string;
+        };
         /** HealthResource */
         HealthResource: {
             status: string;
@@ -2538,6 +3136,51 @@ export interface components {
             revoked_at: string | null;
             created_at: string;
         };
+        /** ItemCollection */
+        ItemCollection: components["schemas"]["ItemResource"][];
+        /** ItemResource */
+        ItemResource: {
+            id: string;
+            sku: string;
+            barcode: string | null;
+            name: string;
+            item_type: string;
+            category: string;
+            uom: string;
+            purchase_uom: string | null;
+            purchase_uom_factor: string | null;
+            tax_class: string;
+            default_price_cents: number;
+            is_stocked: boolean;
+            is_active: boolean;
+            preferred_vendor_id: string | null;
+            preferred_vendor_name: string | null;
+            branches: {
+                branch_id: string;
+                location_id: string | null;
+                reorder_point: string | null;
+                reorder_qty: string | null;
+                bin: string | null;
+                price_override_cents: string | null;
+                /** @description What a line for this item is priced at in this branch. */
+                effective_price_cents: string | number;
+                on_hand: string | null;
+                avg_cost_cents: string | 0;
+                value_cents: number;
+            }[];
+            totals: {
+                on_hand: string | null;
+                value_cents: number;
+            };
+            created_at: string;
+            updated_at: string;
+        };
+        /**
+         * ItemType
+         * @description What an item is. A service fee is never stocked.
+         * @enum {string}
+         */
+        ItemType: "part" | "consumable" | "retail" | "ingredient" | "service_fee";
         /**
          * LineUrgency
          * @description A safety-critical line cannot be declined without a reason on record.
@@ -2620,6 +3263,19 @@ export interface components {
          * @enum {string}
          */
         Module: "repair_pms" | "detailing" | "equipment" | "pos" | "crm" | "procurement" | "accounting";
+        /**
+         * MoveType
+         * @description Why stock moved. The sign of a move's quantity says which way; each type says which signs it may carry. - opening      the first count of an item in a location (inbound, costed)  - receipt      goods received against a purchase order (inbound, costed)  - issue        parts issued to a work order (outbound)  - return       the reversal of an issue (inbound) or of a receipt (outbound)  - adjustment   a stock count's variance, either way  - transfer_out / transfer_in   the two halves of one transfer document  - consumption  used up inside the shop (outbound)
+         * @enum {string}
+         */
+        MoveType: "opening" | "receipt" | "issue" | "return" | "adjustment" | "transfer_out" | "transfer_in" | "consumption";
+        /** OpenStockCountRequest */
+        OpenStockCountRequest: {
+            location_id: string;
+            item_ids?: string[];
+            reason?: string | null;
+            notes?: string | null;
+        };
         /** OrganizationResource */
         OrganizationResource: {
             id: string;
@@ -2640,10 +3296,10 @@ export interface components {
         };
         /**
          * PartsSource
-         * @description Who supplies a line's part: the shop buys it in (and earns its markup), or it comes from the customer's own stock (no margin).
+         * @description Where a line's part comes from, per line (the hybrid model). Phase 3's two values keep their meaning and no stock moves for them:  - own_stock          the part is charged, and earns no markup ("the client's  *                       own stock", Shop::partsMargin);  - supplier_provided  the shop buys it in, charged, earning its markup.  Phase 6 adds three, which say what the inventory does:  - customer_supplied  the customer brings the part: no stock move, NO part charge;  - shop_stock         issued from the branch's inventory: a stock move out of                       the branch store, and the part is charged;  - purchased_for_job  bought on a shop purchase order for this job: the part is                       charged, its cost is the goods received, and it never                       goes through the shelf.
          * @enum {string}
          */
-        PartsSource: "own_stock" | "supplier_provided";
+        PartsSource: "own_stock" | "supplier_provided" | "customer_supplied" | "shop_stock" | "purchased_for_job";
         /** PurchaseOrderCollection */
         PurchaseOrderCollection: components["schemas"]["PurchaseOrderResource"][];
         /** PurchaseOrderResource */
@@ -2690,6 +3346,16 @@ export interface components {
             part_ids: string[];
             notes?: string;
         };
+        /** ReceiveGoodsRequest */
+        ReceiveGoodsRequest: {
+            supplier_ref?: string | null;
+            notes?: string | null;
+            lines: {
+                shop_purchase_order_line_id: string;
+                quantity: number;
+                unit_cost_cents?: number | null;
+            }[];
+        };
         /** RecordConsentRequest */
         RecordConsentRequest: {
             purpose: components["schemas"]["ConsentPurpose"];
@@ -2699,6 +3365,16 @@ export interface components {
             evidence?: string | null;
             /** Format: date-time */
             captured_at?: string | null;
+        };
+        /** RecordOpeningStockRequest */
+        RecordOpeningStockRequest: {
+            location_id: string;
+            reason?: string | null;
+            lines: {
+                item_id: string;
+                quantity: number;
+                unit_cost_cents: number;
+            }[];
         };
         /** RecordReadingRequest */
         RecordReadingRequest: {
@@ -2735,7 +3411,11 @@ export interface components {
             ops_approval_under_cents?: number | null;
             sla_hours?: number | null;
             variance_threshold_pct?: number | null;
-            default_parts_source?: components["schemas"]["PartsSource"] | null;
+            /**
+             * @description Where a line's part comes from, per line (the hybrid model). Phase 3's two values keep their meaning and no stock moves for them:  - own_stock          the part is charged, and earns no markup ("the client's  *                       own stock", Shop::partsMargin);  - supplier_provided  the shop buys it in, charged, earning its markup.  Phase 6 adds three, which say what the inventory does:  - customer_supplied  the customer brings the part: no stock move, NO part charge;  - shop_stock         issued from the branch's inventory: a stock move out of                       the branch store, and the part is charged;  - purchased_for_job  bought on a shop purchase order for this job: the part is                       charged, its cost is the goods received, and it never                       goes through the shelf.
+             * @enum {string|null}
+             */
+            default_parts_source?: "own_stock" | "supplier_provided" | "customer_supplied" | "purchased_for_job" | null;
             monthly_budget_cents?: number | null;
         };
         /**
@@ -2749,7 +3429,11 @@ export interface components {
             ops_approval_under_cents?: number;
             sla_hours?: number;
             variance_threshold_pct?: number;
-            default_parts_source?: components["schemas"]["PartsSource"];
+            /**
+             * @description Where a line's part comes from, per line (the hybrid model). Phase 3's two values keep their meaning and no stock moves for them:  - own_stock          the part is charged, and earns no markup ("the client's  *                       own stock", Shop::partsMargin);  - supplier_provided  the shop buys it in, charged, earning its markup.  Phase 6 adds three, which say what the inventory does:  - customer_supplied  the customer brings the part: no stock move, NO part charge;  - shop_stock         issued from the branch's inventory: a stock move out of                       the branch store, and the part is charged;  - purchased_for_job  bought on a shop purchase order for this job: the part is                       charged, its cost is the goods received, and it never                       goes through the shelf.
+             * @enum {string}
+             */
+            default_parts_source?: "own_stock" | "supplier_provided" | "customer_supplied" | "purchased_for_job";
             monthly_budget_cents?: number;
             /** @description 0 is a real rate (not VAT-registered), not a missing one. */
             vat_rate_pct?: number;
@@ -2781,6 +3465,11 @@ export interface components {
             brand_name?: string | null;
             /** @enum {string} */
             status?: "active" | "inactive";
+            /**
+             * @description What a stock move that would take a balance below zero does in this branch.
+             * @enum {string}
+             */
+            negative_stock_policy?: "allow_and_flag" | "block";
             /** Format: uri */
             logo_url?: string | null;
             brand_color?: string | null;
@@ -2829,7 +3518,11 @@ export interface components {
                 ops_approval_under_cents: number;
                 sla_hours: number;
                 variance_threshold_pct: number;
-                default_parts_source: components["schemas"]["PartsSource"];
+                /**
+                 * @description Where a line's part comes from, per line (the hybrid model). Phase 3's two values keep their meaning and no stock moves for them:  - own_stock          the part is charged, and earns no markup ("the client's  *                       own stock", Shop::partsMargin);  - supplier_provided  the shop buys it in, charged, earning its markup.  Phase 6 adds three, which say what the inventory does:  - customer_supplied  the customer brings the part: no stock move, NO part charge;  - shop_stock         issued from the branch's inventory: a stock move out of                       the branch store, and the part is charged;  - purchased_for_job  bought on a shop purchase order for this job: the part is                       charged, its cost is the goods received, and it never                       goes through the shelf.
+                 * @enum {string}
+                 */
+                default_parts_source: "own_stock" | "supplier_provided" | "customer_supplied" | "purchased_for_job";
                 monthly_budget_cents: number;
             };
             tags?: string[];
@@ -2864,6 +3557,29 @@ export interface components {
                 quantity_per_service: number;
             }[];
         };
+        /** SaveItemBranchSettingsRequest */
+        SaveItemBranchSettingsRequest: {
+            reorder_point?: number | null;
+            reorder_qty?: number | null;
+            bin?: string | null;
+            price_override_cents?: number | null;
+        };
+        /** SaveItemRequest */
+        SaveItemRequest: {
+            sku: string;
+            barcode?: string | null;
+            name: string;
+            item_type: components["schemas"]["ItemType"];
+            category?: string | null;
+            uom: string;
+            purchase_uom?: string | null;
+            purchase_uom_factor?: number;
+            tax_class?: components["schemas"]["TaxClass"];
+            default_price_cents?: number;
+            is_stocked?: boolean;
+            is_active?: boolean;
+            preferred_vendor_id?: string | null;
+        };
         /** SaveServiceTaskRequest */
         SaveServiceTaskRequest: {
             code: string;
@@ -2877,6 +3593,21 @@ export interface components {
             critical?: boolean;
             is_active?: boolean;
             position?: number;
+        };
+        /** SaveShopOrderRequest */
+        SaveShopOrderRequest: {
+            branch_id: string;
+            vendor_id: string;
+            notes?: string | null;
+            /** Format: date */
+            expected_on?: string | null;
+            lines: {
+                item_id?: string | null;
+                description?: string | null;
+                quantity: number;
+                unit_cost_cents: number;
+                work_order_line_id?: string | null;
+            }[];
         };
         /** SaveTechnicianRequest */
         SaveTechnicianRequest: {
@@ -2964,6 +3695,7 @@ export interface components {
                 labour_rate_cents?: number;
                 urgency?: components["schemas"]["LineUrgency"];
                 parts_source?: components["schemas"]["PartsSource"];
+                item_id?: string | null;
                 photos?: string[];
             }[];
         };
@@ -2988,6 +3720,158 @@ export interface components {
         SetModuleRequest: {
             enabled: boolean;
         };
+        /** ShopPurchaseOrderCollection */
+        ShopPurchaseOrderCollection: components["schemas"]["ShopPurchaseOrderResource"][];
+        /** ShopPurchaseOrderResource */
+        ShopPurchaseOrderResource: {
+            id: string;
+            reference: string;
+            branch_id: string;
+            vendor_id: string;
+            vendor_name: string;
+            status: string;
+            notes: string;
+            created_on: string;
+            expected_on: string | null;
+            created_by_name: string;
+            total_cents: number;
+            issued_at: string | null;
+            issued_by_name: string | null;
+            cancelled_at: string | null;
+            cancelled_by_name: string | null;
+            cancellation_reason: string | null;
+            can_edit: boolean;
+            can_issue: string;
+            can_receive: boolean;
+            can_cancel: boolean;
+            lines: unknown[];
+            receipts: unknown[];
+            history: unknown[];
+            created_at: string;
+            updated_at: string;
+        };
+        /** StockBalanceCollection */
+        StockBalanceCollection: components["schemas"]["StockBalanceResource"][];
+        /** StockBalanceResource */
+        StockBalanceResource: {
+            id: string;
+            item: {
+                id: string;
+                sku: string;
+                name: string;
+                uom: string;
+                item_type: string;
+            };
+            branch_id: string;
+            location_id: string;
+            location_name: string;
+            on_hand: string | null;
+            avg_cost_cents: number;
+            value_cents: number;
+            reorder_point: string | null;
+            reorder_qty: string | null;
+            bin: unknown;
+            is_low: string;
+            is_negative: boolean;
+            updated_at: string;
+        };
+        /** StockCountCollection */
+        StockCountCollection: components["schemas"]["StockCountResource"][];
+        /** StockCountResource */
+        StockCountResource: {
+            id: string;
+            reference: string;
+            branch_id: string;
+            location_id: string;
+            status: string;
+            reason: string | null;
+            notes: string;
+            created_on: string;
+            created_by_name: string;
+            posted_at: string | null;
+            posted_by_name: string | null;
+            cancelled_at: string | null;
+            cancelled_by_name: string | null;
+            can_edit: boolean;
+            summary: {
+                lines: number;
+                counted_lines: number;
+                variance_lines: number;
+                net_variance_value_cents: number;
+            };
+            lines: unknown[];
+            created_at: string;
+        };
+        /** StockLocationCollection */
+        StockLocationCollection: components["schemas"]["StockLocationResource"][];
+        /** StockLocationResource */
+        StockLocationResource: {
+            id: string;
+            branch_id: string;
+            kind: string;
+            name: string;
+            is_active: boolean;
+        };
+        /** StockMoveCollection */
+        StockMoveCollection: components["schemas"]["StockMoveResource"][];
+        /** StockMoveResource */
+        StockMoveResource: {
+            id: string;
+            item: {
+                id: string;
+                sku: string;
+                name: string;
+                uom: string;
+                item_type: string;
+            };
+            branch_id: string;
+            location_id: string;
+            move_type: string;
+            quantity: string | null;
+            unit_cost_cents: number;
+            value_cents: number;
+            source_type: string;
+            source_id: string | null;
+            source_reference: unknown;
+            source_document_id: unknown;
+            occurred_at: string;
+            actor_name: string;
+            reason: string | null;
+            negative_flag: boolean;
+        };
+        /**
+         * StockReasonRequest
+         * @description Cancelling a purchase order, voiding a goods receipt: the reason is required and kept.
+         */
+        StockReasonRequest: {
+            reason: string;
+        };
+        /**
+         * StockSource
+         * @description What produced a stock move.
+         * @enum {string}
+         */
+        StockSource: "manual" | "goods_receipt" | "work_order_line" | "stock_count" | "stock_transfer";
+        /** StockTransferCollection */
+        StockTransferCollection: components["schemas"]["StockTransferResource"][];
+        /** StockTransferResource */
+        StockTransferResource: {
+            id: string;
+            reference: string;
+            from_branch_id: string;
+            from_location_id: string;
+            to_branch_id: string;
+            to_location_id: string;
+            reverses_transfer_id: string | null;
+            reversed_by_transfer_id: string | null;
+            can_reverse: string;
+            notes: string;
+            transferred_on: string;
+            created_by_name: string;
+            total_value_cents: number;
+            lines: unknown[];
+            created_at: string;
+        };
         /** StoreInvitationRequest */
         StoreInvitationRequest: {
             /** Format: email */
@@ -2999,6 +3883,12 @@ export interface components {
             customer_account_id?: string | null;
             branch_ids?: string[];
         };
+        /**
+         * TaxClass
+         * @description How an item is taxed (carried for invoicing; Phase 3 billing applies one VAT rate to the order).
+         * @enum {string}
+         */
+        TaxClass: "vatable" | "vat_exempt" | "zero_rated";
         /** TechnicianCollection */
         TechnicianCollection: components["schemas"]["TechnicianResource"][];
         /** TechnicianResource */
@@ -3013,6 +3903,16 @@ export interface components {
             status: string;
             created_at: string;
             updated_at: string;
+        };
+        /** TransferStockRequest */
+        TransferStockRequest: {
+            from_location_id: string;
+            to_location_id: string;
+            notes?: string | null;
+            lines: {
+                item_id: string;
+                quantity: number;
+            }[];
         };
         /** TransferVehicleRequest */
         TransferVehicleRequest: {
@@ -3227,6 +4127,7 @@ export interface components {
                 labour_rate_cents?: number;
                 urgency?: components["schemas"]["LineUrgency"];
                 parts_source?: components["schemas"]["PartsSource"];
+                item_id?: string | null;
                 photos?: string[];
             }[];
         };
@@ -3295,6 +4196,12 @@ export interface components {
                  */
                 can_approve: string;
             };
+            /** @description What the job's ledger-costed parts cost the shop against what they were approved at (staff). */
+            stock: {
+                cost_cents: string;
+                price_cents: string;
+                margin_cents: string;
+            } | null;
             lines: unknown[];
             task_ids: unknown[];
             parts: unknown[];
@@ -5224,6 +6131,101 @@ export interface operations {
             403: components["responses"]["Error.forbidden"];
         };
     };
+    "goods-receipts.index": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                branch_id?: string;
+                vendor_id?: string;
+                shop_purchase_order_id?: string;
+                status?: "draft" | "issued" | "partially_received" | "received" | "open" | "cancelled" | "posted" | "voided";
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `GoodsReceiptResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["GoodsReceiptCollection"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "goods-receipts.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The goods receipt ID */
+                goodsReceipt: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `GoodsReceiptResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["GoodsReceiptResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "goods-receipts.void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The goods receipt ID */
+                goodsReceipt: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StockReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description `GoodsReceiptResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["GoodsReceiptResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
     health: {
         parameters: {
             query?: never;
@@ -5373,6 +6375,165 @@ export interface operations {
                     };
                 };
             };
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "items.index": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                q?: string;
+                item_type?: components["schemas"]["ItemType"];
+                category?: string;
+                is_stocked?: boolean;
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `ItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ItemCollection"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "items.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveItemRequest"];
+            };
+        };
+        responses: {
+            /** @description `ItemResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ItemResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "items.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item ID */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `ItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ItemResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "items.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item ID */
+                item: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveItemRequest"];
+            };
+        };
+        responses: {
+            /** @description `ItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ItemResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "items.branch-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The item ID */
+                item: string;
+                /** @description The branch ID */
+                branch: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SaveItemBranchSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description `ItemResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ItemResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
             422: components["responses"]["Error.validation"];
         };
     };
@@ -6614,6 +7775,731 @@ export interface operations {
             403: components["responses"]["Error.forbidden"];
             404: components["responses"]["Error.not_found"];
             422: components["responses"]["Error.validation"];
+        };
+    };
+    "shop-purchase-orders.index": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                branch_id?: string;
+                vendor_id?: string;
+                shop_purchase_order_id?: string;
+                status?: "draft" | "issued" | "partially_received" | "received" | "open" | "cancelled" | "posted" | "voided";
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `ShopPurchaseOrderResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ShopPurchaseOrderCollection"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "shop-purchase-orders.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveShopOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description `ShopPurchaseOrderResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ShopPurchaseOrderResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "shop-purchase-orders.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The shop purchase order ID */
+                shopPurchaseOrder: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `ShopPurchaseOrderResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ShopPurchaseOrderResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "shop-purchase-orders.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The shop purchase order ID */
+                shopPurchaseOrder: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveShopOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description `ShopPurchaseOrderResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ShopPurchaseOrderResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "shop-purchase-orders.issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The shop purchase order ID */
+                shopPurchaseOrder: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `ShopPurchaseOrderResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ShopPurchaseOrderResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "shop-purchase-orders.cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The shop purchase order ID */
+                shopPurchaseOrder: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StockReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description `ShopPurchaseOrderResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ShopPurchaseOrderResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "shop-purchase-orders.receive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The shop purchase order ID */
+                shopPurchaseOrder: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiveGoodsRequest"];
+            };
+        };
+        responses: {
+            /** @description `GoodsReceiptResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["GoodsReceiptResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock-locations.index": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `StockLocationResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockLocationCollection"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock.on-hand": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                branch_id?: string;
+                location_id?: string;
+                q?: string;
+                item_type?: components["schemas"]["ItemType"];
+                hide_zero?: boolean;
+                low?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `StockBalanceResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockBalanceCollection"];
+                        summary: {
+                            lines: number;
+                            value_cents: number;
+                            low: number;
+                            negative: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock.moves": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                branch_id?: string;
+                location_id?: string;
+                item_id?: string;
+                move_type?: components["schemas"]["MoveType"];
+                source_type?: components["schemas"]["StockSource"];
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `StockMoveResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockMoveCollection"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock.alerts": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                branch_id?: string;
+                location_id?: string;
+                q?: string;
+                item_type?: components["schemas"]["ItemType"];
+                hide_zero?: boolean;
+                low?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                        meta: {
+                            total: number;
+                            critical: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock.reorder": {
+        parameters: {
+            query?: {
+                branch_id?: string;
+                horizon_weeks?: number;
+                customer_account_id?: string;
+                all?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                        meta: {
+                            total: number;
+                            needing_order: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock.opening": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordOpeningStockRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock-counts.index": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                branch_id?: string;
+                vendor_id?: string;
+                shop_purchase_order_id?: string;
+                status?: "draft" | "issued" | "partially_received" | "received" | "open" | "cancelled" | "posted" | "voided";
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `StockCountResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockCountCollection"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock-counts.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenStockCountRequest"];
+            };
+        };
+        responses: {
+            /** @description `StockCountResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockCountResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock-counts.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stock count ID */
+                stockCount: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `StockCountResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockCountResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "stock-counts.lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stock count ID */
+                stockCount: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnterStockCountRequest"];
+            };
+        };
+        responses: {
+            /** @description `StockCountResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockCountResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock-counts.post": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stock count ID */
+                stockCount: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `StockCountResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockCountResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "stock-counts.cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stock count ID */
+                stockCount: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `StockCountResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockCountResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "stock-transfers.index": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                branch_id?: string;
+                vendor_id?: string;
+                shop_purchase_order_id?: string;
+                status?: "draft" | "issued" | "partially_received" | "received" | "open" | "cancelled" | "posted" | "voided";
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `StockTransferResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockTransferCollection"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock-transfers.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransferStockRequest"];
+            };
+        };
+        responses: {
+            /** @description `StockTransferResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockTransferResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "stock-transfers.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stock transfer ID */
+                stockTransfer: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `StockTransferResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockTransferResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "stock-transfers.reverse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The stock transfer ID */
+                stockTransfer: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `StockTransferResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["StockTransferResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
         };
     };
     "technicians.index": {
