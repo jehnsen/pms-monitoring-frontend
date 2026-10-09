@@ -30,6 +30,22 @@ export function formatPesos(value: number) {
 
 const manilaTime = new Intl.DateTimeFormat("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" });
 
+const manilaDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" });
+
+/**
+ * A business date (`YYYY-MM-DD`, Asia/Manila) `daysAgo` days before today.
+ * Only for a filter's starting value: every business date the API records is
+ * its own.
+ */
+export function manilaDateDaysAgo(daysAgo = 0) {
+  return manilaDate.format(new Date(Date.now() - daysAgo * 86_400_000));
+}
+
+/** The Manila business date (`YYYY-MM-DD`) of an API timestamp (sent in UTC). */
+export function manilaDateOf(iso: string) {
+  return manilaDate.format(new Date(iso));
+}
+
 /** The Manila wall-clock time of a timestamp (the API sends UTC; business time is Asia/Manila). */
 export function formatManilaTime(iso: string) {
   return manilaTime.format(new Date(iso));

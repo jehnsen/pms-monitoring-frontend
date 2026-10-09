@@ -265,17 +265,18 @@ test("check-in: walk-in, raise (service advisor); close, check-out (technician)"
   await expect(technician.getByRole("dialog")).toHaveCount(0);
   await expect(technician.getByText(/Ready for billing|Closed/).first()).toBeVisible();
 
-  // …and releases the vehicle at check-out (release is `workorder:complete`,
-  // which the advisor does not hold — their control is a denied one).
+  // …and hands the vehicle back at check-out (release is `workorder:complete`,
+  // which the advisor does not hold — their control is a denied one). Phase 7:
+  // handing back settles nothing; the job stays in the billing queue.
   await page.goto("/shop/check-in?tab=check-out");
   const advisorCard = page.locator("section", { has: page.getByRole("heading", { name: plate }) });
-  await expect(advisorCard.locator("[aria-disabled=true]", { has: page.getByRole("button", { name: "Mark collected" }) })).toBeVisible();
+  await expect(advisorCard.locator("[aria-disabled=true]", { has: page.getByRole("button", { name: "Hand back vehicle" }) })).toBeVisible();
 
   await technician.goto("/shop/check-in?tab=check-out");
   const card = technician.locator("section", { has: technician.getByRole("heading", { name: plate }) });
   await expect(card.getByText("All work closed. Ready to release.")).toBeVisible();
-  await card.getByRole("button", { name: "Mark collected" }).click();
-  await expect(technician.getByText(/released and stamped/)).toBeVisible();
+  await card.getByRole("button", { name: "Hand back vehicle" }).click();
+  await expect(technician.getByText(/handed back and stamped/)).toBeVisible();
   done();
 });
 

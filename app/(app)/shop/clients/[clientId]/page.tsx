@@ -11,6 +11,8 @@ import { VehicleTable } from "@/components/vehicles/vehicle-table";
 import { WorkOrderTable } from "@/components/work-orders/work-order-table";
 import { ClientFormDialog } from "@/components/shop/client-form-dialog";
 import { QueryError } from "@/components/ui/query-error";
+import { BalancePanel } from "@/components/billing/balance-panel";
+import { useCan } from "@/lib/rbac";
 import { useShopClient } from "@/lib/store";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -19,8 +21,9 @@ import { formatCurrency, formatDate } from "@/lib/utils";
  * history, terms, and the approval bands it actually runs on — the sparse
  * overrides folded over the provider's defaults by the API.
  */
-export default function ShopClientDetailPage({ params }: { params: { clientId: string } }) {
+export default function ShopClientDetailPage({ params, searchParams }: { params: { clientId: string }; searchParams?: { tab?: string } }) {
   const { data, error, refetch } = useShopClient(params.clientId);
+  const { can } = useCan();
 
   if (error) return <QueryError error={error} onRetry={() => void refetch()} />;
 
@@ -88,13 +91,13 @@ export default function ShopClientDetailPage({ params }: { params: { clientId: s
         <StatTile
           label="Spend this month"
           value={formatCurrency(rollup.spendThisPeriod)}
-          hint={`${formatCurrency(rollup.outstanding)} uncollected`}
+          hint={`${formatCurrency(rollup.outstanding)} finished, not yet paid`}
           icon={Wallet}
           tone="brand"
         />
       </div>
 
-      <Tabs defaultValue="vehicles" className="mt-6">
+      <Tabs defaultValue={searchParams?.tab === "balance" && can("billing:view") ? "balance" : "vehicles"} className="mt-6">
         <TabsList>
           <TabsTrigger value="vehicles">
             Vehicles
@@ -105,7 +108,14 @@ export default function ShopClientDetailPage({ params }: { params: { clientId: s
             <span className="tabular ml-1 rounded bg-surface-3 px-1.5 py-0.5 text-[10px]">{ownOrders.length}</span>
           </TabsTrigger>
           <TabsTrigger value="terms">Contract & bands</TabsTrigger>
+          {can("billing:view") ? <TabsTrigger value="balance">Balance</TabsTrigger> : null}
         </TabsList>
+
+        {can("billing:view") ? (
+          <TabsContent value="balance">
+            <BalancePanel accountId={client.id} accountName={client.name} staff />
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="vehicles">
           <section className="card-raised">

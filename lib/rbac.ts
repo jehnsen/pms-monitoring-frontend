@@ -85,6 +85,9 @@ export const ALL_CAPABILITIES: Capability[] = [
   "organization:manage",
   "inventory:view",
   "inventory:manage",
+  "billing:view",
+  "billing:manage",
+  "billing:void",
 ];
 
 /** The API's labels (`Capability::label()`). */
@@ -104,6 +107,9 @@ export const CAPABILITY_LABEL: Record<Capability, string> = {
   "organization:manage": "Manage the organization",
   "inventory:view": "View the shop inventory",
   "inventory:manage": "Manage the shop inventory",
+  "billing:view": "View invoices and payments",
+  "billing:manage": "Invoice and record payments",
+  "billing:void": "Void invoices and payments",
 };
 
 /**
@@ -112,9 +118,9 @@ export const CAPABILITY_LABEL: Record<Capability, string> = {
  * `/me`, is what the UI acts on.
  */
 export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
-  viewer: [],
+  viewer: ["billing:view"],
   technician: ["vehicle:update", "workorder:update", "workorder:complete", "document:upload"],
-  purchasing_officer: ["workorder:approve", "po:issue", "document:upload"],
+  purchasing_officer: ["workorder:approve", "po:issue", "document:upload", "billing:view"],
   operations: [
     "vehicle:update",
     "vehicle:manage",
@@ -136,6 +142,7 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "document:delete",
     "settings:manage",
     "customer:manage",
+    "billing:view",
   ],
   provider_technician: ["vehicle:update", "workorder:update", "workorder:complete", "document:upload", "inventory:view"],
   service_advisor: [
@@ -146,8 +153,10 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "document:upload",
     "customer:manage",
     "inventory:view",
+    "billing:view",
+    "billing:manage",
   ],
-  cashier: ["customer:manage", "inventory:view"],
+  cashier: ["customer:manage", "inventory:view", "billing:view", "billing:manage"],
   branch_manager: ALL_CAPABILITIES.filter((c) => c !== "organization:manage"),
   provider_admin: [...ALL_CAPABILITIES],
 };

@@ -260,6 +260,8 @@ export interface RawWorkOrder {
   }[];
   completed_on: string | null;
   collected_at: string | null;
+  released_at?: string | null;
+  invoice?: { id: string; number: string | null; status: string } | null;
   created_at: string;
   vehicle?: RawVehicleRef | null;
   customer_name?: string | null;
@@ -647,6 +649,8 @@ export function toWorkOrder(o: RawWorkOrder): WorkOrder {
     scheduledTime: o.scheduled_time,
     completedOn: o.completed_on,
     collectedAt: o.collected_at,
+    releasedAt: o.released_at ?? null,
+    invoice: o.invoice ?? null,
     odometerAtIntake: numOrNull(o.odometer_at_intake),
     odometerAtService: numOrNull(o.odometer_at_service),
     findings: o.findings ?? "",

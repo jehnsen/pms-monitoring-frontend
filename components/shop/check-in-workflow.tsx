@@ -82,6 +82,8 @@ interface Outcome {
   booked: number;
   waiting: number;
   failures: string[];
+  /** Said by the API but not a failure: an account over its credit limit still gets the work. */
+  notes: string[];
 }
 
 function CheckInPanel() {
@@ -246,7 +248,7 @@ function CheckInPanel() {
     }
 
     const today = formatISO(new Date(), { representation: "date" });
-    const outcome: Outcome = { plate: vehicle.plateNumber, booked: 0, waiting: 0, failures: [] };
+    const outcome: Outcome = { plate: vehicle.plateNumber, booked: 0, waiting: 0, failures: [], notes: [] };
 
     for (const item of chosen) {
       // Draft → send (numbered, auto-approved inside the client's band) →
@@ -267,6 +269,10 @@ function CheckInPanel() {
       if (!created.ok) {
         outcome.failures.push(`${item.task.name}: ${created.error}`);
         continue;
+      }
+      // Over the credit limit: the work stands; say so with the rest of the outcome.
+      if (created.data.warnings.length > 0 && !outcome.notes.includes(created.data.warnings[0].message)) {
+        outcome.notes.push(created.data.warnings[0].message);
       }
       const sent = await sendForApproval(created.data.id);
       if (!sent.ok) {
@@ -313,6 +319,13 @@ function CheckInPanel() {
           {done.booked > 0 ? ` — ${done.booked} auto-approved and booked into the bay` : ""}
           {done.waiting > 0 ? `${done.booked > 0 ? ";" : " —"} ${done.waiting} waiting on the client's approval, to be booked once approved` : ""}.
         </p>
+        {done.notes.length > 0 ? (
+          <ul className="mx-auto mt-3 max-w-md space-y-1 rounded-lg border border-warning/35 bg-warning/10 px-3 py-2 text-left text-xs" role="status">
+            {done.notes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        ) : null}
         {done.failures.length > 0 ? (
           <ul className="mx-auto mt-3 max-w-md space-y-1 text-left text-xs text-critical" role="alert">
             {done.failures.map((failure) => (
@@ -829,7 +842,7 @@ function WalkInForm({ identifier, onRegistered }: { identifier: string; onRegist
 /* ----------------------------------------------------------------- check-out */
 
 function CheckOutPanel() {
-  // Closed and not yet collected — the API's list.
+  // Closed and the vehicle still here — the API's list. Handing it back settles nothing: payment does (Billing).
   const { data: ready, error, refetch } = useReadyForCollection();
   const [released, setReleased] = React.useState<number | null>(null);
 
@@ -854,7 +867,7 @@ function CheckOutPanel() {
           <EmptyState
             icon={PackageCheck}
             title="Nothing waiting to be collected"
-            description="Every finished job has already been released to its client."
+            description="Every finished job's vehicle has been handed back to its client."
           />
         </div>
       </div>
@@ -876,7 +889,7 @@ function Released({ count }: { count: number }) {
     <div className="flex items-center gap-3 rounded-lg border border-ok/30 bg-ok/[0.07] px-4 py-3">
       <CheckCircle2 className="size-4 shrink-0 text-ok" />
       <p className="text-xs text-muted-foreground">
-        {count} {count === 1 ? "job" : "jobs"} released and stamped with your name and the time.
+        {count} {count === 1 ? "job" : "jobs"} handed back and stamped with your name and the time. Billing follows from the billing queue.
       </p>
     </div>
   );
@@ -918,7 +931,7 @@ function CollectionCard({
         else setError(result.error);
       }}
     >
-      {pending ? "Releasing…" : "Mark collected"}
+      {pending ? "Releasing…" : "Hand back vehicle"}
     </Button>
   );
 

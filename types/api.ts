@@ -975,6 +975,133 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List invoices
+         * @description `billing:view`. Drafts first, then newest issued. `status`: `draft`,
+         *     `issued`, `partially_paid`, `paid`, `void`, or `open` (issued or
+         *     partially paid) / `overdue` (open and past its due date).
+         */
+        get: operations["invoices.index"];
+        put?: never;
+        /**
+         * Raise a draft invoice
+         * @description `billing:manage` (staff). Either `work_order_ids`: closed jobs of ONE
+         *     account and ONE branch, not yet invoiced (each approved line is billed
+         *     at its STORED approved cost: parts and labour as two lines, then each
+         *     job's flat fee); or `customer_account_id` + `lines` (+ `branch_id`) for
+         *     a typed-in invoice. Unnumbered until issued. A job already on another
+         *     invoice is 409.
+         */
+        post: operations["invoices.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invoices/{invoice}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show an invoice */
+        get: operations["invoices.show"];
+        put?: never;
+        post?: never;
+        /**
+         * Discard a draft
+         * @description `billing:manage`. Only a draft (it has no number); its jobs may be
+         *     invoiced again. An issued invoice is voided instead.
+         */
+        delete: operations["invoices.destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a draft
+         * @description `billing:manage`. `notes`; a typed-in invoice's `lines` (the whole
+         *     list); `discounts` (`line_id`, `discount_cents`) on any draft. Totals
+         *     are recomputed. An issued invoice never changes (409).
+         */
+        patch: operations["invoices.update"];
+        trace?: never;
+    };
+    "/invoices/{invoice}/issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue an invoice
+         * @description `billing:manage`; requires an `Idempotency-Key`. Numbers the draft from
+         *     the organization's `invoice` series (`INV-YYYY-NNNN`) in this
+         *     transaction, freezes who it is from and to and its totals (VAT added or
+         *     extracted per the branch), dates it (today, or an earlier `issue_date`
+         *     that keeps the series in date order) and sets the due date from the
+         *     account's payment terms. Queues `invoice.issued`.
+         */
+        post: operations["invoices.issue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invoices/{invoice}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void an invoice
+         * @description `billing:void`, with a reason. Only an issued invoice nothing has been
+         *     paid against (void its payments first). It keeps its number; its jobs
+         *     may be invoiced again. Queues `invoice.voided`.
+         */
+        post: operations["invoices.void"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invoices/{invoice}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Invoice PDF
+         * @description The printed invoice (`application/pdf`), behind the same policy as the
+         *     invoice. A draft prints marked as not issued; a void one, as void.
+         */
+        get: operations["invoices.pdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/items": {
         parameters: {
             query?: never;
@@ -1222,6 +1349,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List payments
+         * @description `billing:view`. Newest first; `status` `posted` or `void`.
+         */
+        get: operations["payments.index"];
+        put?: never;
+        /**
+         * Record a payment
+         * @description `billing:manage` (staff); requires an `Idempotency-Key` (a retry
+         *     replays the first answer, never a second payment). `method` cash,
+         *     gcash, maya, card, bank_transfer or check (all but cash need
+         *     `reference_no`); `amount_cents`; `received_on` (default today, never in
+         *     the future). `allocations` (`invoice_id`, `amount_cents`) spread it over
+         *     the account's open invoices; without them it goes to the oldest due
+         *     first. What is not allocated is the customer's credit. A fully paid
+         *     invoice stamps its jobs collected. Queues `payment.received`.
+         */
+        post: operations["payments.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/{payment}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a payment */
+        get: operations["payments.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/{payment}/allocations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply a payment's credit
+         * @description `billing:manage`. Allocates what is left of the payment to open
+         *     invoices of its account, as `allocations` says, or oldest due first.
+         */
+        post: operations["payments.allocate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/{payment}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Void a payment
+         * @description `billing:void`, with a reason. It keeps its number; every invoice it
+         *     paid is owed again (and a job it had settled is no longer collected).
+         */
+        post: operations["payments.void"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payments/{payment}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Acknowledgment receipt PDF
+         * @description The printed acknowledgment of the payment (`application/pdf`): what was
+         *     received and which invoices it went to. Not an invoice.
+         */
+        get: operations["payments.pdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -1420,6 +1658,133 @@ export interface paths {
          * @description draft or sent → cancelled, with a `reason`. Its number is not reused.
          */
         post: operations["purchase-orders.cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Billing queue
+         * @description `billing:view` (staff). Closed jobs not yet invoiced, oldest finished
+         *     first, in the caller's branches; `customer_account_id` narrows it.
+         */
+        get: operations["billing.queue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/receivables/aging": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Receivables aging
+         * @description `billing:view` (staff). Each account's open balances as of `as_of`
+         *     (default today), by days past due: current, 1–30, 31–60, 61–90, over
+         *     90; with the account's unallocated credit. A balance as of a past date
+         *     counts only what was issued, paid and voided by then.
+         */
+        get: operations["receivables.aging"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/receivables/revenue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Revenue: accrual and cash
+         * @description `billing:view` (staff). Over `from`..`to` (business dates): invoices
+         *     issued and still standing (net sales, VAT, total), and payments received
+         *     and still standing (by method).
+         */
+        get: operations["receivables.revenue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/customer-accounts/{customerAccount}/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Account balance
+         * @description `billing:view`. What the account owes on open invoices, what is
+         *     overdue, its unallocated credit, and where it stands against its credit
+         *     limit (`over_limit` warns; new work is never blocked).
+         */
+        get: operations["customer-accounts.balance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/customer-accounts/{customerAccount}/statement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Statement of account
+         * @description `billing:view`. Over `from`..`to` (default the last 30 days): the
+         *     balance brought forward, each invoice, payment and void with the running
+         *     balance, and the closing balance.
+         */
+        get: operations["customer-accounts.statement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/customer-accounts/{customerAccount}/statement/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Statement of account PDF */
+        get: operations["customer-accounts.statement-pdf"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2468,7 +2833,9 @@ export interface paths {
          *     when it is sent for approval. Lines carry quantities and rates; the
          *     server prices them (any cost or total sent is ignored). Staff raise it
          *     in a branch (`branch_id`, else X-Branch-Id, else their only branch); a
-         *     suspended account takes no new work (403 account_suspended).
+         *     suspended account takes no new work (403 account_suspended). An account
+         *     over its credit limit still gets the work: the response adds
+         *     `warnings: [{code: credit_limit_exceeded, …}]` and the override is logged.
          */
         post: operations["work-orders.store"];
         delete?: never;
@@ -2767,6 +3134,16 @@ export interface components {
         };
         /** AlertsResource */
         AlertsResource: unknown[];
+        /**
+         * AllocatePaymentRequest
+         * @description Applying a payment's credit: the invoices and amounts, or nothing (oldest due first).
+         */
+        AllocatePaymentRequest: {
+            allocations?: {
+                invoice_id: string;
+                amount_cents: number;
+            }[] | null;
+        };
         /** AutoScheduleRequest */
         AutoScheduleRequest: {
             customer_account_id?: string;
@@ -2807,6 +3184,10 @@ export interface components {
             brand_color: string | null;
             theme_tokens: string | null;
             status: string;
+            registered_name: string | null;
+            business_style: string | null;
+            invoice_header: string | null;
+            invoice_footer: string | null;
             created_at: string;
             updated_at: string;
         };
@@ -3136,6 +3517,73 @@ export interface components {
             revoked_at: string | null;
             created_at: string;
         };
+        /** InvoiceCollection */
+        InvoiceCollection: components["schemas"]["InvoiceResource"][];
+        /** InvoiceResource */
+        InvoiceResource: {
+            id: string;
+            number: string | null;
+            status: string;
+            /** @enum {string} */
+            status_label: "Draft" | "Issued" | "Partially paid" | "Paid" | "Void";
+            source: string;
+            branch_id: string | null;
+            customer_account_id: string;
+            customer_name: string;
+            issue_date: string | null;
+            due_date: string | null;
+            payment_terms_days: number;
+            days_overdue: number;
+            buyer: {
+                name: string;
+                tin: string | null;
+                address: string | null;
+            };
+            seller: {
+                name: string;
+                business_style: string | null;
+                tin: string | null;
+                branch_code: string | null;
+                address: string | null;
+                vat_registered: boolean;
+                header: string | null;
+                footer: string | null;
+            };
+            prices_include_vat: boolean;
+            vat_rate_pct: string;
+            /**
+             * @description The wording a non-VAT branch's invoice must carry; null for a VAT-registered branch.
+             * @enum {string|null}
+             */
+            non_vat_notice: "THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAX." | null;
+            totals: unknown[];
+            paid_cents: number;
+            balance_cents: number;
+            notes: string;
+            lines: unknown[];
+            work_orders: unknown[];
+            payments: unknown[];
+            created_by_name: string;
+            issued_at: string | null;
+            issued_by_name: string | null;
+            voided_at: string | null;
+            voided_by_name: string | null;
+            void_reason: string | null;
+            can_edit: string;
+            can_issue: string;
+            can_void: string;
+            can_record_payment: string;
+            created_at: string;
+            updated_at: string;
+        };
+        /**
+         * IssueInvoiceRequest
+         * @description Issuing: optionally an earlier business date (never in the future, never behind the series).
+         */
+        IssueInvoiceRequest: {
+            /** Format: date */
+            issue_date?: string | null;
+        };
         /** ItemCollection */
         ItemCollection: components["schemas"]["ItemResource"][];
         /** ItemResource */
@@ -3300,6 +3748,34 @@ export interface components {
          * @enum {string}
          */
         PartsSource: "own_stock" | "supplier_provided" | "customer_supplied" | "shop_stock" | "purchased_for_job";
+        /** PaymentCollection */
+        PaymentCollection: components["schemas"]["PaymentResource"][];
+        /** PaymentResource */
+        PaymentResource: {
+            id: string;
+            number: string;
+            status: string;
+            method: string;
+            /** @enum {string} */
+            method_label: "Cash" | "GCash" | "Maya" | "Card" | "Bank transfer" | "Check";
+            reference_no: string | null;
+            amount_cents: number;
+            allocated_cents: number;
+            unallocated_cents: number;
+            received_on: string;
+            received_by_name: string;
+            branch_id: string | null;
+            customer_account_id: string;
+            customer_name: string;
+            notes: string;
+            allocations: unknown[];
+            voided_at: string | null;
+            voided_by_name: string | null;
+            void_reason: string | null;
+            can_allocate: string;
+            can_void: string;
+            created_at: string;
+        };
         /** PurchaseOrderCollection */
         PurchaseOrderCollection: components["schemas"]["PurchaseOrderResource"][];
         /** PurchaseOrderResource */
@@ -3375,6 +3851,27 @@ export interface components {
                 quantity: number;
                 unit_cost_cents: number;
             }[];
+        };
+        /**
+         * RecordPaymentRequest
+         * @description A payment received: the account, the branch receiving it, the method (a
+         *     reference number unless cash), the amount in centavos, the business date it
+         *     came in, and optionally how to spread it (else oldest due first).
+         */
+        RecordPaymentRequest: {
+            customer_account_id: string;
+            branch_id?: string;
+            /** @enum {string} */
+            method: "cash" | "gcash" | "maya" | "card" | "bank_transfer" | "check";
+            reference_no?: string | null;
+            amount_cents: number;
+            /** Format: date */
+            received_on?: string | null;
+            notes?: string | null;
+            allocations?: {
+                invoice_id: string;
+                amount_cents: number;
+            }[] | null;
         };
         /** RecordReadingRequest */
         RecordReadingRequest: {
@@ -3470,6 +3967,14 @@ export interface components {
              * @enum {string}
              */
             negative_stock_policy?: "allow_and_flag" | "block";
+            /**
+             * @description What this branch's invoices print (Phase 7): its BIR-registered name and
+             *     business style, and header / footer text worded by its accountant.
+             */
+            registered_name?: string | null;
+            business_style?: string | null;
+            invoice_header?: string | null;
+            invoice_footer?: string | null;
             /** Format: uri */
             logo_url?: string | null;
             brand_color?: string | null;
@@ -3555,6 +4060,33 @@ export interface components {
             usages?: {
                 service_task_id: string;
                 quantity_per_service: number;
+            }[];
+        };
+        /**
+         * SaveInvoiceRequest
+         * @description Raising a draft (POST): `work_order_ids` (closed jobs of one account), or
+         *     a typed-in invoice (`customer_account_id`, `branch_id`, `lines`). Editing a
+         *     draft (PATCH): `notes`, a typed-in invoice's `lines`, and `discounts` on any.
+         *     Lines carry quantities and prices; totals are the server's.
+         */
+        SaveInvoiceRequest: {
+            work_order_ids?: string[];
+            customer_account_id?: string;
+            branch_id?: string;
+            notes?: string | null;
+            lines?: {
+                description: string;
+                quantity: number;
+                unit_price_cents: number;
+                discount_cents?: number;
+                /** @enum {string} */
+                tax_class?: "vatable" | "vat_exempt" | "zero_rated";
+                item_id?: string | null;
+                service_task_id?: string | null;
+            }[];
+            discounts?: {
+                line_id: string;
+                discount_cents: number;
             }[];
         };
         /** SaveItemBranchSettingsRequest */
@@ -4104,6 +4636,13 @@ export interface components {
             created_at: string;
             updated_at: string;
         };
+        /**
+         * VoidDocumentRequest
+         * @description Voiding an invoice or a payment: the reason is required and kept on the document.
+         */
+        VoidDocumentRequest: {
+            reason: string;
+        };
         /** VoidReadingRequest */
         VoidReadingRequest: {
             reason: string;
@@ -4208,7 +4747,15 @@ export interface components {
             history: unknown[];
             approval_log: unknown[];
             completed_on: string | null;
+            /** @description Settled: stamped when its invoice is paid (Phase 7); before invoicing, when it was collected. */
             collected_at: string | null;
+            /** @description The vehicle handed back at the counter (Phase 7). */
+            released_at: string | null;
+            invoice: {
+                id: string;
+                number: string;
+                status: string;
+            } | null;
             created_at: string;
             updated_at: string;
         };
@@ -6378,6 +6925,246 @@ export interface operations {
             422: components["responses"]["Error.validation"];
         };
     };
+    "invoices.index": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                status?: "draft" | "issued" | "partially_paid" | "paid" | "void" | "open" | "overdue";
+                customer_account_id?: string;
+                branch_id?: string;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `InvoiceResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["InvoiceCollection"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "invoices.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SaveInvoiceRequest"];
+            };
+        };
+        responses: {
+            /** @description `InvoiceResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["InvoiceResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "invoices.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The invoice ID */
+                invoice: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `InvoiceResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["InvoiceResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "invoices.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The invoice ID */
+                invoice: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "invoices.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The invoice ID */
+                invoice: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SaveInvoiceRequest"];
+            };
+        };
+        responses: {
+            /** @description `InvoiceResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["InvoiceResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "invoices.issue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The invoice ID */
+                invoice: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["IssueInvoiceRequest"];
+            };
+        };
+        responses: {
+            /** @description `InvoiceResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["InvoiceResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "invoices.void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The invoice ID */
+                invoice: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description `InvoiceResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["InvoiceResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "invoices.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The invoice ID */
+                invoice: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
     "items.index": {
         parameters: {
             query?: {
@@ -6846,6 +7633,190 @@ export interface operations {
             422: components["responses"]["Error.validation"];
         };
     };
+    "payments.index": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                status?: "posted" | "void";
+                method?: "cash" | "gcash" | "maya" | "card" | "bank_transfer" | "check";
+                customer_account_id?: string;
+                branch_id?: string;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `PaymentResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PaymentCollection"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "payments.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordPaymentRequest"];
+            };
+        };
+        responses: {
+            /** @description `PaymentResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PaymentResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "payments.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The payment ID */
+                payment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `PaymentResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PaymentResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "payments.allocate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The payment ID */
+                payment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AllocatePaymentRequest"];
+            };
+        };
+        responses: {
+            /** @description `PaymentResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PaymentResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "payments.void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The payment ID */
+                payment: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoidDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description `PaymentResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["PaymentResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "payments.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The payment ID */
+                payment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
     me: {
         parameters: {
             query?: never;
@@ -7152,6 +8123,231 @@ export interface operations {
                     "application/json": {
                         data: components["schemas"]["PurchaseOrderResource"];
                     };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "billing.queue": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                customer_account_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `WorkOrderResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["WorkOrderCollection"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "receivables.aging": {
+        parameters: {
+            query?: {
+                as_of?: string;
+                from?: string;
+                to?: string;
+                customer_account_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            as_of: string;
+                            accounts: unknown[][];
+                            totals: unknown[];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "receivables.revenue": {
+        parameters: {
+            query?: {
+                as_of?: string;
+                from?: string;
+                to?: string;
+                customer_account_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            from: string;
+                            to: string;
+                            accrual: {
+                                invoices: number;
+                                net_sales_cents: number;
+                                vat_cents: number;
+                                total_cents: number;
+                            };
+                            cash: {
+                                payments: number;
+                                received_cents: number;
+                                by_method: unknown[];
+                            };
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "customer-accounts.balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The customer account ID */
+                customerAccount: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            customer_account_id: string;
+                            customer_name: string;
+                            payment_terms_days: number;
+                            credit_limit_cents: number | null;
+                            outstanding_cents: number;
+                            overdue_cents: number;
+                            credit_cents: number;
+                            net_balance_cents: number;
+                            available_credit_cents: number | null;
+                            over_limit: boolean;
+                            open_invoices: unknown[];
+                            next_due_date: string | null;
+                            uninvoiced_jobs: number | null;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "customer-accounts.statement": {
+        parameters: {
+            query?: {
+                as_of?: string;
+                from?: string;
+                to?: string;
+                customer_account_id?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The customer account ID */
+                customerAccount: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            customer_account_id: string;
+                            customer_name: string;
+                            customer_tin: string | null;
+                            customer_address: string | null;
+                            from: string;
+                            to: string;
+                            opening_balance_cents: number;
+                            total_charges_cents: number;
+                            total_credits_cents: number;
+                            closing_balance_cents: number;
+                            entries: unknown[];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "customer-accounts.statement-pdf": {
+        parameters: {
+            query?: {
+                as_of?: string;
+                from?: string;
+                to?: string;
+                customer_account_id?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The customer account ID */
+                customerAccount: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
                 };
             };
             401: components["responses"]["Error.unauthenticated"];
@@ -9192,6 +10388,19 @@ export interface operations {
                 content: {
                     "application/json": {
                         data: components["schemas"]["WorkOrderResource"];
+                        warnings: [
+                            {
+                                /** @constant */
+                                code: "credit_limit_exceeded";
+                                message: string;
+                                details: {
+                                    credit_limit_cents: number | null;
+                                    outstanding_cents: number;
+                                    credit_cents: number;
+                                    available_credit_cents: number | null;
+                                };
+                            }
+                        ];
                     };
                 };
             };

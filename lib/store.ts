@@ -27,6 +27,7 @@ import type {
   WorkOrderType,
 } from "@/types";
 import { api, apiAll, apiBlob, apiData, apiPage, newIdempotencyKey, saveBlob, type Page } from "@/lib/api/client";
+import type { CreditWarning } from "@/types/billing";
 import { describeApiError, isApiError } from "@/lib/api/errors";
 import { useSelectedBranch } from "@/lib/api/branch";
 import { INVENTORY_ROOTS } from "@/lib/api/inventory-keys";
@@ -536,6 +537,11 @@ const AFFECTS = {
   organization: ["organization", "me"],
 } as const;
 
+/** The new order, with any warning the API raised alongside it. */
+function withWarnings(body: { data: RawWorkOrder; warnings?: CreditWarning[] }): WorkOrder & { warnings: CreditWarning[] } {
+  return { ...toWorkOrder(body.data), warnings: body.warnings ?? [] };
+}
+
 export interface NewWorkOrderLine {
   id?: string;
   serviceTaskId?: string | null;
@@ -678,10 +684,14 @@ export function useFleetActions() {
   return useMemo(
     () => ({
       /* ---------------------------------------------------- work orders */
+      /**
+       * Resolves to the new draft plus the API's `warnings` (an account over its
+       * credit limit still gets the work; the API logs the override).
+       */
       createWorkOrder: (draft: NewWorkOrderDraft) =>
         write(AFFECTS.work, async () =>
-          order(
-            await apiData<RawWorkOrder>("/work-orders", {
+          withWarnings(
+            await api<{ data: RawWorkOrder; warnings?: CreditWarning[] }>("/work-orders", {
               method: "POST",
               idempotencyKey: newIdempotencyKey(),
               body: {

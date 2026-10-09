@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   CalendarClock,
   CheckCircle2,
@@ -37,6 +38,7 @@ import { UploadDocumentDialog } from "@/components/documents/upload-document-dia
 import { DeniedAction } from "@/components/auth/denied-action";
 import { QueryError } from "@/components/ui/query-error";
 import { useDocumentPage, useFleetActions, useServiceTasks, useVehicle, useWorkOrder } from "@/lib/store";
+import { useBillingActions } from "@/lib/receivables";
 import { useCan } from "@/lib/rbac";
 import { formatCurrency, formatDate, formatKm, formatPesos, titleCase } from "@/lib/utils";
 import type { ApprovalAction, WorkOrderEvent, ApprovalLogEntry } from "@/types";
@@ -69,7 +71,9 @@ export default function WorkOrderDetailPage({
   const { data: attachedPage } = useDocumentPage({ work_order_id: params.orderId, per_page: 100 });
   const { tasksById } = useServiceTasks();
   const { startWorkOrder, sendForApproval } = useFleetActions();
-  const { can, reason, side } = useCan();
+  const { invoiceJobs } = useBillingActions();
+  const router = useRouter();
+  const { can, reason, side, canAsStaff } = useCan();
   const [sendError, setSendError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -121,6 +125,23 @@ export default function WorkOrderDetailPage({
           <span className="flex flex-wrap items-center gap-3">
             <span className="tabular">{order.displayReference}</span>
             <WorkOrderStatusBadge status={order.status} size="md" />
+            {/* Billing, as the API projects it: ready for billing → invoiced → completed (paid). */}
+            {order.lifecycleStage === "ready_for_billing" ? (
+              <Badge tone="warning" size="md">
+                <ReceiptText />
+                Ready for billing
+              </Badge>
+            ) : order.lifecycleStage === "invoiced" ? (
+              <Badge tone="brand" size="md">
+                <ReceiptText />
+                Invoiced
+              </Badge>
+            ) : order.status === "closed" && order.lifecycleStage === "completed" ? (
+              <Badge tone="ok" size="md">
+                <CheckCircle2 />
+                Paid
+              </Badge>
+            ) : null}
           </span>
         }
         description={order.title}
@@ -153,6 +174,39 @@ export default function WorkOrderDetailPage({
                 <Play />
                 Start job
               </Button>
+            ) : null}
+
+            {order.invoice ? (
+              <Button variant="secondary" asChild>
+                <Link href={`/invoices/${order.invoice.id}`}>
+                  <ReceiptText />
+                  {order.invoice.number ?? "Draft invoice"}
+                </Link>
+              </Button>
+            ) : order.lifecycleStage === "ready_for_billing" && side === "staff" ? (
+              canAsStaff("billing:manage") ? (
+                <Button
+                  variant="primary"
+                  disabled={busy}
+                  onClick={() =>
+                    void step(async () => {
+                      const result = await invoiceJobs([order.id]);
+                      if (result.ok) router.push(`/invoices/${result.data.id}`);
+                      return result;
+                    })
+                  }
+                >
+                  <ReceiptText />
+                  Invoice this job
+                </Button>
+              ) : (
+                <DeniedAction reason={reason("billing:manage")}>
+                  <Button variant="primary">
+                    <ReceiptText />
+                    Invoice this job
+                  </Button>
+                </DeniedAction>
+              )
             ) : null}
 
             {order.status === "in_progress" ? (

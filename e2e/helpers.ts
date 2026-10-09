@@ -8,6 +8,7 @@ export const ACCOUNTS = {
   providerAdmin: { email: "owner@mekanikomore.ph", name: "Mike Manabat", home: "/shop" },
   serviceAdvisor: { email: "advisor@mekanikomore.ph", name: "Divina Lacson", home: "/shop" },
   technician: { email: "bay@mekanikomore.ph", name: "Arnel Pascual", home: "/shop" },
+  cashier: { email: "cashier@mekanikomore.ph", name: "Paolo Reyes", home: "/shop" },
   fleetManager: { email: "donmiguel@mekanikomor.ph", name: "Don Miguel", home: "/dashboard" },
   viewer: { email: "viewer@mekanikomore.ph", name: "Camille Ortega", home: "/dashboard" },
   northwind: { email: "fleet@northwind.ph", name: "Ruben Salcedo", home: "/dashboard" },

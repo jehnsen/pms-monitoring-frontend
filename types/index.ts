@@ -45,7 +45,10 @@ export type Capability =
   | "customer:manage"
   | "organization:manage"
   | "inventory:view"
-  | "inventory:manage";
+  | "inventory:manage"
+  | "billing:view"
+  | "billing:manage"
+  | "billing:void";
 
 /** A module the API gates screens behind. */
 export type ModuleKey = "repair_pms" | "detailing" | "equipment" | "cafe_pos";
@@ -360,13 +363,18 @@ export type WorkOrderStatus =
   | "closed"
   | "cancelled";
 
-/** The brief's five-stage workflow, projected by the API over the nine statuses. */
+/**
+ * The brief's workflow, projected by the API over the nine statuses and the
+ * order's invoice: a closed job is ready for billing until an invoice is
+ * issued for it, invoiced until that invoice is paid, then completed.
+ */
 export type LifecycleStage =
   | "draft"
   | "pending_approval"
   | "approved"
   | "in_progress"
   | "ready_for_billing"
+  | "invoiced"
   | "completed"
   | "declined"
   | "cancelled";
@@ -523,7 +531,12 @@ export interface WorkOrder {
   scheduledFor: string | null;
   scheduledTime: string | null;
   completedOn: string | null;
+  /** Settled: stamped by the API when the job's invoice is paid (before invoicing, when it was collected). */
   collectedAt: string | null;
+  /** When the vehicle was handed back at the counter. */
+  releasedAt: string | null;
+  /** The invoice carrying the job, if any (a portal session never sees a draft). */
+  invoice: { id: string; number: string | null; status: string } | null;
   odometerAtIntake: number | null;
   odometerAtService: number | null;
   findings: string;

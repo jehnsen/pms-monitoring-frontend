@@ -119,6 +119,8 @@ export function NewWorkOrderDialog({
   const activeVendors = React.useMemo(() => vendors.filter((vendor) => vendor.active), [vendors]);
 
   const [created, setCreated] = React.useState<WorkOrder | null>(null);
+  // The API's credit-limit warning: the work was raised, the override logged.
+  const [creditWarning, setCreditWarning] = React.useState<string | null>(null);
   const [sendError, setSendError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
@@ -237,6 +239,7 @@ export function NewWorkOrderDialog({
       return;
     }
 
+    setCreditWarning(result.data.warnings[0]?.message ?? null);
     // Send the quotation: numbered now, auto-approved inside the band.
     const sent = await sendForApproval(result.data.id);
     setPending(false);
@@ -640,7 +643,7 @@ export function NewWorkOrderDialog({
                     : created.status === "approved"
                       ? ". It auto-approved and is ready to schedule."
                       : "."
-                }`
+                }${creditWarning ? ` Note: ${creditWarning}` : ""}`
             : ""
         }
         primaryAction={

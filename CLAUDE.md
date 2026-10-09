@@ -75,6 +75,12 @@ its endpoint, with the Phase 5 verification results.
 - **Inventory** has its own seam: `lib/api/inventory.ts` (raw resources and
   mappers) and `lib/inventory.ts` (hooks, actions); its query-key roots live in
   `lib/api/inventory-keys.ts` so a work-order write can refresh them.
+- **Billing** has its own seam too: `lib/api/billing.ts` (raw resources,
+  mappers, `BILLING_ROOTS`) and `lib/receivables.ts` (hooks and
+  `useBillingActions()`); types in `types/billing.ts`. (`lib/billing.ts` is
+  the quote PREVIEW, unrelated.) Issuing an invoice and recording a payment
+  require an `Idempotency-Key`: the dialog mints one when it opens and reuses
+  it on a retry, so a retried click replays instead of double-posting.
 - **`lib/mappers.ts`** — the seam between API resources and `types/index.ts`:
   snake_case → camelCase, centavos → pesos (**display only**), and the defaults
   components rely on (`""`, `[]`) for nullable fields. A new field on a domain
@@ -149,6 +155,19 @@ its endpoint, with the Phase 5 verification results.
   existing lines. The new-work-order dialog's estimate stays a labelled preview;
   staff see a job's `stock` cost and margin on its page (the API sends it to
   staff only).
+- **Order-to-cash** (Phase 7): `/shop/billing` (the billing queue: closed jobs
+  no invoice carries, oldest first; pick one account's jobs → a draft),
+  `/invoices` and `/invoices/[id]` (both sides: staff see their branches,
+  a portal user their own account's issued invoices, payments, balance and
+  statement), `/shop/receivables` (AR aging as of a date; revenue invoiced vs
+  received), and a **Balance** tab on `/shop/clients/[id]`. The invoice's VAT
+  breakdown, balance, `days_overdue` and `can_*` are the API's; PDFs (invoice,
+  acknowledgment receipt, statement) download through `apiBlob`. A closed
+  job's stage is `ready_for_billing` → `invoiced` → `completed` (paid): the
+  check-out's "Hand back vehicle" stamps `released_at` and settles nothing.
+  Raising work for an account over its credit limit succeeds with a
+  `warnings` entry, shown in the new-work-order dialog and check-in. No
+  screen claims BIR accreditation.
 - **Documents** upload as multipart to the API (10 MB); a document on no vehicle
   is filed against an account (the portal user's own, or one staff pick).
   Downloads open a short-lived signed URL.

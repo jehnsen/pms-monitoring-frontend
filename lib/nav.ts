@@ -1,5 +1,6 @@
 import {
   ArrowLeftRight,
+  Banknote,
   Boxes,
   Building2,
   CalendarRange,
@@ -7,12 +8,14 @@ import {
   ClipboardCheck,
   ClipboardList,
   DoorOpen,
+  FileText,
   FolderOpen,
   History,
   LayoutDashboard,
   LineChart,
   ListChecks,
   PackageCheck,
+  PiggyBank,
   Receipt,
   Settings,
   ShieldCheck,
@@ -116,6 +119,17 @@ export const CLIENT_NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Billing",
+    items: [
+      {
+        href: "/invoices",
+        label: "Invoices",
+        icon: FileText,
+        description: "What you owe, what you paid, your statement",
+      },
+    ],
+  },
+  {
     label: "Configure",
     items: [
       {
@@ -195,6 +209,29 @@ export const PROVIDER_NAV_SECTIONS: NavSection[] = [
         label: "Reports",
         icon: TrendingUp,
         description: "Revenue, utilisation, and mix",
+      },
+    ],
+  },
+  {
+    label: "Billing",
+    items: [
+      {
+        href: "/shop/billing",
+        label: "Billing queue",
+        icon: Banknote,
+        description: "Finished jobs waiting for an invoice",
+      },
+      {
+        href: "/invoices",
+        label: "Invoices",
+        icon: FileText,
+        description: "Issued, paid and void invoices; payments",
+      },
+      {
+        href: "/shop/receivables",
+        label: "Receivables",
+        icon: PiggyBank,
+        description: "AR aging and revenue, invoiced and received",
       },
     ],
   },
