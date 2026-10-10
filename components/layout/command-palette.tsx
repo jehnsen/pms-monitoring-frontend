@@ -49,7 +49,7 @@ export function CommandPalette({
       trailing: vehicle.pms ? <PmsStatusBadge status={vehicle.pms.status} /> : undefined,
     }));
 
-    const navItems = navSectionsFor(session?.side).flatMap((section) => section.items);
+    const navItems = navSectionsFor(session?.side, session?.modules).flatMap((section) => section.items);
     const pages = navItems.filter((item) =>
       q ? item.label.toLowerCase().includes(q) : true
     ).map<Result>((item) => ({
@@ -61,7 +61,7 @@ export function CommandPalette({
     }));
 
     return [...vehicles, ...pages];
-  }, [found, q, session?.side]);
+  }, [found, q, session?.side, session?.modules]);
 
   // Reset the highlight whenever the candidate list changes underneath it.
   React.useEffect(() => setCursor(0), [query]);

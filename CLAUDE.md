@@ -88,6 +88,17 @@ its endpoint, with the Phase 5 verification results.
   invoice, a payment or a stock move refreshes the books on screen. Balances,
   subtotals, running balances, the trial balance's totals and every close check
   are the API's; nothing is added up in the browser.
+- **Detailing** (Phase 9) has its own seam too: `lib/api/detailing.ts` (mappers,
+  `DETAILING_ROOT`), `lib/detailing.ts` (hooks and `useDetailingActions()`),
+  `lib/detailing-public.ts` (the public booking page and the wall screen: no
+  session, so none of the session-keyed hooks) and `lib/detailing-realtime.ts`
+  (`useBookingChanges`: Echo over Reverb when the API says realtime is enabled,
+  else a timer); types in `types/detailing.ts`. Every detailing query key starts
+  with `detailing`. Completing a job consumes stock and a checkout posts an
+  invoice and a payment, so those writes also refresh `INVENTORY_ROOTS` and
+  `BILLING_ROOTS`. Which starts are free (and why not), where a job sits day by
+  day, when it ends, what it comes to and what it is waiting for (`next`) are
+  all the API's; nothing is planned or totalled in the browser.
 - **`lib/mappers.ts`** — the seam between API resources and `types/index.ts`:
   snake_case → camelCase, centavos → pesos (**display only**), and the defaults
   components rely on (`""`, `[]`) for nullable fields. A new field on a domain
@@ -185,6 +196,48 @@ its endpoint, with the Phase 5 verification results.
   daily sales). Money and stock events post their own entries in the API; there
   is no way to make an entry by hand. A branch manager reads and sees the change
   and close controls dimmed (`DeniedAction`); everyone else gets the reason.
+- **Detailing** (Phase 9; `/shop/detailing/*`, staff only, behind the
+  `detailing` module): New booking (`/new`), Bookings (`/`), the job card with
+  its inspection (`/bookings/[id]`), Schedule by bay or by detailer
+  (`/schedule`), Shop monitor (`/monitor`), Packages & pricing (`/packages`)
+  and Detailing settings (`/settings`). The nav section carries `module:
+  "detailing"` and shows only where `/me` lists the module active
+  (`navSectionsFor(side, modules)`); a branch without it gets the API's
+  `module_disabled` notice. `detailing:view` reads; `detailing:book`,
+  `detailing:work`, `detailing:qc` and `detailing:manage` act, each gated with
+  `DeniedAction`. On the job card the order is book → inspect → job → sign-off
+  → bill: starting without the check-in inspection comes back as a 409
+  (`inspection_required`), and the page then asks for the override reason; an
+  implausible mileage comes back as a 422 with `confirm_warning`; the sign-off
+  is refused for a detailer named on the job; the counter checkout (invoice +
+  payment in one call) mints its `Idempotency-Key` when the dialog opens. The
+  damage map (`components/detailing/damage-map.tsx`) stores points in
+  thousandths of the outline, as the API does.
+- **Equipment monitoring** (Phase 10; `/shop/equipment/*`, staff only, behind
+  the `equipment` module): the board (`/shop/equipment`: every tool with its
+  service status, forecast, runtime and health, and the floor in numbers), one
+  tool (`/shop/equipment/[id]`: its triggers, reliability and cost, service
+  history and usage log; log a service, log usage, change status) and Service
+  profiles (`/shop/equipment/profiles`: which packages put how many hours on
+  which tools). Data is `lib/equipment.ts` over `lib/api/equipment.ts` (types in
+  `types/equipment.ts`; every key starts with `equipment`). **Nothing is
+  metered in the browser**: a tool's runtime, ratios, due date and health score
+  are derived by the API each time it is read, from completed detailing jobs and
+  the usage log, so there is no "edit meter" anywhere. The form's lists and the
+  values a category suggests come from `GET /equipment/options`.
+  `equipment:view` reads; `equipment:manage` writes (`DeniedAction` otherwise).
+- **Public booking** (`/book/[branchSlug]`, and
+  `/book/[branchSlug]/confirmation/[token]`): no sign-in. The page wears the
+  BRANCH's look: `BranchTheme` sets the branch's `theme_tokens` (the same
+  names as this app's design tokens, plus `font-heading` / `font-body`) as CSS
+  variables on its wrapper, so semantic classes re-theme inside it. Samahuzai's
+  tokens are obsidian and gold, Cormorant Garamond over DM Sans (loaded in
+  `app/book/layout.tsx`). When the branch has online booking off, the page
+  shows the API's notice instead of the form.
+- **The wall screen** (`/display/monitor`): no sign-in. The link made under
+  Detailing settings → Displays carries a display token in its URL fragment; the
+  page keeps it on the device, sends it as `X-Display-Token` (never a cookie),
+  and shows a "disconnected" message once the token is revoked.
 - **Documents** upload as multipart to the API (10 MB); a document on no vehicle
   is filed against an account (the portal user's own, or one staff pick).
   Downloads open a short-lived signed URL.

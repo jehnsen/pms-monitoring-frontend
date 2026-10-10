@@ -50,7 +50,14 @@ export type Capability =
   | "billing:manage"
   | "billing:void"
   | "ledger:view"
-  | "ledger:manage";
+  | "ledger:manage"
+  | "detailing:view"
+  | "detailing:book"
+  | "detailing:work"
+  | "detailing:qc"
+  | "detailing:manage"
+  | "equipment:view"
+  | "equipment:manage";
 
 /** A module the API gates screens behind. */
 export type ModuleKey = "repair_pms" | "detailing" | "equipment" | "cafe_pos";

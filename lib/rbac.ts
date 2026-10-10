@@ -90,6 +90,13 @@ export const ALL_CAPABILITIES: Capability[] = [
   "billing:void",
   "ledger:view",
   "ledger:manage",
+  "detailing:view",
+  "detailing:book",
+  "detailing:work",
+  "detailing:qc",
+  "detailing:manage",
+  "equipment:view",
+  "equipment:manage",
 ];
 
 /** The API's labels (`Capability::label()`). */
@@ -114,6 +121,13 @@ export const CAPABILITY_LABEL: Record<Capability, string> = {
   "billing:void": "Void invoices and payments",
   "ledger:view": "View the books",
   "ledger:manage": "Manage the books and close periods",
+  "detailing:view": "View detailing bookings",
+  "detailing:book": "Take and manage detailing bookings",
+  "detailing:work": "Work detailing job cards",
+  "detailing:qc": "Sign off detailing jobs",
+  "detailing:manage": "Manage detailing packages and settings",
+  "equipment:view": "View the equipment monitor",
+  "equipment:manage": "Manage equipment and its service history",
 };
 
 /**
@@ -148,7 +162,7 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "customer:manage",
     "billing:view",
   ],
-  provider_technician: ["vehicle:update", "workorder:update", "workorder:complete", "document:upload", "inventory:view"],
+  provider_technician: ["vehicle:update", "workorder:update", "workorder:complete", "document:upload", "inventory:view", "detailing:view", "detailing:work", "equipment:view"],
   service_advisor: [
     "vehicle:update",
     "vehicle:manage",
@@ -159,8 +173,13 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "inventory:view",
     "billing:view",
     "billing:manage",
+    "detailing:view",
+    "detailing:book",
+    "detailing:work",
+    "detailing:qc",
+    "equipment:view",
   ],
-  cashier: ["customer:manage", "inventory:view", "billing:view", "billing:manage"],
+  cashier: ["customer:manage", "inventory:view", "billing:view", "billing:manage", "detailing:view", "detailing:book", "equipment:view"],
   branch_manager: ALL_CAPABILITIES.filter((c) => c !== "organization:manage" && c !== "ledger:manage"),
   provider_admin: [...ALL_CAPABILITIES],
 };

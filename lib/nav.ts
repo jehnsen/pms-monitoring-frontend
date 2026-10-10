@@ -4,18 +4,23 @@ import {
   BookOpen,
   Boxes,
   Building2,
+  CalendarCheck,
+  CalendarPlus,
   CalendarRange,
   Car,
   ClipboardCheck,
   ClipboardList,
+  Cog,
   DoorOpen,
   FileText,
   FolderOpen,
+  Gauge,
   History,
   LayoutDashboard,
   LineChart,
   ListChecks,
   Lock,
+  MonitorPlay,
   PackageCheck,
   PiggyBank,
   Receipt,
@@ -25,6 +30,7 @@ import {
   SlidersHorizontal,
   ShieldCheck,
   ShoppingCart,
+  Sparkles,
   TrendingUp,
   Truck,
   UsersRound,
@@ -32,7 +38,7 @@ import {
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import type { UserRole, UserSide } from "@/types";
+import type { ModuleKey, UserRole, UserSide } from "@/types";
 
 export interface NavItem {
   href: string;
@@ -46,6 +52,8 @@ export interface NavItem {
 export interface NavSection {
   label: string;
   items: NavItem[];
+  /** Shown only where the session has this module active (`/me` → `modules.active`). */
+  module?: ModuleKey;
 }
 
 /**
@@ -218,6 +226,66 @@ export const PROVIDER_NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Detailing",
+    module: "detailing",
+    items: [
+      {
+        href: "/shop/detailing/new",
+        label: "New booking",
+        icon: CalendarPlus,
+        description: "Take a detailing booking at the counter",
+      },
+      {
+        href: "/shop/detailing",
+        label: "Bookings",
+        icon: CalendarCheck,
+        description: "Every detailing booking and its job card",
+      },
+      {
+        href: "/shop/detailing/schedule",
+        label: "Schedule",
+        icon: CalendarRange,
+        description: "The day by bay and by detailer",
+      },
+      {
+        href: "/shop/detailing/monitor",
+        label: "Shop monitor",
+        icon: MonitorPlay,
+        description: "Today's jobs, live, for the wall screen",
+      },
+      {
+        href: "/shop/detailing/packages",
+        label: "Packages & pricing",
+        icon: Sparkles,
+        description: "The menu, priced per vehicle size",
+      },
+      {
+        href: "/shop/detailing/settings",
+        label: "Detailing settings",
+        icon: SlidersHorizontal,
+        description: "Pool, closing time, online booking, displays",
+      },
+    ],
+  },
+  {
+    label: "Equipment",
+    module: "equipment",
+    items: [
+      {
+        href: "/shop/equipment",
+        label: "Equipment monitor",
+        icon: Gauge,
+        description: "Tool register, service status and health",
+      },
+      {
+        href: "/shop/equipment/profiles",
+        label: "Service profiles",
+        icon: Cog,
+        description: "Which packages put hours on which tools",
+      },
+    ],
+  },
+  {
     label: "Billing",
     items: [
       {
@@ -348,8 +416,10 @@ export const PROVIDER_NAV_SECTIONS: NavSection[] = [
 ];
 
 /** The nav for whichever side of the tenancy boundary the session sits on (`/me` → `side`). */
-export function navSectionsFor(side: UserSide | undefined): NavSection[] {
-  return side === "staff" ? PROVIDER_NAV_SECTIONS : CLIENT_NAV_SECTIONS;
+export function navSectionsFor(side: UserSide | undefined, modules?: readonly ModuleKey[]): NavSection[] {
+  const sections = side === "staff" ? PROVIDER_NAV_SECTIONS : CLIENT_NAV_SECTIONS;
+  // A module's screens are listed only where the API says the module is active for this session.
+  return sections.filter((section) => !section.module || (modules ?? []).includes(section.module));
 }
 
 /** Where a bare sign-in lands. The two sides have different home screens. */

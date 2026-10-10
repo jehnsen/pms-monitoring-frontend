@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ArrowUpRight, OctagonAlert, Wrench } from "lucide-react";
 import { homeHrefFor, navSectionsFor } from "@/lib/nav";
 import { useBranding, useFleetSummary, useRequests } from "@/lib/store";
+import { useSession } from "@/lib/auth";
 import { useCan } from "@/lib/rbac";
 import { Logo } from "@/components/layout/logo";
 import { cn } from "@/lib/utils";
@@ -21,7 +22,8 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const requestsForMe = useRequestsForMeCount();
   const { side } = useCan();
   // The two sides get different section lists, not one list with items hidden.
-  const sections = navSectionsFor(side);
+  const { session } = useSession();
+  const sections = navSectionsFor(side, session?.modules);
 
   return (
     <nav aria-label="Main navigation" className="flex flex-1 flex-col gap-6 px-4 py-6">
@@ -34,7 +36,9 @@ export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             {section.items.map((item) => {
               const active =
                 pathname === item.href ||
-                (item.href !== "/shop" && item.href !== "/shop/inventory" && pathname.startsWith(`${item.href}/`));
+                (item.href !== "/shop" && item.href !== "/shop/inventory" && item.href !== "/shop/detailing" && item.href !== "/shop/equipment" && pathname.startsWith(`${item.href}/`)) ||
+                // Bookings also owns its job cards.
+                (item.href === "/shop/detailing" && pathname.startsWith("/shop/detailing/bookings/"));
               const Icon = item.icon;
 
               return (
