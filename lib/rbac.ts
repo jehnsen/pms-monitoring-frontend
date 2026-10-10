@@ -88,6 +88,8 @@ export const ALL_CAPABILITIES: Capability[] = [
   "billing:view",
   "billing:manage",
   "billing:void",
+  "ledger:view",
+  "ledger:manage",
 ];
 
 /** The API's labels (`Capability::label()`). */
@@ -110,6 +112,8 @@ export const CAPABILITY_LABEL: Record<Capability, string> = {
   "billing:view": "View invoices and payments",
   "billing:manage": "Invoice and record payments",
   "billing:void": "Void invoices and payments",
+  "ledger:view": "View the books",
+  "ledger:manage": "Manage the books and close periods",
 };
 
 /**
@@ -157,7 +161,7 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "billing:manage",
   ],
   cashier: ["customer:manage", "inventory:view", "billing:view", "billing:manage"],
-  branch_manager: ALL_CAPABILITIES.filter((c) => c !== "organization:manage"),
+  branch_manager: ALL_CAPABILITIES.filter((c) => c !== "organization:manage" && c !== "ledger:manage"),
   provider_admin: [...ALL_CAPABILITIES],
 };
 

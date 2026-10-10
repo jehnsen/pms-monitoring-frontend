@@ -48,7 +48,9 @@ export type Capability =
   | "inventory:manage"
   | "billing:view"
   | "billing:manage"
-  | "billing:void";
+  | "billing:void"
+  | "ledger:view"
+  | "ledger:manage";
 
 /** A module the API gates screens behind. */
 export type ModuleKey = "repair_pms" | "detailing" | "equipment" | "cafe_pos";

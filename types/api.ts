@@ -4,6 +4,131 @@
  */
 
 export interface paths {
+    "/ledger/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Chart of accounts
+         * @description `ledger:view` (staff). Every account with its balance through `as_of`
+         *     (default today) over the caller's branches, and the posting rules that
+         *     point at it. The chart is installed on first use.
+         */
+        get: operations["ledger.accounts.index"];
+        put?: never;
+        /**
+         * Add an account
+         * @description `ledger:manage`. A new account takes no postings until a posting rule
+         *     is pointed at it. Its code is unique in the chart.
+         */
+        post: operations["ledger.accounts.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/accounts/{account}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit an account
+         * @description `ledger:manage`. Rename or describe it, or deactivate one no posting
+         *     rule uses. Once an account has been posted to its code, type and side
+         *     are fixed (409).
+         */
+        patch: operations["ledger.accounts.update"];
+        trace?: never;
+    };
+    "/ledger/posting-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Posting rules
+         * @description `ledger:view`. Each event or category the books post by, the account it
+         *     posts to and the account type it needs.
+         */
+        get: operations["ledger.rules.index"];
+        /**
+         * Edit posting rules
+         * @description `ledger:manage`. Re-point rules at other accounts of the right type.
+         *     It applies to postings from now on; entries already made are never
+         *     rewritten.
+         */
+        put: operations["ledger.rules.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ledger settings
+         * @description `ledger:view`. The accounting product the books are exported for
+         *     (`none`, `xero` or `quickbooks`) and the account mappings its import
+         *     needs.
+         */
+        get: operations["ledger.settings.show"];
+        /**
+         * Set the accounting product
+         * @description `ledger:manage`. `xero` and `quickbooks` switch on that product's
+         *     manual-journal import file next to the plain CSV.
+         */
+        put: operations["ledger.settings.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/export-mappings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Map accounts for export
+         * @description `ledger:manage`. Our account → the code (Xero) or name (QuickBooks
+         *     Online) the accountant's books use; an empty code and name removes the
+         *     mapping.
+         */
+        put: operations["ledger.mappings.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/alerts": {
         parameters: {
             query?: never;
@@ -1174,6 +1299,177 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ledger/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Journal
+         * @description `ledger:view`. Entries in the caller's branches, newest first, filtered
+         *     by date range, account, event, branch, source document or a search on
+         *     number, reference and memo.
+         */
+        get: operations["ledger.journal.index"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/journal/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export the journal
+         * @description `ledger:view`. `format` `csv` (default): one row per line. `xero` or
+         *     `quickbooks`: that product's manual-journal import, when it is the
+         *     organization's accounting target and every account used is mapped
+         *     (409 `unmapped_accounts` names the ones that are not). A caller limited
+         *     to some branches exports only those branches' lines. No live sync.
+         */
+        get: operations["ledger.journal.export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/journal/{journalEntry}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Show a journal entry */
+        get: operations["ledger.journal.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/reports/trial-balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trial balance
+         * @description Every account with activity through `as_of` (default today), its net
+         *     balance in the debit or credit column, and whether the columns agree.
+         */
+        get: operations["ledger.reports.trial-balance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/reports/general-ledger/{account}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * General ledger for an account
+         * @description One account's lines over `from`..`to` (default this month) with a
+         *     running balance on the account's own side after the balance brought
+         *     forward. Paged.
+         */
+        get: operations["ledger.reports.general-ledger"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/reports/profit-and-loss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Profit and loss
+         * @description Revenue (net of discounts), cost of sales, gross profit, other expenses
+         *     and net profit over `from`..`to`, with a column per branch in scope and
+         *     the consolidated total.
+         */
+        get: operations["ledger.reports.profit-and-loss"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/reports/balance-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Balance sheet
+         * @description Assets, liabilities and equity through `as_of`, including the earnings
+         *     made to date; `balanced` says whether assets = liabilities + equity.
+         */
+        get: operations["ledger.reports.balance-sheet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/reports/daily-sales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Daily sales
+         * @description By day and branch over `from`..`to`: net sales, VAT and the invoiced
+         *     total (voids netted on the day they happened), and the money received
+         *     that day by payment method.
+         */
+        get: operations["ledger.reports.daily-sales"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/vehicles/{vehicle}/readings": {
         parameters: {
             query?: never;
@@ -1454,6 +1750,76 @@ export interface paths {
         get: operations["payments.pdf"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/periods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Periods
+         * @description `ledger:view`. The months that have entries, newest first, with their
+         *     status and (once closed) who closed them and the checklist as it
+         *     passed. The current month is always listed.
+         */
+        get: operations["ledger.periods.index"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/periods/checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Close checklist
+         * @description `ledger:view`, `period` `YYYY-MM`. The five checks for that month (every
+         *     source posted; receivables = Accounts Receivable; stock valuation =
+         *     Inventory; unapplied credit = Customer Deposits; trial balance
+         *     balanced), whether the month can be closed now and, if not, why.
+         *     Read-only.
+         */
+        get: operations["ledger.periods.checklist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ledger/periods/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close a month
+         * @description `ledger:manage` (and not branch-limited). Only once the month is over,
+         *     earlier months are closed and the checklist passes (409
+         *     `close_checklist_failed` carries it). A closed month takes no new entry
+         *     and is never reopened; a void of one of its documents posts in the
+         *     current month, dated today, naming the original.
+         */
+        post: operations["ledger.periods.close"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3128,6 +3494,17 @@ export interface components {
             password: string;
             password_confirmation: string;
         };
+        /** AccountResource */
+        AccountResource: {
+            id: string;
+            code: string;
+            name: string;
+            type: string;
+            normal_side: string;
+            is_active: boolean;
+            is_system: boolean;
+            description: string;
+        };
         /** AlertInteractionRequest */
         AlertInteractionRequest: {
             alert_ids: string[];
@@ -3240,6 +3617,13 @@ export interface components {
             };
             /** @description Read at the counter, today. */
             odometer: number;
+        };
+        /**
+         * ClosePeriodRequest
+         * @description A month, `YYYY-MM`.
+         */
+        ClosePeriodRequest: {
+            period: string;
         };
         /** CollectWorkOrdersRequest */
         CollectWorkOrdersRequest: {
@@ -3629,6 +4013,39 @@ export interface components {
          * @enum {string}
          */
         ItemType: "part" | "consumable" | "retail" | "ingredient" | "service_fee";
+        /** JournalEntryCollection */
+        JournalEntryCollection: components["schemas"]["JournalEntryResource"][];
+        /** JournalEntryResource */
+        JournalEntryResource: {
+            id: string;
+            number: string;
+            entry_date: string;
+            period: string;
+            period_closed: boolean;
+            event: string;
+            /** @enum {string} */
+            event_label: "Invoice issued" | "Invoice voided" | "Payment received" | "Payment voided" | "Credit applied to an invoice" | "Credit application reversed" | "Opening stock" | "Goods received" | "Goods receipt voided" | "Parts issued to a job" | "Parts returned from a job" | "Stock consumed" | "Stock adjustment" | "Stock transfer";
+            is_reversal: boolean;
+            source_type: string;
+            source_id: string;
+            reference: string;
+            memo: string;
+            payment_method: string | null;
+            branch_id: string;
+            branch_name: string;
+            counter_branch_id: string | null;
+            reversal_of_id: string | null;
+            reversed_by_id: string | null;
+            total_cents: number;
+            posted_by_name: string;
+            posted_at: string;
+            lines: unknown[];
+        };
+        /** LedgerSettingsRequest */
+        LedgerSettingsRequest: {
+            /** @enum {string} */
+            accounting_target: "none" | "xero" | "quickbooks";
+        };
         /**
          * LineUrgency
          * @description A safety-critical line cannot be declined without a reason on record.
@@ -3915,6 +4332,17 @@ export interface components {
             default_parts_source?: "own_stock" | "supplier_provided" | "customer_supplied" | "purchased_for_job" | null;
             monthly_budget_cents?: number | null;
         };
+        /** SaveAccountRequest */
+        SaveAccountRequest: {
+            code: string;
+            name: string;
+            /** @enum {string} */
+            type: "asset" | "liability" | "equity" | "revenue" | "expense";
+            /** @enum {string} */
+            normal_side?: "debit" | "credit";
+            description?: string | null;
+            is_active?: boolean;
+        };
         /**
          * SaveApprovalSettingsRequest
          * @description PUT /approval-settings (organization defaults) and
@@ -4036,6 +4464,16 @@ export interface components {
             /** Format: uri */
             logo_url?: string | null;
             brand_color?: string | null;
+        };
+        /** SaveExportMappingsRequest */
+        SaveExportMappingsRequest: {
+            mappings: {
+                account_id: string;
+                /** @enum {string} */
+                target: "xero" | "quickbooks";
+                external_code?: string | null;
+                external_name?: string | null;
+            }[];
         };
         /**
          * SaveFleetPartRequest
@@ -4468,6 +4906,14 @@ export interface components {
             brand_color?: string | null;
             theme_tokens?: string[] | null;
         };
+        /** UpdatePostingRulesRequest */
+        UpdatePostingRulesRequest: {
+            rules: {
+                /** @enum {string} */
+                key: "cash.on_hand" | "cash.bank" | "clearing.gcash" | "clearing.maya" | "clearing.card" | "receivables.control" | "inventory.stock" | "tax.input_vat" | "payables.control" | "clearing.grir" | "tax.output_vat" | "liability.customer_deposits" | "liability.unearned_revenue" | "equity.opening_balance" | "sales.labour" | "sales.parts" | "sales.detailing" | "sales.cafe" | "sales.fees" | "sales.manual" | "sales.discounts" | "cogs.parts" | "cogs.consumables" | "cogs.cafe" | "inventory.adjustments" | "inventory.price_variance" | "expense.equipment_repairs";
+                account_id: string;
+            }[];
+        };
         /** UpdateProfileRequest */
         UpdateProfileRequest: {
             first_name: string;
@@ -4869,6 +5315,236 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    "ledger.accounts.index": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                as_of?: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                        meta: {
+                            as_of: string;
+                            scope: {
+                                branches: unknown[];
+                                all_branches: string;
+                            };
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.accounts.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description `AccountResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AccountResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.accounts.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The account ID */
+                account: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description `AccountResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["AccountResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.rules.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "ledger.rules.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePostingRulesRequest"];
+            };
+        };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.settings.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            accounting_target: string;
+                            mappings: unknown[];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "ledger.settings.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LedgerSettingsRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            accounting_target: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.mappings.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveExportMappingsRequest"];
+            };
+        };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
     "alerts.index": {
         parameters: {
             query?: {
@@ -7324,6 +8000,323 @@ export interface operations {
             422: components["responses"]["Error.validation"];
         };
     };
+    "ledger.journal.index": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                as_of?: string;
+                from?: string;
+                to?: string;
+                account_id?: string;
+                event?: "invoice_issued" | "invoice_voided" | "payment_received" | "payment_voided" | "credit_applied" | "credit_reversed" | "stock_opening" | "stock_receipt" | "stock_receipt_return" | "stock_issue" | "stock_return" | "stock_consumption" | "stock_adjustment" | "stock_transfer";
+                branch_id?: string;
+                source_id?: string;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `JournalEntryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["JournalEntryCollection"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.journal.export": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                as_of?: string;
+                from?: string;
+                to?: string;
+                format?: "csv" | "xero" | "quickbooks";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv; charset=UTF-8": string;
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.journal.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The journal entry ID */
+                journalEntry: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `JournalEntryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["JournalEntryResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "ledger.reports.trial-balance": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                as_of?: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.reports.general-ledger": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                as_of?: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path: {
+                /** @description The account ID */
+                account: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            account: {
+                                id: string;
+                                code: string;
+                                name: string;
+                                type: string;
+                                normal_side: string;
+                            };
+                            from: string;
+                            to: string;
+                            scope: {
+                                branches: unknown[];
+                                all_branches: string;
+                            };
+                            opening_balance_cents: number;
+                            total_debit_cents: number;
+                            total_credit_cents: number;
+                            closing_balance_cents: number;
+                            lines: {
+                                id: string;
+                                entry_id: string;
+                                number: string;
+                                entry_date: string;
+                                event: string;
+                                event_label: string;
+                                reference: string;
+                                memo: string;
+                                branch_id: string;
+                                branch_name: string;
+                                debit_cents: number;
+                                credit_cents: number;
+                                balance_cents: number;
+                            }[];
+                            meta: {
+                                page: number;
+                                per_page: number;
+                                total: number;
+                            };
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.reports.profit-and-loss": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                as_of?: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.reports.balance-sheet": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                as_of?: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.reports.daily-sales": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                as_of?: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            from: string;
+                            to: string;
+                            scope: {
+                                branches: unknown[];
+                                all_branches: string;
+                            };
+                            days: {
+                                date: string;
+                                branch_id: string;
+                                branch_name: string;
+                                net_sales_cents: string;
+                                vat_cents: string;
+                                invoiced_cents: string;
+                                received_cents: number;
+                                receipts: unknown[];
+                            }[];
+                            totals: {
+                                net_sales_cents: number;
+                                vat_cents: number;
+                                invoiced_cents: number;
+                                received_cents: number;
+                            };
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
     "vehicles.readings.index": {
         parameters: {
             query?: {
@@ -7815,6 +8808,218 @@ export interface operations {
             401: components["responses"]["Error.unauthenticated"];
             403: components["responses"]["Error.forbidden"];
             404: components["responses"]["Error.not_found"];
+        };
+    };
+    "ledger.periods.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                        meta: {
+                            current: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "ledger.periods.checklist": {
+        parameters: {
+            query: {
+                period: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            period_key: string;
+                            label: string;
+                            starts_on: string;
+                            ends_on: string;
+                            status: string;
+                            ended: boolean;
+                            checklist: [
+                                {
+                                    /** @constant */
+                                    key: "unposted_sources";
+                                    /** @constant */
+                                    label: "Every invoice, payment and stock move is posted";
+                                    passed: boolean;
+                                    expected_cents: null;
+                                    actual_cents: null;
+                                    difference_cents: null;
+                                    detail: string;
+                                },
+                                {
+                                    /** @constant */
+                                    key: "receivables";
+                                    /** @constant */
+                                    label: "Receivables subledger equals Accounts Receivable";
+                                    passed: boolean;
+                                    expected_cents: number;
+                                    actual_cents: number;
+                                    difference_cents: number;
+                                    detail: string;
+                                },
+                                {
+                                    /** @constant */
+                                    key: "inventory";
+                                    /** @constant */
+                                    label: "Stock valuation equals Inventory";
+                                    passed: boolean;
+                                    expected_cents: number;
+                                    actual_cents: number;
+                                    difference_cents: number;
+                                    detail: string;
+                                },
+                                {
+                                    /** @constant */
+                                    key: "customer_deposits";
+                                    /** @constant */
+                                    label: "Unapplied customer credit equals Customer Deposits";
+                                    passed: boolean;
+                                    expected_cents: number;
+                                    actual_cents: number;
+                                    difference_cents: number;
+                                    detail: string;
+                                },
+                                {
+                                    /** @constant */
+                                    key: "trial_balance";
+                                    /** @constant */
+                                    label: "The trial balance balances";
+                                    passed: boolean;
+                                    expected_cents: number;
+                                    actual_cents: number;
+                                    difference_cents: number;
+                                    detail: string;
+                                }
+                            ];
+                            can_close: boolean;
+                            blocked_by: string | null | ("This month is already closed." | "The month is not over yet." | "The checklist has failures.");
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "ledger.periods.close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClosePeriodRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            period_key: string;
+                            label: string;
+                            starts_on: string;
+                            ends_on: string;
+                            status: string;
+                            ended: boolean;
+                            checklist: [
+                                {
+                                    /** @constant */
+                                    key: "unposted_sources";
+                                    /** @constant */
+                                    label: "Every invoice, payment and stock move is posted";
+                                    passed: boolean;
+                                    expected_cents: null;
+                                    actual_cents: null;
+                                    difference_cents: null;
+                                    detail: string;
+                                },
+                                {
+                                    /** @constant */
+                                    key: "receivables";
+                                    /** @constant */
+                                    label: "Receivables subledger equals Accounts Receivable";
+                                    passed: boolean;
+                                    expected_cents: number;
+                                    actual_cents: number;
+                                    difference_cents: number;
+                                    detail: string;
+                                },
+                                {
+                                    /** @constant */
+                                    key: "inventory";
+                                    /** @constant */
+                                    label: "Stock valuation equals Inventory";
+                                    passed: boolean;
+                                    expected_cents: number;
+                                    actual_cents: number;
+                                    difference_cents: number;
+                                    detail: string;
+                                },
+                                {
+                                    /** @constant */
+                                    key: "customer_deposits";
+                                    /** @constant */
+                                    label: "Unapplied customer credit equals Customer Deposits";
+                                    passed: boolean;
+                                    expected_cents: number;
+                                    actual_cents: number;
+                                    difference_cents: number;
+                                    detail: string;
+                                },
+                                {
+                                    /** @constant */
+                                    key: "trial_balance";
+                                    /** @constant */
+                                    label: "The trial balance balances";
+                                    passed: boolean;
+                                    expected_cents: number;
+                                    actual_cents: number;
+                                    difference_cents: number;
+                                    detail: string;
+                                }
+                            ];
+                            can_close: boolean;
+                            blocked_by: string | null | ("This month is already closed." | "The month is not over yet." | "The checklist has failures.");
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
         };
     };
     me: {

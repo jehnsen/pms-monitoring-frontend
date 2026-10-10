@@ -18,4 +18,5 @@ export const INVENTORY_ROOTS = [
   "inv-count",
   "inv-transfers",
   "inv-branches",
+  "ledger",
 ] as const;

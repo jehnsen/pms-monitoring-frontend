@@ -35,6 +35,7 @@ export const BILLING_ROOTS = [
   "work-order",
   "work-orders",
   "shop",
+  "ledger",
 ] as const;
 
 function pesos(cents: number | null | undefined): number {

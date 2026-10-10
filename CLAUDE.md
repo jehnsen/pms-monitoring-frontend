@@ -81,6 +81,13 @@ its endpoint, with the Phase 5 verification results.
   the quote PREVIEW, unrelated.) Issuing an invoice and recording a payment
   require an `Idempotency-Key`: the dialog mints one when it opens and reuses
   it on a retry, so a retried click replays instead of double-posting.
+- **The books** (Phase 8) have their own seam too: `lib/api/ledger.ts` (raw
+  resources, mappers, `LEDGER_ROOT`) and `lib/ledger.ts` (hooks and
+  `useLedgerActions()`); types in `types/ledger.ts`. Every books query key starts
+  with `ledger`, and that root is in `BILLING_ROOTS` and `INVENTORY_ROOTS`, so an
+  invoice, a payment or a stock move refreshes the books on screen. Balances,
+  subtotals, running balances, the trial balance's totals and every close check
+  are the API's; nothing is added up in the browser.
 - **`lib/mappers.ts`** — the seam between API resources and `types/index.ts`:
   snake_case → camelCase, centavos → pesos (**display only**), and the defaults
   components rely on (`""`, `[]`) for nullable fields. A new field on a domain
@@ -168,6 +175,16 @@ its endpoint, with the Phase 5 verification results.
   Raising work for an account over its credit limit succeeds with a
   `warnings` entry, shown in the new-work-order dialog and check-in. No
   screen claims BIR accreditation.
+- **The books** (Phase 8; `/shop/books/*`, staff only; `ledger:view` reads,
+  `ledger:manage` changes): Chart of accounts (`/shop/books`), Posting rules and
+  the accountant's export mapping (`/shop/books/rules`), Journal browser with an
+  entry dialog and the CSV / Xero / QuickBooks export (`/shop/books/journal`),
+  Period close (`/shop/books/periods`: the five-check list, close a month for
+  good) and the accounting reports (`/shop/books/reports`: trial balance,
+  general ledger, profit and loss by branch and consolidated, balance sheet,
+  daily sales). Money and stock events post their own entries in the API; there
+  is no way to make an entry by hand. A branch manager reads and sees the change
+  and close controls dimmed (`DeniedAction`); everyone else gets the reason.
 - **Documents** upload as multipart to the API (10 MB); a document on no vehicle
   is filed against an account (the portal user's own, or one staff pick).
   Downloads open a short-lived signed URL.
@@ -197,7 +214,8 @@ Rules that are not negotiable in this codebase:
   never a data series; status chips always ship an icon **and** a label.
 - Two or more series ⇒ a legend is present.
 - Stacked segments are separated by a 2px stroke in the *surface* colour (that's
-  the gap mechanism), never by a contrasting border.
+  the gap 
+  echanism), never by a contrasting border.
 - Every chart goes through `ChartFrame`, which supplies the table view. Don't add
   a chart without one — no value should be reachable only by hovering.
 
