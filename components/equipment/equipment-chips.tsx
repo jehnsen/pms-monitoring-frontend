@@ -59,9 +59,12 @@ export function HealthScore({ health }: { health: EquipmentReport["health"] }) {
   );
 }
 
-const UNIT = { hours: "h", cycles: "jobs", days: "days" } as const;
+const UNIT = { hours: "h", cycles: "jobs", cups: "cups", days: "days" } as const;
 
-/** How far into its service interval the tool is, on the trigger that binds, as the API reports it. */
+/** What a service limit is called on screen. */
+export const LIMIT_LABEL = { hours: "Runtime hours", cycles: "Jobs", cups: "Cups", days: "Days" } as const;
+
+/** How far into its service interval the tool is, with the limit that trips first, as the API reports them. */
 export function ServiceMeter({ service }: { service: EquipmentReport["service"] }) {
   if (!service) return <span className="text-2xs text-subtle-foreground">No interval set</span>;
   const binding = service.triggers.find((trigger) => trigger.key === service.binding) ?? service.triggers[0];

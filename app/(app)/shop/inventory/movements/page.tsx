@@ -37,6 +37,9 @@ function documentHref(move: StockMoveRow): string | null {
   if (source === "goods_receipt") return "/shop/inventory/purchasing";
   if (source === "stock_count") return "/shop/inventory/counts";
   if (source === "stock_transfer") return "/shop/inventory/transfers";
+  if (source === "detailing_booking") return `/shop/detailing/bookings/${move.sourceDocumentId}`;
+  // A service entry has no number: the API names its tool, and this opens it.
+  if (source === "equipment_maintenance") return `/shop/equipment/${move.sourceDocumentId}`;
   return null;
 }
 

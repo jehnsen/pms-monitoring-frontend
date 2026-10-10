@@ -686,7 +686,11 @@ export type AlertKind =
   | "document_expiry"
   | "work_order_overdue"
   | "approval_sla_breach"
-  | "driver_licence_expiry";
+  | "driver_licence_expiry"
+  | "equipment_service_overdue"
+  | "equipment_service_due_soon"
+  | "equipment_end_of_life"
+  | "equipment_replace_soon";
 
 export type AlertSeverity = "critical" | "warning" | "info";
 

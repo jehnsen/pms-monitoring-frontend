@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, apiData, newIdempotencyKey } from "@/lib/api/client";
 import { EQUIPMENT_ROOT, toBoard, toEquipment, toOptions, toProfileLine } from "@/lib/api/equipment";
+import { INVENTORY_ROOTS } from "@/lib/api/inventory-keys";
 import { run, useApiQuery, type ActionResult } from "@/lib/store";
 import type { Equipment, EquipmentBoard, EquipmentOptions, PackageProfileLine } from "@/types/equipment";
 
@@ -13,6 +14,11 @@ import type { Equipment, EquipmentBoard, EquipmentOptions, PackageProfileLine } 
  * `useEquipmentActions()` for the writes. Nothing is optimistic and nothing is
  * computed here: a tool's meters, service status, forecast, life, reliability
  * and health are derived by the API each time it is read.
+ *
+ * A tool's state raises and clears alerts, so every write refreshes the
+ * alerts too. A service entry may take parts from stock (and removing it puts
+ * them back), which the API books to Equipment Repairs & Maintenance: those
+ * two writes also refresh `INVENTORY_ROOTS`, which carries the books.
  */
 
 type Raw = Record<string, any>; // eslint-disable-line
@@ -81,13 +87,34 @@ function toBody(draft: EquipmentDraft, editing: boolean) {
   return body;
 }
 
+/** The "Log a service" form, as typed. */
+export interface ServiceEntryDraft {
+  kind: string;
+  performedBy: string;
+  /** Pesos paid for the work, apart from parts taken from stock. */
+  cost: string;
+  downtimeHours: string;
+  /** Parts in words (bought outside, or a description). */
+  parts: string;
+  notes: string;
+  resetsService: boolean;
+  /** Parts taken from the branch's store. */
+  issuedParts: { itemId: string; quantity: string }[];
+}
+
 export function useEquipmentActions() {
   const queryClient = useQueryClient();
-  const refresh = useCallback(() => queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === EQUIPMENT_ROOT }), [queryClient]);
+  const refresh = useCallback(
+    (also: readonly string[]) => {
+      const roots = new Set<unknown>([EQUIPMENT_ROOT, "alerts", ...also]);
+      return queryClient.invalidateQueries({ predicate: (query) => roots.has(query.queryKey[0]) });
+    },
+    [queryClient]
+  );
   const write = useCallback(
-    async <T,>(fn: () => Promise<T>): Promise<ActionResult<T>> => {
+    async <T,>(fn: () => Promise<T>, also: readonly string[] = []): Promise<ActionResult<T>> => {
       const result = await run(fn);
-      if (result.ok) await refresh();
+      if (result.ok) await refresh(also);
       return result;
     },
     [refresh]
@@ -127,28 +154,35 @@ export function useEquipmentActions() {
           await api(`/equipment/${id}/usage-logs/${logId}`, { method: "DELETE" });
         }),
 
-      logService: (id: string, entry: { kind: string; performedBy: string; cost: string; downtimeHours: string; parts: string; notes: string; resetsService: boolean }) =>
-        write(async () =>
-          toEquipment(
-            await apiData<Raw>(`/equipment/${id}/maintenance-logs`, {
-              method: "POST",
-              body: {
-                kind: entry.kind,
-                resets_service: entry.resetsService,
-                ...(entry.performedBy.trim() !== "" ? { performed_by: entry.performedBy.trim() } : {}),
-                ...(entry.cost.trim() !== "" ? { cost_cents: Math.round(Number(entry.cost) * 100) } : {}),
-                ...(entry.downtimeHours.trim() !== "" ? { downtime_hours: entry.downtimeHours.trim() } : {}),
-                ...(entry.parts.trim() !== "" ? { parts: entry.parts.trim() } : {}),
-                ...(entry.notes.trim() !== "" ? { notes: entry.notes.trim() } : {}),
-              },
-            })
-          )
-        ),
+      /** `issuedParts` leave the branch's store as the entry is saved; a refusal (not enough on the shelf) comes back as the result's error. */
+      logService: (id: string, entry: ServiceEntryDraft) => {
+        const issued = entry.issuedParts.filter((part) => part.itemId !== "" && part.quantity.trim() !== "");
+        return write(
+          async () =>
+            toEquipment(
+              await apiData<Raw>(`/equipment/${id}/maintenance-logs`, {
+                method: "POST",
+                body: {
+                  kind: entry.kind,
+                  resets_service: entry.resetsService,
+                  ...(entry.performedBy.trim() !== "" ? { performed_by: entry.performedBy.trim() } : {}),
+                  ...(entry.cost.trim() !== "" ? { cost_cents: Math.round(Number(entry.cost) * 100) } : {}),
+                  ...(entry.downtimeHours.trim() !== "" ? { downtime_hours: entry.downtimeHours.trim() } : {}),
+                  ...(entry.parts.trim() !== "" ? { parts: entry.parts.trim() } : {}),
+                  ...(entry.notes.trim() !== "" ? { notes: entry.notes.trim() } : {}),
+                  ...(issued.length > 0 ? { issued_parts: issued.map((part) => ({ item_id: part.itemId, quantity: part.quantity.trim() })) } : {}),
+                },
+              })
+            ),
+          issued.length > 0 ? INVENTORY_ROOTS : []
+        );
+      },
 
+      /** Puts back whatever parts the entry took from stock. */
       deleteService: (id: string, logId: string) =>
         write(async () => {
           await api(`/equipment/${id}/maintenance-logs/${logId}`, { method: "DELETE" });
-        }),
+        }, INVENTORY_ROOTS),
 
       /** The whole list for one package. */
       setProfile: (packageId: string, lines: { equipmentId: string; hoursPerJob: string }[]) =>

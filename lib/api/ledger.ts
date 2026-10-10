@@ -470,6 +470,8 @@ export const EVENT_GROUPS: { value: string; label: string }[] = [
   { value: "stock_consumption", label: "Stock consumed" },
   { value: "stock_adjustment", label: "Stock adjustment" },
   { value: "stock_transfer", label: "Stock transfer" },
+  { value: "stock_maintenance", label: "Parts used on equipment" },
+  { value: "stock_maintenance_return", label: "Parts returned from equipment" },
 ];
 
 export const ACCOUNT_TYPES: { value: AccountType; label: string }[] = [

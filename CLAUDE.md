@@ -214,17 +214,28 @@ its endpoint, with the Phase 5 verification results.
   damage map (`components/detailing/damage-map.tsx`) stores points in
   thousandths of the outline, as the API does.
 - **Equipment monitoring** (Phase 10; `/shop/equipment/*`, staff only, behind
-  the `equipment` module): the board (`/shop/equipment`: every tool with its
-  service status, forecast, runtime and health, and the floor in numbers), one
-  tool (`/shop/equipment/[id]`: its triggers, reliability and cost, service
+  the `equipment` module): the Health board (`/shop/equipment`: every tool with
+  its service status, forecast, runtime and health, and the floor in numbers),
+  the Equipment register (`/shop/equipment/register`: what each tool is, its
+  make, serial, cost and service plan; add and edit), one tool
+  (`/shop/equipment/[id]`: its service plan, reliability and cost, service
   history and usage log; log a service, log usage, change status) and Service
   profiles (`/shop/equipment/profiles`: which packages put how many hours on
   which tools). Data is `lib/equipment.ts` over `lib/api/equipment.ts` (types in
   `types/equipment.ts`; every key starts with `equipment`). **Nothing is
   metered in the browser**: a tool's runtime, ratios, due date and health score
   are derived by the API each time it is read, from completed detailing jobs and
-  the usage log, so there is no "edit meter" anywhere. The form's lists and the
-  values a category suggests come from `GET /equipment/options`.
+  the usage log, so there is no "edit meter" anywhere. Which limit of the plan
+  "trips first" (`service.binding`) and the reading or date each falls due at
+  (`dueAt` / `dueOn`) are the API's maintenance engine's. A tool whose
+  `countUnit` is `cups` (the espresso machine) shows cups where others show
+  jobs. "Log a service" can take parts from the branch's store (`issuedParts`,
+  picked from `useItemOptions()`): the API moves the stock and books the
+  expense, so that write and removing an entry refresh `INVENTORY_ROOTS` (which
+  carries the books); a refusal (not enough on the shelf) shows in the dialog.
+  Every equipment write also refreshes `alerts`: a tool due for service or near
+  its rated life is in the bell with the rest (`equipment_*` kinds). The form's
+  lists and the values a category suggests come from `GET /equipment/options`.
   `equipment:view` reads; `equipment:manage` writes (`DeniedAction` otherwise).
 - **Public booking** (`/book/[branchSlug]`, and
   `/book/[branchSlug]/confirmation/[token]`): no sign-in. The page wears the

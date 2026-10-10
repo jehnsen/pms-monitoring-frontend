@@ -20,7 +20,7 @@ import { cn, formatPesos } from "@/lib/utils";
 type Filter = "all" | "attention" | "untracked";
 
 /**
- * The equipment monitor: every tool on the detailing floor with where it
+ * The health board: every tool on the detailing floor with where it
  * stands in its service interval, when the next service is forecast, how much
  * of its rated life is spent and its health score. All of it is the API's,
  * derived from completed jobs and the usage log each time the page loads.
@@ -47,8 +47,8 @@ export default function EquipmentBoardPage() {
   return (
     <>
       <PageHeader
-        title="Equipment monitor"
-        description="The detailing floor's tools: service status, forecast, life and health. Runtime comes from completed jobs and the usage log, never from a typed-in meter."
+        title="Equipment health board"
+        description="The floor's tools: service status, forecast, life and health. Runtime comes from completed jobs and the usage log, never from a typed-in meter."
         actions={manages ? add : <DeniedAction reason={reason("equipment:manage")}>{add}</DeniedAction>}
       />
 
@@ -129,7 +129,7 @@ export default function EquipmentBoardPage() {
                         {tool.report.forecast ? (tool.report.forecast.days <= 0 ? "Now" : formatDay(tool.report.forecast.dueOn)) : <span className="text-subtle-foreground">{tool.report.service ? "Idle: no forecast" : "—"}</span>}
                       </td>
                       <td className="tabular px-3 py-3 text-right">
-                        {formatHours(tool.report.lifetime.hours)}
+                        {tool.countUnit === "cups" ? `${tool.report.lifetime.cycles.toLocaleString("en-PH")} cups` : formatHours(tool.report.lifetime.hours)}
                         {tool.report.life ? <p className="text-2xs text-subtle-foreground">{tool.report.life.levelLabel}</p> : null}
                       </td>
                       <td className="px-5 py-3">

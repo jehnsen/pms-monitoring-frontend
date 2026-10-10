@@ -9,6 +9,7 @@ import {
   Clock,
   Contact,
   FileWarning,
+  Gauge,
   Hourglass,
   OctagonAlert,
   RotateCcw,
@@ -33,6 +34,10 @@ const KIND_ICON: Record<AlertKind, typeof Bell> = {
   document_expiry: FileWarning,
   approval_sla_breach: Hourglass,
   driver_licence_expiry: Contact,
+  equipment_service_overdue: OctagonAlert,
+  equipment_service_due_soon: Clock,
+  equipment_end_of_life: Gauge,
+  equipment_replace_soon: Gauge,
 };
 
 const SEVERITY_STYLE = {

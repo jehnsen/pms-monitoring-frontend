@@ -13,7 +13,7 @@ export type NegativeStockPolicy = "allow_and_flag" | "block";
 
 export type MoveType = "opening" | "receipt" | "issue" | "return" | "adjustment" | "transfer_out" | "transfer_in" | "consumption";
 
-export type MoveSource = "manual" | "goods_receipt" | "work_order_line" | "stock_count" | "stock_transfer";
+export type MoveSource = "manual" | "goods_receipt" | "work_order_line" | "stock_count" | "stock_transfer" | "detailing_booking" | "equipment_maintenance";
 
 /** An item as another record names it. */
 export interface ItemRef {

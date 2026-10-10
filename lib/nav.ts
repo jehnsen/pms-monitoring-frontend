@@ -273,9 +273,15 @@ export const PROVIDER_NAV_SECTIONS: NavSection[] = [
     items: [
       {
         href: "/shop/equipment",
-        label: "Equipment monitor",
+        label: "Health board",
         icon: Gauge,
-        description: "Tool register, service status and health",
+        description: "Service status, forecast and health of every tool",
+      },
+      {
+        href: "/shop/equipment/register",
+        label: "Equipment register",
+        icon: ClipboardList,
+        description: "Every tool: make, serial, cost, service plan",
       },
       {
         href: "/shop/equipment/profiles",

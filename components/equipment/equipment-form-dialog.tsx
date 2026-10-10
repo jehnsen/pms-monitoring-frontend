@@ -139,9 +139,9 @@ export function EquipmentFormDialog({ tool, onClose }: { tool: Equipment | null;
             <div className="grid gap-4 sm:grid-cols-3">
               {choice("eq-meter", "Mainly metered by", draft.meterType, options.data?.meterTypes, (meterType) => setDraft((c) => ({ ...c, meterType })))}
               {field("baselineHours", "Hours already on it", { type: "number", min: 0, step: "0.1" })}
-              {field("baselineCycles", "Jobs already on it", { type: "number", min: 0, step: "1" })}
+              {field("baselineCycles", draft.meterType === "cups" ? "Cups already served" : "Jobs already on it", { type: "number", min: 0, step: "1" })}
               {field("serviceIntervalHours", "Service every (hours)", { type: "number", min: 0, step: "0.1" })}
-              {field("serviceIntervalCycles", "Service every (jobs)", { type: "number", min: 0, step: "1" })}
+              {field("serviceIntervalCycles", draft.meterType === "cups" ? "Service every (cups)" : "Service every (jobs)", { type: "number", min: 0, step: "1" })}
               {field("serviceIntervalDays", "Service every (days)", { type: "number", min: 0, step: "1" })}
               {field("expectedLifeHours", "Rated life (hours)", { type: "number", min: 0, step: "1" })}
             </div>

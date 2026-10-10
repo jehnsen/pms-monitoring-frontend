@@ -19,13 +19,18 @@ export interface EquipmentOptions {
   categoryPresets: Record<string, Record<string, string | number>>;
 }
 
+/** One limit of a tool's service plan. `cups` is the count meter of café gear; `cycles` everyone else's. */
 export interface ServiceTrigger {
-  key: "hours" | "cycles" | "days";
+  key: "hours" | "cycles" | "cups" | "days";
   unit: string;
   used: number;
   interval: number;
   ratio: number;
   remaining: number;
+  /** The reading a meter limit falls due at; null for the calendar limit. */
+  dueAt: number | null;
+  /** The Manila date the calendar limit falls due on; null for a meter limit. */
+  dueOn: string | null;
 }
 
 export interface EquipmentReport {
@@ -35,6 +40,7 @@ export interface EquipmentReport {
     level: "ok" | "due_soon" | "overdue";
     levelLabel: string;
     progress: number;
+    /** The limit that trips first, as the API's maintenance engine has it. */
     binding: ServiceTrigger["key"];
     triggers: ServiceTrigger[];
     hoursSince: number;
@@ -77,6 +83,8 @@ export interface Equipment {
   warrantyUntil: string | null;
   expectedLifeHours: string | null;
   meterType: string;
+  /** What the count meter counts. */
+  countUnit: "cycles" | "cups";
   baselineHours: string;
   baselineCycles: number;
   serviceIntervalHours: string | null;
@@ -94,7 +102,12 @@ export interface Equipment {
     kindLabel: string;
     performedAt: string;
     performedBy: string;
+    /** What was paid for the work (pesos), apart from parts taken from stock. */
     cost: number;
+    /** What the parts taken from stock were worth (pesos). */
+    partsCost: number;
+    totalCost: number;
+    issuedParts: { itemId: string; sku: string; name: string; uom: string; quantity: string; value: number }[];
     downtimeHours: string;
     parts: string;
     notes: string;

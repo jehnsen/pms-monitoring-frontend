@@ -755,6 +755,760 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/detailing/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The schedule
+         * @description `from`/`to` (default today, at most 31 days): every booking that sits
+         *     on those days, the bays and detailers to lay them out by, the blocked
+         *     slots, and how many heads each slot holds against the pool.
+         */
+        get: operations["detailing.schedule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/monitor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The shop monitor
+         * @description The confirmed, on-going and completed jobs that sit on `date` (default
+         *     today), as the wall screen shows them.
+         */
+        get: operations["detailing.monitor"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Free starts for a package
+         * @description `package_id`, `size_class`, `date`: every grid slot as a start, whether
+         *     it is free and why not (`blocked`, `capacity`, `overflow`), the days
+         *     the job would take, when it would end, and which detailers are already
+         *     busy in those hours. `start_time` answers for that one time instead
+         *     (it need not be on the grid); `except_booking_id` leaves a booking out
+         *     when re-timing it.
+         */
+        get: operations["detailing.availability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/realtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How to listen for changes
+         * @description The branch's realtime channel and what a browser needs to join it.
+         *     `enabled: false` means no realtime server is configured: read again
+         *     every `poll_seconds`.
+         */
+        get: operations["detailing.realtime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/broadcasting/auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authorise a socket
+         * @description `detailing:view` in the channel's branch. Signs `socket_id` onto
+         *     `channel_name` (`private-detailing.branch.{id}`).
+         */
+        post: operations["broadcasting.auth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List bookings
+         * @description `detailing:view`. Newest day first, over the detailing branches the
+         *     session works in (`branch_id` narrows it). `meta.summary` counts the
+         *     same filters by status and says what today holds.
+         */
+        get: operations["detailing.bookings.index"];
+        put?: never;
+        /**
+         * Take a booking
+         * @description `detailing:book` in the branch. The API plans the days (a job that does
+         *     not fit before closing rolls into the next morning), prices the package
+         *     for the vehicle's size, and reserves the detailers. A slot that has
+         *     filled, a blocked slot or a detailer already on another job is 409 with
+         *     `details.reason` (`full`, `blocked`, `detailer_conflict`). The booking
+         *     is numbered from the `detailing_booking` series (BK-).
+         */
+        post: operations["detailing.bookings.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/bookings/{detailingBooking}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show a booking
+         * @description With its status log.
+         */
+        get: operations["detailing.bookings.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit a booking
+         * @description `detailing:book`. Its bay, notes, contact details and vehicle.
+         */
+        patch: operations["detailing.bookings.update"];
+        trace?: never;
+    };
+    "/detailing/bookings/{detailingBooking}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change a booking's status
+         * @description Starting (`on_going`) and completing need `detailing:work` or
+         *     `detailing:book`; every other move `detailing:book`. Any status may
+         *     follow any other. Starting needs the check-in inspection (409,
+         *     `details.reason` = `inspection_required`) unless
+         *     `inspection_override_reason` is given. Completing releases the slots
+         *     the job no longer needs and takes its materials from stock, once.
+         */
+        post: operations["detailing.bookings.status"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/bookings/{detailingBooking}/detailers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Name a booking's detailers
+         * @description `detailing:book`. Checked across the booking's whole span; the heads
+         *     reserved follow the names.
+         */
+        put: operations["detailing.bookings.detailers"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/bookings/{detailingBooking}/addons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace a booking's extras
+         * @description `detailing:book`. The whole list; a listed add-on is priced for the
+         *     booking's size unless a price is typed.
+         */
+        put: operations["detailing.bookings.addons"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/bookings/{detailingBooking}/checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Tick the checklist
+         * @description `detailing:work`.
+         */
+        post: operations["detailing.bookings.checklist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/bookings/{detailingBooking}/sign-off": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign a job off
+         * @description `detailing:qc`, on a completed job, by someone other than a detailer
+         *     named on it (403 otherwise). `passed: false` needs `notes`.
+         */
+        post: operations["detailing.bookings.sign-off"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/bookings/{detailingBooking}/inspections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a booking's inspections */
+        get: operations["detailing.bookings.inspections.index"];
+        put?: never;
+        /**
+         * Record an inspection
+         * @description `detailing:work`. One per stage (`check_in`, `check_out`); sending a
+         *     stage again replaces it and, when `damage_points` is sent, its map. A
+         *     `mileage` is recorded as an odometer reading of the booking's vehicle:
+         *     an implausible one is 422 until sent again with `confirm_mileage`.
+         */
+        post: operations["detailing.bookings.inspections.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/bookings/{detailingBooking}/inspections/{inspection}/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add an inspection photo
+         * @description `detailing:work`. Multipart; an image, `phase` `before` or `after`.
+         */
+        post: operations["detailing.bookings.inspections.photos.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/bookings/{detailingBooking}/inspections/{inspection}/photos/{photo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an inspection photo */
+        delete: operations["detailing.bookings.inspections.photos.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/bookings/{detailingBooking}/invoice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invoice a booking
+         * @description `detailing:book` and `billing:manage`. A draft invoice for a completed,
+         *     signed-off job: the package at the price it was booked at, and each
+         *     extra as a line. A booking is invoiced once (409 otherwise).
+         */
+        post: operations["detailing.bookings.invoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/bookings/{detailingBooking}/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check a booking out at the counter
+         * @description `detailing:book` and `billing:manage`. Invoice and payment in one
+         *     action: raises the invoice if there is none, issues it, and records the
+         *     payment against it, all or nothing. Requires an `Idempotency-Key`.
+         */
+        post: operations["detailing.bookings.checkout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/catalogue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The menu
+         * @description Categories, packages (with prices and materials) and add-ons of the
+         *     branch, in their set order, with the branch's detailers. Inactive ones
+         *     only with `include_inactive=1`.
+         */
+        get: operations["detailing.catalogue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/duration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a duration
+         * @description How the API reads a typed duration (`text`): slots, minutes, days and
+         *     the "Interpreted as …" line, so a typo is caught before it is saved.
+         */
+        get: operations["detailing.duration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/catalogue/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Reorder the menu
+         * @description `kind` is `packages`, `categories` or `addons`; `ids` in the order wanted.
+         */
+        put: operations["detailing.catalogue.reorder"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/packages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a package */
+        post: operations["detailing.packages.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/packages/{detailingPackage}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a package
+         * @description The whole package: its prices are replaced by the list sent, and its
+         *     materials too when `materials` is sent.
+         */
+        put: operations["detailing.packages.update"];
+        post?: never;
+        /**
+         * Delete a package
+         * @description A package that bookings name is 409: switch it off instead.
+         */
+        delete: operations["detailing.packages.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a category */
+        post: operations["detailing.categories.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/categories/{detailingCategory}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit a category */
+        put: operations["detailing.categories.update"];
+        post?: never;
+        /**
+         * Delete a category
+         * @description One that still has packages is 409.
+         */
+        delete: operations["detailing.categories.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/addons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add an add-on */
+        post: operations["detailing.addons.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/addons/{detailingAddon}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit an add-on */
+        put: operations["detailing.addons.update"];
+        post?: never;
+        /**
+         * Delete an add-on
+         * @description One that bookings carry is 409: switch it off instead.
+         */
+        delete: operations["detailing.addons.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show the settings
+         * @description `detailing:view`. A branch that has saved none yet shows the defaults
+         *     (`saved: false`).
+         */
+        get: operations["detailing.settings.show"];
+        /**
+         * Save the settings
+         * @description `detailing:manage`. Only what is sent changes. The pool cannot drop
+         *     below what existing bookings already hold in one slot, and a booking
+         *     takes no more than the pool by default (422).
+         */
+        put: operations["detailing.settings.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/blocked-slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Block slots
+         * @description `detailing:manage`. Closes grid slots of a day to new bookings;
+         *     bookings already there stay.
+         */
+        post: operations["detailing.blocked-slots.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/blocked-slots/{blockedSlot}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unblock a slot */
+        delete: operations["detailing.blocked-slots.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/display-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List display tokens
+         * @description `detailing:manage`. The tokens of the branch's wall screens, revoked
+         *     ones included. A token is never shown again after it is made.
+         */
+        get: operations["detailing.display-tokens.index"];
+        put?: never;
+        /**
+         * Issue a display token
+         * @description `detailing:manage`. `token` is in the response this once: it reads this
+         *     branch's shop monitor and nothing else.
+         */
+        post: operations["detailing.display-tokens.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/display-tokens/{displayToken}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revoke a display token */
+        post: operations["detailing.display-tokens.revoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/recurring-schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List standing weekly slots
+         * @description `detailing:view`. Of the branch, or of one customer with `customer_account_id`.
+         */
+        get: operations["detailing.recurring.index"];
+        put?: never;
+        /**
+         * Add a standing weekly slot
+         * @description `detailing:manage`. A preference the shop books from; it books nothing itself.
+         */
+        post: operations["detailing.recurring.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/detailing/recurring-schedules/{recurringSchedule}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Edit a standing weekly slot */
+        put: operations["detailing.recurring.update"];
+        post?: never;
+        /** Remove a standing weekly slot */
+        delete: operations["detailing.recurring.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/display/detailing/monitor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The shop monitor, for a display
+         * @description Today's confirmed, on-going and completed jobs of the token's branch
+         *     (Asia/Manila), the branch's name and look, and how to listen for
+         *     changes (`realtime`; when it is not enabled, read again every
+         *     `poll_seconds`).
+         */
+        get: operations["display.detailing.monitor"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/display/broadcasting/auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authorise a display's socket
+         * @description Signs `socket_id` onto `channel_name`, which must be the token's own
+         *     branch channel.
+         */
+        post: operations["display.broadcasting.auth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/documents/summary": {
         parameters: {
             query?: never;
@@ -869,6 +1623,222 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/equipment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The equipment board
+         * @description `equipment:view`. Every tool of the branch with its report (service
+         *     status, forecast, life, reliability, utilisation, health) and the floor
+         *     in numbers (`summary`).
+         */
+        get: operations["equipment.index"];
+        put?: never;
+        /**
+         * Register a tool
+         * @description `equipment:manage`.
+         */
+        post: operations["equipment.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/equipment/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The register's lists
+         * @description Categories, statuses, condition ratings, meter types and service kinds
+         *     with their labels, the starting values each category suggests, and the
+         *     thresholds the monitor works to.
+         */
+        get: operations["equipment.options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/equipment/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Package profiles
+         * @description `equipment:view`. Which tools each detailing package puts hours on,
+         *     and how many per completed job.
+         */
+        get: operations["equipment.profiles.index"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/equipment/profiles/{detailingPackage}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set a package's profile
+         * @description `equipment:manage`. The whole list for one package: `lines` of
+         *     `equipment_id` and `hours_per_job`.
+         */
+        put: operations["equipment.profiles.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/equipment/{equipment}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show a tool
+         * @description Its report, its usage log and its service history.
+         */
+        get: operations["equipment.show"];
+        /**
+         * Edit a tool
+         * @description `equipment:manage`. Only what is sent changes.
+         */
+        put: operations["equipment.update"];
+        post?: never;
+        /**
+         * Delete a tool
+         * @description `equipment:manage`. Only one with nothing logged against it and no
+         *     package mapped; any other is 409: retire it instead.
+         */
+        delete: operations["equipment.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/equipment/{equipment}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change a tool's status
+         * @description `equipment:manage`.
+         */
+        post: operations["equipment.status"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/equipment/{equipment}/usage-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log usage
+         * @description `equipment:manage`. Runtime hours and/or job cycles the booking sheet
+         *     never saw. Completed bookings accrue by themselves through the package
+         *     profiles: logging one here too would count it twice.
+         */
+        post: operations["equipment.usage-logs.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/equipment/{equipment}/usage-logs/{usageLog}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a usage entry */
+        delete: operations["equipment.usage-logs.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/equipment/{equipment}/maintenance-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Log a service
+         * @description `equipment:manage`. Unless `resets_service` is false (a clean
+         *     inspection), it restarts every service interval from `performed_at`.
+         */
+        post: operations["equipment.maintenance-logs.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/equipment/{equipment}/maintenance-logs/{maintenanceLog}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a service entry */
+        delete: operations["equipment.maintenance-logs.destroy"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1871,6 +2841,95 @@ export interface paths {
          */
         put: operations["me.password"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/detailing/bookings/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A booking's confirmation page
+         * @description By the token of its confirmation link: its reference, status, package
+         *     and times. An unknown token is 404.
+         */
+        get: operations["public.detailing.bookings.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/detailing/{branchSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A branch's public booking page
+         * @description Its name and look (`theme_tokens`), whether online booking is on (and
+         *     the notice shown when it is not), the vehicle sizes, and its menu:
+         *     every active package with a price per size. `captcha.provider` says
+         *     which challenge to draw, if any.
+         */
+        get: operations["public.detailing.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/detailing/{branchSlug}/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Free starts, for the public
+         * @description `package_id`, `size_class`, `date`: the times of that day a booking may
+         *     start (before closing, not in the past), each free or not, and when the
+         *     job would end. Nothing about other bookings.
+         */
+        get: operations["public.detailing.availability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/detailing/{branchSlug}/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request a booking
+         * @description Lands `pending`; the shop confirms it, and the customer is emailed
+         *     both times. 409 when the slot has just filled (`details.reason` =
+         *     `full`), is blocked, or online booking is off
+         *     (`public_booking_disabled`). The `token` opens the confirmation page.
+         */
+        post: operations["public.detailing.bookings.store"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3521,6 +4580,11 @@ export interface components {
                 amount_cents: number;
             }[] | null;
         };
+        /** AssignDetailersRequest */
+        AssignDetailersRequest: {
+            /** @description Empty is refused by the engine, in the source's words. */
+            detailer_ids: string[];
+        };
         /** AutoScheduleRequest */
         AutoScheduleRequest: {
             customer_account_id?: string;
@@ -3539,6 +4603,32 @@ export interface components {
             created_at: string;
             updated_at: string;
         };
+        /**
+         * BlockSlotsRequest
+         * @description Close slots of one day to new bookings. `slots` are grid slot starts, minutes since midnight.
+         */
+        BlockSlotsRequest: {
+            branch_id?: string | null;
+            /** Format: date */
+            date: string;
+            slots: ("480" | "510" | "540" | "570" | "600" | "630" | "660" | "690" | "780" | "810" | "840" | "870" | "900" | "930" | "960" | "990" | "1020" | "1050" | "1080" | "1110" | "1140" | "1170" | "1200" | "1230" | "1260")[];
+            label?: string | null;
+        };
+        /** BookingAddonsRequest */
+        BookingAddonsRequest: {
+            addons: {
+                addon_id?: string | null;
+                name?: string | null;
+                quantity?: number | null;
+                unit_price_cents?: number | null;
+            }[];
+        };
+        /**
+         * BookingStatus
+         * @description A booking's lifecycle. The source's values, with `on-going` spelled `on_going`. As in the source any status may follow any other: the shop corrects a mis-tap by tapping the right one. What each move does to the clock and to the reserved slots is `BookingClock`'s and `SlotRelease`'s.
+         * @enum {string}
+         */
+        BookingStatus: "pending" | "confirmed" | "on_going" | "completed" | "cancelled" | "no_show";
         /** BranchCollection */
         BranchCollection: components["schemas"]["BranchResource"][];
         /** BranchResource */
@@ -3571,6 +4661,17 @@ export interface components {
         /** CancelPurchaseOrderRequest */
         CancelPurchaseOrderRequest: {
             reason: string;
+        };
+        /**
+         * ChangeBookingStatusRequest
+         * @description Move a booking's status. `reason` is kept on a cancellation and logged on
+         *     any move; `inspection_override_reason` starts work without the check-in
+         *     inspection.
+         */
+        ChangeBookingStatusRequest: {
+            status: components["schemas"]["BookingStatus"];
+            reason?: string | null;
+            inspection_override_reason?: string | null;
         };
         /** ChangePasswordRequest */
         ChangePasswordRequest: {
@@ -3617,6 +4718,17 @@ export interface components {
             };
             /** @description Read at the counter, today. */
             odometer: number;
+        };
+        /**
+         * CheckoutRequest
+         * @description The counter's checkout: how the customer paid. `amount_cents` defaults to everything due.
+         */
+        CheckoutRequest: {
+            /** @enum {string} */
+            method: "cash" | "gcash" | "maya" | "card" | "bank_transfer" | "check";
+            reference_no?: string | null;
+            amount_cents?: number | null;
+            notes?: string | null;
         };
         /**
          * ClosePeriodRequest
@@ -3727,6 +4839,221 @@ export interface components {
                 note?: string | null;
             }[];
         };
+        /** DetailingAddonResource */
+        DetailingAddonResource: {
+            id: string;
+            branch_id: string;
+            name: string;
+            is_active: boolean;
+            position: number;
+            prices: unknown[];
+        };
+        /** DetailingBookingCollection */
+        DetailingBookingCollection: components["schemas"]["DetailingBookingResource"][];
+        /** DetailingBookingResource */
+        DetailingBookingResource: {
+            id: string;
+            reference: string;
+            branch_id: string;
+            status: string;
+            /** @enum {string} */
+            status_label: "Pending" | "Confirmed" | "On-going" | "Completed" | "Cancelled" | "No-show";
+            source: string;
+            customer_account_id: string;
+            customer: {
+                name: string;
+                email: string | null;
+                phone: string | null;
+            };
+            vehicle_id: string | null;
+            vehicle_label: string | null;
+            size_class: string;
+            /** @enum {string} */
+            size_label: "Small" | "Medium" | "Large" | "XL";
+            package: {
+                id: string;
+                name: string;
+                category_name: string | null;
+                price_cents: number;
+                duration_text: string;
+            };
+            /** @description The day and time asked for; `days` is where the work sits. */
+            scheduled_date: string;
+            start_minutes: number;
+            start_time: string;
+            start_label: string;
+            first_day: string | null;
+            days: unknown[];
+            spans_days: boolean;
+            finish: {
+                date: string;
+                minutes: number;
+                label: string;
+                actual: boolean;
+            } | {
+                date: null;
+                minutes: null;
+                label: null;
+                actual: boolean;
+            };
+            min_detailers: number;
+            detailers_count: number;
+            detailers: unknown[];
+            bay: {
+                id: string;
+                name: string;
+            } | null;
+            addons: unknown[];
+            totals: {
+                package_cents: number;
+                addons_cents: number;
+                total_cents: number;
+            };
+            notes: string;
+            cancellation_reason: string | null;
+            checklist: unknown[];
+            checklist_progress: {
+                done: number;
+                total: number;
+            };
+            started_at: string | null;
+            completed_at: string | null;
+            inspection: {
+                needed_before_start: string;
+                check_in_id: string | null;
+                check_out_id: string | null;
+                override_reason: string | null;
+                overridden_by_name: string | null;
+            };
+            qc: {
+                status: string | null;
+                by_name: string | null;
+                at: string | null;
+                notes: string | null;
+            };
+            materials: {
+                consumed_at: string;
+                cost_cents: number;
+            } | null;
+            margin: {
+                revenue_cents: number;
+                materials_cost_cents: number;
+                margin_cents: number;
+                margin_pct: string | null;
+            } | null;
+            invoice: {
+                id: string | null;
+                number: string | null;
+                status: string | null;
+                total_due_cents: number | null;
+                balance_cents: number | null;
+            } | null;
+            /** @description What the job is waiting for; the API still checks each step when it is taken. */
+            next: {
+                needs_inspection: string;
+                can_sign_off: string;
+                /** @enum {string|null} */
+                sign_off_blocked_reason: "A job is signed off by someone other than the detailer who worked it." | null;
+                can_invoice: string;
+                can_check_out: string;
+                locked_by_invoice: boolean;
+            };
+            status_log: unknown[] | null;
+            created_by_name: string;
+            created_at: string;
+            updated_at: string;
+        };
+        /** DetailingCategoryResource */
+        DetailingCategoryResource: {
+            id: string;
+            branch_id: string;
+            name: string;
+            slug: string;
+            color: string | null;
+            position: number;
+        };
+        /** DetailingInspectionResource */
+        DetailingInspectionResource: {
+            id: string;
+            booking_id: string;
+            branch_id: string;
+            vehicle_id: string | null;
+            stage: string;
+            overall_rating: number;
+            exterior_rating: number | null;
+            interior_rating: number | null;
+            exterior_condition: string | null;
+            interior_condition: string | null;
+            mileage: number | null;
+            meter_reading_id: string | null;
+            notes: string | null;
+            damage_points: unknown[];
+            photos: unknown[];
+            recorded_by_name: string;
+            recorded_at: string;
+        };
+        /** DetailingPackageResource */
+        DetailingPackageResource: {
+            id: string;
+            branch_id: string;
+            category: {
+                id: string;
+                name: string;
+                slug: string;
+                color: string | null;
+            } | null;
+            name: string;
+            description: string | null;
+            duration_text: string;
+            duration: {
+                slot_budget: number;
+                minutes: number;
+                days: number;
+                interpreted: string;
+            };
+            inclusions: string[];
+            is_popular: boolean;
+            min_detailers: number;
+            recommended_detailers: number;
+            applies_to: string;
+            is_active: boolean;
+            position: number;
+            prices: unknown[];
+            materials: unknown[] | null;
+        };
+        /** DetailingSettingResource */
+        DetailingSettingResource: {
+            branch_id: string;
+            saved: string;
+            detailer_pool_size: number;
+            default_detailers_per_booking: number;
+            closing_minutes: number;
+            closing_time: string;
+            closing_label: string;
+            public_booking_enabled: boolean;
+            public_booking_notice: string | null;
+            inspection_required: boolean;
+            size_multipliers: unknown[];
+            active_detailers: number;
+            peak_heads: number;
+            grid: {
+                /** @constant */
+                slot_minutes: 30;
+                /** @constant */
+                opening_minutes: 480;
+                /** @constant */
+                lunch_start_minutes: 720;
+                /** @constant */
+                lunch_end_minutes: 780;
+                /** @constant */
+                grid_end_minutes: 1260;
+            };
+        };
+        /** DisplayTokenRequest */
+        DisplayTokenRequest: {
+            branch_id?: string | null;
+            name: string;
+        };
         /** DocumentCollection */
         DocumentCollection: components["schemas"]["DocumentResource"][];
         /**
@@ -3770,6 +5097,108 @@ export interface components {
                 /** @description null un-counts a line. */
                 counted_quantity: number | null;
                 reason?: string | null;
+            }[];
+        };
+        /** EquipmentResource */
+        EquipmentResource: {
+            id: string;
+            branch_id: string;
+            name: string;
+            category: string;
+            category_label: string;
+            brand: string | null;
+            model: string | null;
+            serial_number: string | null;
+            bay: {
+                id: string;
+                name: string;
+            } | null;
+            status: string;
+            status_label: string;
+            condition_rating: string;
+            condition_label: string;
+            purchase_date: string | null;
+            purchase_cost_cents: number;
+            warranty_until: string | null;
+            expected_life_hours: string | null;
+            meter_type: string;
+            /**
+             * @description What the count meter counts: `cups` for the espresso machine, else job `cycles`.
+             * @enum {string}
+             */
+            count_unit: "cups" | "cycles";
+            baseline_hours: string;
+            baseline_cycles: number;
+            service_interval_hours: string | null;
+            service_interval_cycles: number | null;
+            service_interval_days: number | null;
+            last_service_at: string | null;
+            maintenance_task: string | null;
+            notes: string | null;
+            is_active: boolean;
+            position: number;
+            report: {
+                lifetime: string | null;
+                /**
+                 * @description Null = no interval set: the tool is not tracked. `binding` is the
+                 *     limit that trips first; each trigger says the reading (`due_at`)
+                 *     or the Manila date (`due_on`) it falls due at.
+                 */
+                service: null;
+                forecast: {
+                    days: string | null;
+                    due_at: string | null;
+                    /** @description The business date it falls on, Asia/Manila (R9). */
+                    due_on: string | null;
+                    rate_per_day: string | null;
+                } | null;
+                life: null;
+                reliability: unknown[];
+                utilization: string | null;
+                health: string | null;
+            };
+            usage_logs: unknown[] | null;
+            maintenance_logs: unknown[] | null;
+        };
+        /**
+         * EquipmentWriteRequest
+         * @description The small writes against one tool or one package: a status change, a usage
+         *     entry, a service entry, a package's equipment profile. Each route reads the
+         *     part it needs.
+         */
+        EquipmentWriteRequest: {
+            branch_id?: string | null;
+            /** @enum {string} */
+            status?: "available" | "in_use" | "maintenance" | "repair" | "retired";
+            /** @description A usage entry. */
+            hours?: number | null;
+            cycles?: number | null;
+            /** Format: date-time */
+            used_at?: string | null;
+            detailing_booking_id?: string | null;
+            note?: string | null;
+            /**
+             * @description A service entry.
+             * @enum {string}
+             */
+            kind?: "preventive" | "repair" | "inspection" | "calibration" | "part_replacement";
+            /** Format: date-time */
+            performed_at?: string | null;
+            performed_by?: string | null;
+            cost_cents?: number;
+            downtime_hours?: number | null;
+            parts?: string | null;
+            notes?: string | null;
+            resets_service?: boolean;
+            /** @description Parts the service took from the branch's store. */
+            issued_parts?: {
+                item_id: string;
+                quantity: number;
+            }[];
+            /** @description A package's equipment profile: the whole list. */
+            lines?: {
+                equipment_id: string;
+                hours_per_job: number;
             }[];
         };
         /** FleetPartCollection */
@@ -3880,6 +5309,20 @@ export interface components {
                     last_heartbeat_at: string | null;
                 };
             };
+        };
+        /**
+         * InspectionPhotoRequest
+         * @description A before or after photo: an image, stored like any document (10 MB).
+         */
+        InspectionPhotoRequest: {
+            /**
+             * Format: binary
+             * @description Maximum file size: 10240 kilobytes.
+             */
+            file: string;
+            /** @enum {string} */
+            phase: "before" | "after";
+            caption?: string | null;
         };
         /** InvitationCollection */
         InvitationCollection: components["schemas"]["InvitationResource"][];
@@ -4024,7 +5467,7 @@ export interface components {
             period_closed: boolean;
             event: string;
             /** @enum {string} */
-            event_label: "Invoice issued" | "Invoice voided" | "Payment received" | "Payment voided" | "Credit applied to an invoice" | "Credit application reversed" | "Opening stock" | "Goods received" | "Goods receipt voided" | "Parts issued to a job" | "Parts returned from a job" | "Stock consumed" | "Stock adjustment" | "Stock transfer";
+            event_label: "Invoice issued" | "Invoice voided" | "Payment received" | "Payment voided" | "Credit applied to an invoice" | "Credit application reversed" | "Opening stock" | "Goods received" | "Goods receipt voided" | "Parts issued to a job" | "Parts returned from a job" | "Stock consumed" | "Stock adjustment" | "Stock transfer" | "Parts used on equipment" | "Parts returned from equipment";
             is_reversal: boolean;
             source_type: string;
             source_id: string;
@@ -4193,6 +5636,33 @@ export interface components {
             can_void: string;
             created_at: string;
         };
+        /**
+         * PublicBookingRequest
+         * @description A booking request from a branch's public page. The customer says who they
+         *     are, what they drive, which package and size, and when; and ticks the
+         *     consent to keep their service records, without which no account is opened.
+         *     `captcha_token` is checked when the server has a captcha configured.
+         */
+        PublicBookingRequest: {
+            package_id: string;
+            size_class: components["schemas"]["SizeClass"];
+            /** Format: date */
+            date: string;
+            start_time: string;
+            first_name: string;
+            last_name: string;
+            /** Format: email */
+            email: string;
+            phone: string;
+            vehicle_make: string;
+            vehicle_model: string;
+            vehicle_year?: number | null;
+            plate_number?: string | null;
+            notes?: string | null;
+            /** @enum {unknown} */
+            consent_service_records: "yes" | "on" | "1" | 1 | "true" | true;
+            captcha_token?: string | null;
+        };
         /** PurchaseOrderCollection */
         PurchaseOrderCollection: components["schemas"]["PurchaseOrderResource"][];
         /** PurchaseOrderResource */
@@ -4259,6 +5729,32 @@ export interface components {
             /** Format: date-time */
             captured_at?: string | null;
         };
+        /**
+         * RecordInspectionRequest
+         * @description A vehicle's inspection at a stage of the booking. A damage point is a place
+         *     on the top-down outline, in thousandths of its width (x) and length (y).
+         */
+        RecordInspectionRequest: {
+            /** @enum {string} */
+            stage: "check_in" | "check_out";
+            overall_rating: number;
+            exterior_rating?: number | null;
+            interior_rating?: number | null;
+            /** @enum {string|null} */
+            exterior_condition?: "excellent" | "good" | "fair" | "poor" | null;
+            /** @enum {string|null} */
+            interior_condition?: "excellent" | "good" | "fair" | "poor" | null;
+            mileage?: number | null;
+            confirm_mileage?: boolean;
+            notes?: string | null;
+            damage_points?: {
+                x_permille: number;
+                y_permille: number;
+                /** @enum {string|null} */
+                kind?: "scratch" | "dent" | "chip" | "crack" | "stain" | "other" | null;
+                note: string;
+            }[];
+        };
         /** RecordOpeningStockRequest */
         RecordOpeningStockRequest: {
             location_id: string;
@@ -4299,6 +5795,31 @@ export interface components {
             confirm_warning?: boolean;
             /** @enum {string} */
             source?: "manual";
+        };
+        /**
+         * RecurringScheduleRequest
+         * @description A customer's standing weekly slot. `day_of_week` is 0 (Sunday) to 6 (Saturday).
+         */
+        RecurringScheduleRequest: {
+            branch_id?: string | null;
+            customer_account_id: string;
+            package_id: string;
+            size_class: components["schemas"]["SizeClass"];
+            vehicle_id?: string | null;
+            day_of_week: number;
+            start_time: string;
+            is_active?: boolean;
+            notes?: string | null;
+        };
+        /**
+         * ReorderRequest
+         * @description The order a branch's packages, categories or add-ons are listed in.
+         */
+        ReorderRequest: {
+            branch_id?: string | null;
+            /** @enum {string} */
+            kind: "packages" | "categories" | "addons";
+            ids: string[];
         };
         /** ResetPasswordRequest */
         ResetPasswordRequest: {
@@ -4342,6 +5863,17 @@ export interface components {
             normal_side?: "debit" | "credit";
             description?: string | null;
             is_active?: boolean;
+        };
+        /** SaveAddonRequest */
+        SaveAddonRequest: {
+            branch_id?: string | null;
+            name: string;
+            is_active?: boolean;
+            position?: number | null;
+            prices: {
+                size_class: components["schemas"]["SizeClass"];
+                price_cents: number;
+            }[];
         };
         /**
          * SaveApprovalSettingsRequest
@@ -4408,6 +5940,14 @@ export interface components {
             brand_color?: string | null;
             theme_tokens?: string[] | null;
         };
+        /** SaveCategoryRequest */
+        SaveCategoryRequest: {
+            branch_id?: string | null;
+            name: string;
+            slug?: string | null;
+            color?: string | null;
+            position?: number | null;
+        };
         /** SaveContactRequest */
         SaveContactRequest: {
             name: string;
@@ -4464,6 +6004,42 @@ export interface components {
             /** Format: uri */
             logo_url?: string | null;
             brand_color?: string | null;
+        };
+        /**
+         * SaveEquipmentRequest
+         * @description A tool of the register. On an edit only what is sent changes; a nullable
+         *     field sent as null is cleared. Hours are decimals to three places.
+         */
+        SaveEquipmentRequest: {
+            branch_id?: string | null;
+            name: string;
+            /** @enum {string} */
+            category?: "wash" | "polishing" | "interior" | "coating" | "air" | "measurement" | "facility" | "cafe" | "other";
+            brand?: string | null;
+            model?: string | null;
+            serial_number?: string | null;
+            bay_id?: string | null;
+            /** @enum {string} */
+            status?: "available" | "in_use" | "maintenance" | "repair" | "retired";
+            /** @enum {string} */
+            condition_rating?: "excellent" | "good" | "fair" | "poor";
+            /** Format: date */
+            purchase_date?: string | null;
+            purchase_cost_cents?: number;
+            /** Format: date */
+            warranty_until?: string | null;
+            expected_life_hours?: number | null;
+            /** @enum {string} */
+            meter_type?: "hours" | "cycles" | "cups" | "days";
+            baseline_hours?: number;
+            baseline_cycles?: number;
+            service_interval_hours?: number | null;
+            service_interval_cycles?: number | null;
+            service_interval_days?: number | null;
+            maintenance_task?: string | null;
+            notes?: string | null;
+            is_active?: boolean;
+            position?: number;
         };
         /** SaveExportMappingsRequest */
         SaveExportMappingsRequest: {
@@ -4550,6 +6126,35 @@ export interface components {
             is_active?: boolean;
             preferred_vendor_id?: string | null;
         };
+        /**
+         * SavePackageRequest
+         * @description A package with its price per size class and, optionally, its bill of materials (the whole list).
+         */
+        SavePackageRequest: {
+            branch_id?: string | null;
+            name: string;
+            description?: string | null;
+            category_id?: string | null;
+            duration_text: string;
+            inclusions?: string[];
+            is_popular?: boolean;
+            min_detailers?: number;
+            recommended_detailers?: number;
+            /** @enum {string} */
+            applies_to?: "all" | "four_wheel" | "motorcycle";
+            is_active?: boolean;
+            position?: number | null;
+            prices: {
+                size_class: components["schemas"]["SizeClass"];
+                price_cents: number;
+                duration_text?: string | null;
+            }[];
+            materials?: {
+                item_id: string;
+                quantity: number;
+                scales_with_size?: boolean;
+            }[] | null;
+        };
         /** SaveServiceTaskRequest */
         SaveServiceTaskRequest: {
             code: string;
@@ -4563,6 +6168,22 @@ export interface components {
             critical?: boolean;
             is_active?: boolean;
             position?: number;
+        };
+        /** SaveSettingsRequest */
+        SaveSettingsRequest: {
+            branch_id?: string | null;
+            detailer_pool_size?: number;
+            default_detailers_per_booking?: number;
+            closing_time?: string;
+            public_booking_enabled?: boolean;
+            public_booking_notice?: string | null;
+            inspection_required?: boolean;
+            size_multipliers?: {
+                small?: number;
+                medium?: number;
+                large?: number;
+                xl?: number;
+            };
         };
         /** SaveShopOrderRequest */
         SaveShopOrderRequest: {
@@ -4720,6 +6341,17 @@ export interface components {
             created_at: string;
             updated_at: string;
         };
+        /** SignOffRequest */
+        SignOffRequest: {
+            passed: boolean;
+            notes?: string | null;
+        };
+        /**
+         * SizeClass
+         * @description A vehicle's size bucket (the source's `cars.size`); packages and add-ons are priced per bucket.
+         * @enum {string}
+         */
+        SizeClass: "small" | "medium" | "large" | "xl";
         /** StockBalanceCollection */
         StockBalanceCollection: components["schemas"]["StockBalanceResource"][];
         /** StockBalanceResource */
@@ -4819,9 +6451,18 @@ export interface components {
         /**
          * StockSource
          * @description What produced a stock move.
+         *     | |
+         *     |---|
+         *     | `manual` <br/>  |
+         *     | `goods_receipt` <br/>  |
+         *     | `work_order_line` <br/>  |
+         *     | `stock_count` <br/>  |
+         *     | `stock_transfer` <br/>  |
+         *     | `detailing_booking` <br/> A detailing job's package materials, consumed when it completed (Phase 9). |
+         *     | `equipment_maintenance` <br/> Parts a tool's service entry took from stock (Phase 10). |
          * @enum {string}
          */
-        StockSource: "manual" | "goods_receipt" | "work_order_line" | "stock_count" | "stock_transfer";
+        StockSource: "manual" | "goods_receipt" | "work_order_line" | "stock_count" | "stock_transfer" | "detailing_booking" | "equipment_maintenance";
         /** StockTransferCollection */
         StockTransferCollection: components["schemas"]["StockTransferResource"][];
         /** StockTransferResource */
@@ -4854,6 +6495,38 @@ export interface components {
             branch_ids?: string[];
         };
         /**
+         * TakeBookingRequest
+         * @description Take a booking for one of the shop's customers. The plan, the price and the
+         *     heads are the API's: the request says who, what, which size, and when.
+         */
+        TakeBookingRequest: {
+            branch_id?: string | null;
+            customer_account_id: string;
+            vehicle_id?: string | null;
+            vehicle_label?: string | null;
+            package_id: string;
+            size_class: components["schemas"]["SizeClass"];
+            /** Format: date */
+            date: string;
+            start_time: string;
+            detailers_count?: number | null;
+            detailer_ids?: string[];
+            bay_id?: string | null;
+            /** @enum {string} */
+            status?: "pending" | "confirmed";
+            notes?: string | null;
+            customer_name?: string | null;
+            /** Format: email */
+            customer_email?: string | null;
+            customer_phone?: string | null;
+            addons?: {
+                addon_id?: string | null;
+                name?: string | null;
+                quantity?: number | null;
+                unit_price_cents?: number | null;
+            }[];
+        };
+        /**
          * TaxClass
          * @description How an item is taxed (carried for invoicing; Phase 3 billing applies one VAT rate to the order).
          * @enum {string}
@@ -4874,6 +6547,11 @@ export interface components {
             created_at: string;
             updated_at: string;
         };
+        /** TickChecklistRequest */
+        TickChecklistRequest: {
+            index: number;
+            done: boolean;
+        };
         /** TransferStockRequest */
         TransferStockRequest: {
             from_location_id: string;
@@ -4889,6 +6567,20 @@ export interface components {
             customer_account_id: string;
             /** Format: date */
             effective_on?: string | null;
+        };
+        /**
+         * UpdateBookingRequest
+         * @description A booking's bay, notes, contact details and vehicle: only what is sent changes.
+         */
+        UpdateBookingRequest: {
+            bay_id?: string | null;
+            vehicle_id?: string | null;
+            vehicle_label?: string | null;
+            notes?: string | null;
+            customer_name?: string | null;
+            /** Format: email */
+            customer_email?: string | null;
+            customer_phone?: string | null;
         };
         /** UpdateOrganizationRequest */
         UpdateOrganizationRequest: {
@@ -6965,6 +8657,1515 @@ export interface operations {
             422: components["responses"]["Error.validation"];
         };
     };
+    "detailing.schedule": {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                date?: string | null;
+                from?: string | null;
+                to?: string | null;
+                package_id?: string | null;
+                size_class?: components["schemas"]["SizeClass"];
+                start_time?: string;
+                except_booking_id?: string | null;
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            branch_id: string;
+                            from: string;
+                            to: unknown;
+                            pool: number;
+                            closing_minutes: number;
+                            grid: unknown[];
+                            days: {
+                                date: string;
+                                slots: unknown[];
+                            }[];
+                            bays: unknown[];
+                            detailers: unknown[];
+                            blocked: unknown[];
+                            bookings: unknown[];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.monitor": {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                date?: string | null;
+                from?: string | null;
+                to?: string | null;
+                package_id?: string | null;
+                size_class?: components["schemas"]["SizeClass"];
+                start_time?: string;
+                except_booking_id?: string | null;
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            branch_id: string;
+                            date: string;
+                            generated_at: string;
+                            counts: {
+                                upcoming: number;
+                                in_progress: number;
+                                done: number;
+                            };
+                            jobs: {
+                                id: string;
+                                reference: string;
+                                status: string;
+                                /** @enum {string} */
+                                stage: "in_progress" | "done" | "upcoming";
+                                customer_name: string;
+                                vehicle_label: string | null;
+                                size_class: string;
+                                package_name: string;
+                                bay_name: string | null;
+                                detailers: unknown[];
+                                detailers_count: number;
+                                /** @description Where it sits on THIS day (a continuation day starts at opening), for sorting and the clock. */
+                                start_minutes: string | number;
+                                start_label: string;
+                                continues_from: string | null;
+                                finish: {
+                                    date: string;
+                                    minutes: number;
+                                    label: string;
+                                    actual: boolean;
+                                } | {
+                                    date: null;
+                                    minutes: null;
+                                    label: null;
+                                    actual: boolean;
+                                };
+                                started_at: string | null;
+                                completed_at: string | null;
+                                checklist: {
+                                    done: number;
+                                    total: number;
+                                };
+                                qc_status: string | null;
+                            }[];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.availability": {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                date?: string | null;
+                from?: string | null;
+                to?: string | null;
+                package_id?: string | null;
+                size_class?: components["schemas"]["SizeClass"];
+                start_time?: string;
+                except_booking_id?: string | null;
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            date: string;
+                            package_id: string;
+                            size_class: string;
+                            duration_text: string;
+                            slot_budget: number;
+                            min_detailers: number;
+                            pool: number;
+                            closing_minutes: number;
+                            starts: ({
+                                start_minutes: string | unknown;
+                                time: string | unknown;
+                                label: string | unknown;
+                                slot: number | unknown;
+                                spans_days: string;
+                                plan: unknown[];
+                                ends: {
+                                    date: string;
+                                    minutes: string;
+                                    label: string;
+                                } | null;
+                                busy_detailer_ids: unknown[];
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.realtime": {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                date?: string | null;
+                from?: string | null;
+                to?: string | null;
+                package_id?: string | null;
+                size_class?: components["schemas"]["SizeClass"];
+                start_time?: string;
+                except_booking_id?: string | null;
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "broadcasting.auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    socket_id?: string;
+                    channel_name?: string;
+                };
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        auth: string;
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "detailing.bookings.index": {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                cursor?: string;
+                branch_id?: string | null;
+                "status[]"?: components["schemas"]["BookingStatus"][];
+                date_from?: string | null;
+                date_to?: string | null;
+                customer_account_id?: string | null;
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated set of `DetailingBookingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingBookingCollection"];
+                        meta: {
+                            summary: {
+                                total: number;
+                                by_status: string;
+                                today: {
+                                    date: string;
+                                    bookings: number;
+                                    on_the_floor: number;
+                                    pending: number;
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.bookings.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakeBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingBookingResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingBookingResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.bookings.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `DetailingBookingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingBookingResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "detailing.bookings.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UpdateBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingBookingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingBookingResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.bookings.status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeBookingStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingBookingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingBookingResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.bookings.detailers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignDetailersRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingBookingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingBookingResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.bookings.addons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingAddonsRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingBookingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingBookingResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.bookings.checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TickChecklistRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingBookingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingBookingResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.bookings.sign-off": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignOffRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingBookingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingBookingResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.bookings.inspections.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "detailing.bookings.inspections.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordInspectionRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingInspectionResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingInspectionResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.bookings.inspections.photos.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+                /** @description The inspection ID */
+                inspection: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["InspectionPhotoRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingInspectionResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingInspectionResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.bookings.inspections.photos.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+                /** @description The inspection ID */
+                inspection: string;
+                /** @description The photo ID */
+                photo: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "detailing.bookings.invoice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `InvoiceResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["InvoiceResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "detailing.bookings.checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing booking ID */
+                detailingBooking: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            booking: unknown[];
+                            invoice: unknown[];
+                            payment: unknown[] | null;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.catalogue": {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                date?: string | null;
+                from?: string | null;
+                to?: string | null;
+                package_id?: string | null;
+                size_class?: components["schemas"]["SizeClass"];
+                start_time?: string;
+                except_booking_id?: string | null;
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            branch_id: string;
+                            categories: unknown[];
+                            packages: unknown[];
+                            addons: unknown[];
+                            detailers: unknown[];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.duration": {
+        parameters: {
+            query?: {
+                text?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "detailing.catalogue.reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.packages.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePackageRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingPackageResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingPackageResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.packages.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing package ID */
+                detailingPackage: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePackageRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingPackageResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingPackageResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.packages.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing package ID */
+                detailingPackage: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "detailing.categories.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingCategoryResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingCategoryResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.categories.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing category ID */
+                detailingCategory: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingCategoryResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingCategoryResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.categories.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing category ID */
+                detailingCategory: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "detailing.addons.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAddonRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingAddonResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingAddonResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.addons.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing addon ID */
+                detailingAddon: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAddonRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingAddonResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingAddonResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.addons.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing addon ID */
+                detailingAddon: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "detailing.settings.show": {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                date?: string | null;
+                from?: string | null;
+                to?: string | null;
+                package_id?: string | null;
+                size_class?: components["schemas"]["SizeClass"];
+                start_time?: string;
+                except_booking_id?: string | null;
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `DetailingSettingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingSettingResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.settings.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SaveSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description `DetailingSettingResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["DetailingSettingResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.blocked-slots.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlockSlotsRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.blocked-slots.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The blocked slot ID */
+                blockedSlot: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "detailing.display-tokens.index": {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                date?: string | null;
+                from?: string | null;
+                to?: string | null;
+                package_id?: string | null;
+                size_class?: components["schemas"]["SizeClass"];
+                start_time?: string;
+                except_booking_id?: string | null;
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.display-tokens.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisplayTokenRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.display-tokens.revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The display token ID */
+                displayToken: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            branch_id: string;
+                            name: string;
+                            token_hint: string;
+                            is_active: boolean;
+                            last_used_at: string | null;
+                            revoked_at: string | null;
+                            revoked_by_name: string | null;
+                            created_by_name: string;
+                            created_at: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "detailing.recurring.index": {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                date?: string | null;
+                from?: string | null;
+                to?: string | null;
+                package_id?: string | null;
+                size_class?: components["schemas"]["SizeClass"];
+                start_time?: string;
+                except_booking_id?: string | null;
+                include_inactive?: boolean;
+                customer_account_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.recurring.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecurringScheduleRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            branch_id: string;
+                            customer_account_id: string;
+                            customer_name: string;
+                            vehicle_id: string | null;
+                            vehicle_label: string | null;
+                            package_id: string;
+                            package_name: string;
+                            size_class: string;
+                            day_of_week: number;
+                            day_label: string;
+                            start_minutes: number;
+                            start_time: string;
+                            start_label: string;
+                            is_active: boolean;
+                            notes: string | null;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.recurring.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The recurring schedule ID */
+                recurringSchedule: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecurringScheduleRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            branch_id: string;
+                            customer_account_id: string;
+                            customer_name: string;
+                            vehicle_id: string | null;
+                            vehicle_label: string | null;
+                            package_id: string;
+                            package_name: string;
+                            size_class: string;
+                            day_of_week: number;
+                            day_label: string;
+                            start_minutes: number;
+                            start_time: string;
+                            start_label: string;
+                            is_active: boolean;
+                            notes: string | null;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "detailing.recurring.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The recurring schedule ID */
+                recurringSchedule: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "display.detailing.monitor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: string;
+                    };
+                };
+            };
+        };
+    };
+    "display.broadcasting.auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    socket_id?: string;
+                    channel_name?: string;
+                };
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        auth: string;
+                    };
+                };
+            };
+        };
+    };
     "documents.summary": {
         parameters: {
             query?: {
@@ -7183,6 +10384,527 @@ export interface operations {
                     "application/json": Record<string, never>;
                 };
             };
+        };
+    };
+    "equipment.index": {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                status?: "available" | "in_use" | "maintenance" | "repair" | "retired";
+                /** @description A usage entry. */
+                hours?: number | null;
+                cycles?: number | null;
+                used_at?: string | null;
+                detailing_booking_id?: string | null;
+                note?: string | null;
+                /** @description A service entry. */
+                kind?: "preventive" | "repair" | "inspection" | "calibration" | "part_replacement";
+                performed_at?: string | null;
+                performed_by?: string | null;
+                cost_cents?: number;
+                downtime_hours?: number | null;
+                parts?: string | null;
+                notes?: string | null;
+                resets_service?: boolean;
+                issued_parts?: {
+                    item_id: string;
+                    quantity: number;
+                }[];
+                lines?: {
+                    equipment_id: string;
+                    hours_per_job: number;
+                }[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            branch_id: string;
+                            summary: {
+                                total: number;
+                                active: number;
+                                overdue: number;
+                                due_soon: number;
+                                down: number;
+                                replace_watch: number;
+                                untracked: number;
+                                asset_value_cents: number;
+                                maintenance_spend_cents: number;
+                                avg_health: number | null;
+                            };
+                            tools: unknown[];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "equipment.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveEquipmentRequest"];
+            };
+        };
+        responses: {
+            /** @description `EquipmentResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EquipmentResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "equipment.options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            categories: unknown[];
+                            statuses: unknown[];
+                            conditions: unknown[];
+                            meter_types: unknown[];
+                            maintenance_kinds: unknown[];
+                            category_presets: {
+                                wash: {
+                                    /** @constant */
+                                    meter_type: "hours";
+                                    /** @constant */
+                                    service_interval_hours: "200";
+                                    /** @constant */
+                                    expected_life_hours: "2000";
+                                    /** @constant */
+                                    maintenance_task: "Inspect seals, filters, nozzles";
+                                };
+                                polishing: {
+                                    /** @constant */
+                                    meter_type: "hours";
+                                    /** @constant */
+                                    service_interval_hours: "180";
+                                    /** @constant */
+                                    expected_life_hours: "1500";
+                                    /** @constant */
+                                    maintenance_task: "Backing plate + bearing / brush inspection";
+                                };
+                                interior: {
+                                    /** @constant */
+                                    meter_type: "hours";
+                                    /** @constant */
+                                    service_interval_hours: "100";
+                                    /** @constant */
+                                    expected_life_hours: "2500";
+                                    /** @constant */
+                                    maintenance_task: "Clean / replace filters, descale";
+                                };
+                                coating: {
+                                    /** @constant */
+                                    meter_type: "hours";
+                                    /** @constant */
+                                    service_interval_hours: "500";
+                                    /** @constant */
+                                    expected_life_hours: "1800";
+                                    /** @constant */
+                                    maintenance_task: "Emitter / element + nozzle inspection";
+                                };
+                                air: {
+                                    /** @constant */
+                                    meter_type: "hours";
+                                    /** @constant */
+                                    service_interval_hours: "500";
+                                    /** @constant */
+                                    expected_life_hours: "8000";
+                                    /** @constant */
+                                    maintenance_task: "Oil change, drain tank, replace air filter";
+                                };
+                                measurement: {
+                                    /** @constant */
+                                    meter_type: "days";
+                                    /** @constant */
+                                    service_interval_days: 365;
+                                    /** @constant */
+                                    maintenance_task: "Annual factory calibration";
+                                };
+                                facility: {
+                                    /** @constant */
+                                    meter_type: "days";
+                                    /** @constant */
+                                    service_interval_days: 180;
+                                    /** @constant */
+                                    maintenance_task: "Safety + wear inspection";
+                                };
+                                cafe: {
+                                    /** @constant */
+                                    meter_type: "cups";
+                                    /** @constant */
+                                    service_interval_cycles: 5000;
+                                    /** @constant */
+                                    maintenance_task: "Descale and backflush";
+                                };
+                            };
+                            thresholds: {
+                                due_soon_ratio: number;
+                                /** @constant */
+                                forecast_window_days: 30;
+                                /** @constant */
+                                open_hours_per_day: 10;
+                            };
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "equipment.profiles.index": {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                status?: "available" | "in_use" | "maintenance" | "repair" | "retired";
+                /** @description A usage entry. */
+                hours?: number | null;
+                cycles?: number | null;
+                used_at?: string | null;
+                detailing_booking_id?: string | null;
+                note?: string | null;
+                /** @description A service entry. */
+                kind?: "preventive" | "repair" | "inspection" | "calibration" | "part_replacement";
+                performed_at?: string | null;
+                performed_by?: string | null;
+                cost_cents?: number;
+                downtime_hours?: number | null;
+                parts?: string | null;
+                notes?: string | null;
+                resets_service?: boolean;
+                issued_parts?: {
+                    item_id: string;
+                    quantity: number;
+                }[];
+                lines?: {
+                    equipment_id: string;
+                    hours_per_job: number;
+                }[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "equipment.profiles.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The detailing package ID */
+                detailingPackage: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EquipmentWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "equipment.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The equipment ID */
+                equipment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description `EquipmentResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EquipmentResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "equipment.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The equipment ID */
+                equipment: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveEquipmentRequest"];
+            };
+        };
+        responses: {
+            /** @description `EquipmentResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EquipmentResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "equipment.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The equipment ID */
+                equipment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "equipment.status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The equipment ID */
+                equipment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EquipmentWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description `EquipmentResource` */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EquipmentResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "equipment.usage-logs.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The equipment ID */
+                equipment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EquipmentWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description `EquipmentResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EquipmentResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "equipment.usage-logs.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The equipment ID */
+                equipment: string;
+                /** @description The usage log ID */
+                usageLog: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "equipment.maintenance-logs.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The equipment ID */
+                equipment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["EquipmentWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description `EquipmentResource` */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EquipmentResource"];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "equipment.maintenance-logs.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The equipment ID */
+                equipment: string;
+                /** @description The maintenance log ID */
+                maintenanceLog: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
         };
     };
     "fleet-parts.index": {
@@ -8010,7 +11732,7 @@ export interface operations {
                 from?: string;
                 to?: string;
                 account_id?: string;
-                event?: "invoice_issued" | "invoice_voided" | "payment_received" | "payment_voided" | "credit_applied" | "credit_reversed" | "stock_opening" | "stock_receipt" | "stock_receipt_return" | "stock_issue" | "stock_return" | "stock_consumption" | "stock_adjustment" | "stock_transfer";
+                event?: "invoice_issued" | "invoice_voided" | "payment_received" | "payment_voided" | "credit_applied" | "credit_reversed" | "stock_opening" | "stock_receipt" | "stock_receipt_return" | "stock_issue" | "stock_return" | "stock_consumption" | "stock_adjustment" | "stock_transfer" | "stock_maintenance" | "stock_maintenance_return";
                 branch_id?: string;
                 source_id?: string;
                 q?: string;
@@ -9095,6 +12817,122 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Error.unauthenticated"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "public.detailing.bookings.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            branch: {
+                                [key: string]: unknown;
+                            };
+                            booking: {
+                                [key: string]: unknown;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+    "public.detailing.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                branchSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: string;
+                    };
+                };
+            };
+        };
+    };
+    "public.detailing.availability": {
+        parameters: {
+            query?: {
+                branch_id?: string | null;
+                date?: string | null;
+                from?: string | null;
+                to?: string | null;
+                package_id?: string | null;
+                size_class?: components["schemas"]["SizeClass"];
+                start_time?: string;
+                except_booking_id?: string | null;
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path: {
+                branchSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: string;
+                    };
+                };
+            };
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "public.detailing.bookings.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                branchSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicBookingRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: string;
+                    };
+                };
+            };
             422: components["responses"]["Error.validation"];
         };
     };
