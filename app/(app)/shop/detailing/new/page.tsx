@@ -6,6 +6,7 @@ import { CalendarPlus, Info } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { DeniedAction } from "@/components/auth/denied-action";
 import { formatDay } from "@/components/detailing/booking-status";
+import { CustomerBenefitsNote } from "@/components/crm/customer-benefits";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -143,6 +144,7 @@ export default function NewDetailingBookingPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-2xs text-subtle-foreground">A walk-in is registered under Check in / out first.</p>
+                {accountId ? <CustomerBenefitsNote accountId={accountId} /> : null}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="vehicle">Vehicle</Label>

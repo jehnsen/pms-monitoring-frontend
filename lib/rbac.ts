@@ -41,7 +41,8 @@ export const ROLE_DESCRIPTION: Record<UserRole, string> = {
     "Works assigned jobs across all clients: records findings and parts, and closes jobs. Cannot approve spend.",
   branch_manager:
     "Runs the branches they are pinned to: everything the provider admin can do there except organization settings.",
-  cashier: "Front counter: registers customers and looks up stock. No access to jobs or spend.",
+  cashier:
+    "Front counter: registers customers, takes detailing bookings, invoices and takes payment, sells prepaid packages and looks up stock. Cannot raise or approve repair work.",
   fleet_manager:
     "Full control of their own fleet: schedules, work orders, documents, and settings. Unlimited approval authority within that one client. Cannot view or add users — only the provider admin manages accounts.",
   operations:
@@ -97,6 +98,9 @@ export const ALL_CAPABILITIES: Capability[] = [
   "detailing:manage",
   "equipment:view",
   "equipment:manage",
+  "crm:view",
+  "crm:work",
+  "crm:manage",
 ];
 
 /** The API's labels (`Capability::label()`). */
@@ -128,6 +132,9 @@ export const CAPABILITY_LABEL: Record<Capability, string> = {
   "detailing:manage": "Manage detailing packages and settings",
   "equipment:view": "View the equipment monitor",
   "equipment:manage": "Manage equipment and its service history",
+  "crm:view": "See customer records, tasks and the pipeline",
+  "crm:work": "Keep notes and tasks, work leads, sell packages",
+  "crm:manage": "Set up reminders, templates, tiers and campaigns",
 };
 
 /**
@@ -178,8 +185,10 @@ export const ROLE_CAPABILITIES: Record<UserRole, Capability[]> = {
     "detailing:work",
     "detailing:qc",
     "equipment:view",
+    "crm:view",
+    "crm:work",
   ],
-  cashier: ["customer:manage", "inventory:view", "billing:view", "billing:manage", "detailing:view", "detailing:book", "equipment:view"],
+  cashier: ["customer:manage", "inventory:view", "billing:view", "billing:manage", "detailing:view", "detailing:book", "equipment:view", "crm:view", "crm:work"],
   branch_manager: ALL_CAPABILITIES.filter((c) => c !== "organization:manage" && c !== "ledger:manage"),
   provider_admin: [...ALL_CAPABILITIES],
 };

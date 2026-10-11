@@ -37,6 +37,7 @@ import {
   Warehouse,
   Wrench,
   type LucideIcon,
+  Users,
 } from "lucide-react";
 import type { ModuleKey, UserRole, UserSide } from "@/types";
 
@@ -288,6 +289,60 @@ export const PROVIDER_NAV_SECTIONS: NavSection[] = [
         label: "Service profiles",
         icon: Cog,
         description: "Which packages put hours on which tools",
+      },
+    ],
+  },
+  {
+    label: "CRM",
+    module: "crm",
+    items: [
+      {
+        href: "/shop/crm",
+        label: "Customers",
+        icon: Users,
+        description: "Every customer, whole: jobs, bills, bookings, notes",
+      },
+      {
+        href: "/shop/crm/tasks",
+        label: "Tasks",
+        icon: ListChecks,
+        description: "Follow-ups, call-backs and booking requests",
+      },
+      {
+        href: "/shop/crm/pipeline",
+        label: "Pipeline",
+        icon: LineChart,
+        description: "B2B leads by stage, to a won account",
+      },
+      {
+        href: "/shop/crm/memberships",
+        label: "Memberships & packages",
+        icon: PiggyBank,
+        description: "Tiers, prepaid plans and packages sold",
+      },
+      {
+        href: "/shop/crm/reminders",
+        label: "Reminder rules",
+        icon: CalendarCheck,
+        description: "What is sent, when, and the quiet hours",
+      },
+      {
+        href: "/shop/crm/templates",
+        label: "Templates",
+        icon: FileText,
+        description: "The wording of every message",
+      },
+      {
+        href: "/shop/crm/messages",
+        label: "Message log",
+        icon: ScrollText,
+        description: "Sent, held and skipped, with the reason",
+      },
+      {
+        href: "/shop/crm/campaigns",
+        label: "Segments & campaigns",
+        icon: Scale,
+        description: "Groups of customers and what is sent to them",
       },
     ],
   },

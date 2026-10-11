@@ -177,12 +177,16 @@ export const toBooking = (raw: Raw): DetailingBooking => ({
         balance: pesos(raw.invoice.balance_cents),
       }
     : null,
+  prepaid: raw.prepaid
+    ? { packageId: raw.prepaid.package_id, reference: raw.prepaid.reference, planName: raw.prepaid.plan_name, amount: (raw.prepaid.amount_cents ?? 0) / 100, redeemedOn: raw.prepaid.redeemed_on }
+    : null,
   next: {
     needsInspection: Boolean(raw.next?.needs_inspection),
     canSignOff: Boolean(raw.next?.can_sign_off),
     signOffBlockedReason: raw.next?.sign_off_blocked_reason ?? null,
     canInvoice: Boolean(raw.next?.can_invoice),
     canCheckOut: Boolean(raw.next?.can_check_out),
+    canRedeem: Boolean(raw.next?.can_redeem),
     lockedByInvoice: Boolean(raw.next?.locked_by_invoice),
   },
   statusLog: (raw.status_log ?? []).map((log: Raw) => ({

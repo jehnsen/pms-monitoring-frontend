@@ -626,6 +626,849 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/crm/segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List segments
+         * @description `crm:view`. Each with how many customers it holds right now.
+         */
+        get: operations["crm.segments.index"];
+        put?: never;
+        /**
+         * Add a segment
+         * @description `crm:manage`. Conditions on spend, last visit, vehicle make and size, tier, branch, account type and tag.
+         */
+        post: operations["crm.segments.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/segments/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Who a filter would match
+         * @description `crm:view`. For the segment form: the customers `filters` matches now, before it is saved.
+         */
+        post: operations["crm.segments.preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/segments/{segment}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A segment's customers
+         * @description `crm:view`. Worked out now from the segment's definition.
+         */
+        get: operations["crm.segments.members"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/segments/{segment}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a segment
+         * @description `crm:manage`. A campaign already sending keeps the audience it started with.
+         */
+        put: operations["crm.segments.update"];
+        post?: never;
+        /**
+         * Delete a segment
+         * @description `crm:manage`. Not one a campaign uses (409).
+         */
+        delete: operations["crm.segments.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List campaigns
+         * @description `crm:view`. Newest first, each with what became of its audience.
+         */
+        get: operations["crm.campaigns.index"];
+        put?: never;
+        /**
+         * Draft a campaign
+         * @description `crm:manage`. A segment, an active MARKETING template, and optionally
+         *     when to send and an hourly limit of its own.
+         */
+        post: operations["crm.campaigns.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/campaigns/{campaign}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show a campaign
+         * @description With its progress: sent, queued, failed, skipped (by reason), still to go.
+         */
+        get: operations["crm.campaigns.show"];
+        /**
+         * Edit a draft campaign
+         * @description `crm:manage`. Only a draft (409 otherwise).
+         */
+        put: operations["crm.campaigns.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/campaigns/{campaign}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Schedule or cancel a campaign
+         * @description `crm:manage`. `status`: `scheduled` (a draft goes out at `scheduled_at`,
+         *     or now), `draft` (back from scheduled), `cancelled`. Sending is done by
+         *     the scheduler, to customers with marketing consent only, within the
+         *     hourly limit; everyone else is logged as skipped.
+         */
+        post: operations["crm.campaigns.status"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The CRM's lists
+         * @description The staff a task or a lead can be given to, the pipeline's stages, and
+         *     the lists the forms offer.
+         */
+        get: operations["crm.options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/customers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List customers
+         * @description `crm:view`. Every customer account of the organization, by name, with
+         *     what the CRM knows of each: what they have paid, when they were last
+         *     served, their tier and their open tasks. `q` searches the name.
+         */
+        get: operations["crm.customers.index"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/customers/{customer_account}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Customer 360
+         * @description `crm:view`. Everything on record about one customer, in one read:
+         *     vehicles, jobs, invoices and balance, payments and bookings at EVERY
+         *     branch, consents, notes, tasks, messages, feedback, membership, prepaid
+         *     packages, points, and a timeline built from those records.
+         */
+        get: operations["crm.customers.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/customers/{customer_account}/benefits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A customer's benefits
+         * @description `crm:view`. What to tell the customer at the counter: the tier they
+         *     hold and what it gives, the prepaid packages they can still use, and
+         *     their points.
+         */
+        get: operations["crm.customers.benefits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/customers/{customer_account}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a note
+         * @description `crm:work`.
+         */
+        post: operations["crm.customers.notes.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/customers/{customer_account}/notes/{note}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a note
+         * @description `crm:work`. Its text, or whether it is pinned.
+         */
+        put: operations["crm.customers.notes.update"];
+        post?: never;
+        /**
+         * Remove a note
+         * @description `crm:work`.
+         */
+        delete: operations["crm.customers.notes.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/customers/{customer_account}/membership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Put a customer on a tier
+         * @description `crm:work`. Whatever membership they held ends as this one starts.
+         */
+        post: operations["crm.customers.membership.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/customers/{customer_account}/membership/{membership}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * End a membership
+         * @description `crm:work`.
+         */
+        delete: operations["crm.customers.membership.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/customers/{customer_account}/points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Spend or correct points
+         * @description `crm:work`. `points` is signed: negative for points the customer spent
+         *     (`redeemed`), either way for a correction (`adjusted`). A balance never
+         *     goes below zero (409).
+         */
+        post: operations["crm.customers.points.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/tiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List membership tiers
+         * @description `crm:view`. With how many customers hold each.
+         */
+        get: operations["crm.tiers.index"];
+        put?: never;
+        /**
+         * Add a tier
+         * @description `crm:manage`. A discount (0–100%), priority booking, and the detailing add-ons a member gets free.
+         */
+        post: operations["crm.tiers.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/tiers/{tier}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a tier
+         * @description `crm:manage`. Only what is sent changes.
+         */
+        put: operations["crm.tiers.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/prepaid-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List prepaid plans
+         * @description `crm:view`.
+         */
+        get: operations["crm.prepaid-plans.index"];
+        put?: never;
+        /**
+         * Add a prepaid plan
+         * @description `crm:manage`. So many credits for a price; a credit pays for one
+         *     detailing job (of `detailing_package_id`, or of any package when null).
+         */
+        post: operations["crm.prepaid-plans.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/prepaid-plans/{plan}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a prepaid plan
+         * @description `crm:manage`. Packages already sold keep what they were sold as.
+         */
+        put: operations["crm.prepaid-plans.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/prepaid-packages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List prepaid packages sold
+         * @description `crm:view`. Newest first; `customer_account_id` for one customer's.
+         *     `summary.unearned_cents` is what is still owed as service across them
+         *     all: what Unearned Revenue should hold for prepaid packages.
+         */
+        get: operations["crm.prepaid-packages.index"];
+        put?: never;
+        /**
+         * Sell a prepaid package
+         * @description `crm:work`. Numbered and booked in one transaction: Dr the cash-side
+         *     account of `payment_method` / Cr Unearned Revenue. `branch_id` is the
+         *     branch that took the money (the session's branch when not given).
+         *     Needs an `Idempotency-Key`.
+         */
+        post: operations["crm.prepaid-packages.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/prepaid-packages/{prepaid_package}/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem a prepaid credit
+         * @description `crm:work`. One credit of the package settles a finished, signed-off
+         *     detailing job of the same customer (`detailing_booking_id`), which then
+         *     cannot be invoiced. Books Dr Unearned Revenue / Cr Sales – Detailing
+         *     for the credit's share of the price. Refused with 409 and a `reason`
+         *     (`not_billable`, `wrong_package`, `no_credits`, `expired`,
+         *     `already_settled`). Needs an `Idempotency-Key`.
+         */
+        post: operations["crm.prepaid-packages.redeem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * CRM settings
+         * @description Quiet hours (minutes of the Manila day), the reminder cooldown, when a
+         *     customer counts as lapsed, the campaign hourly limit, and whether
+         *     feedback and loyalty points are on.
+         */
+        get: operations["crm.settings.show"];
+        /**
+         * Change CRM settings
+         * @description `crm:manage`. Only what is sent changes.
+         */
+        put: operations["crm.settings.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List templates
+         * @description `crm:view`. With the placeholders each uses, and the lists the form offers.
+         */
+        get: operations["crm.templates.index"];
+        put?: never;
+        /**
+         * Add a template
+         * @description `crm:manage`.
+         */
+        post: operations["crm.templates.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/templates/{template}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a template
+         * @description `crm:manage`. A template a rule or a campaign uses keeps its purpose (409).
+         */
+        put: operations["crm.templates.update"];
+        post?: never;
+        /**
+         * Delete a template
+         * @description `crm:manage`. Only one that was never used; switch a used one off instead (409).
+         */
+        delete: operations["crm.templates.destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/reminder-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reminder rules
+         * @description `crm:view`. The four kinds of service reminder, each with its rule
+         *     (`null` until one is set).
+         */
+        get: operations["crm.reminder-rules.index"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/reminder-rules/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set a reminder rule
+         * @description `crm:manage`. Whether this kind of reminder is sent, with which
+         *     service-reminder template, and (for documents) how many days ahead.
+         */
+        put: operations["crm.reminder-rules.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/reminders/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Build the reminders now
+         * @description `crm:manage`. The run the schedule makes every morning: candidates from
+         *     the maintenance engine, detailing repeat intervals, document expiries
+         *     and lapsed customers; each held to consent, opt-out, the cooldown and
+         *     quiet hours. Returns how many were queued and why the rest were not.
+         */
+        post: operations["crm.reminders.run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The message log
+         * @description `crm:view`. Everything sent, queued, failed and skipped, newest first.
+         *     `status`, `purpose`, `source_type` (+ `source_id`) and
+         *     `customer_account_id` narrow it. A skipped message says why
+         *     (`skip_reason`: `no_consent`, `opted_out`, `no_address`).
+         */
+        get: operations["crm.messages.index"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feedback
+         * @description `crm:view`. The organization's Net Promoter Score and the answers
+         *     behind it, newest first.
+         */
+        get: operations["crm.feedback.index"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List tasks
+         * @description `crm:view`. Open tasks first, the soonest due at the top. `status`
+         *     (`open`, `done`, `cancelled`, or `all`; default `open`), `mine` for the
+         *     caller's own, `customer_account_id` or `lead_id` for one subject's.
+         *     `summary` counts the open ones: overdue, due today, with a reminder due.
+         */
+        get: operations["crm.tasks.index"];
+        put?: never;
+        /**
+         * Add a task
+         * @description `crm:work`. About a customer or a lead; with an assignee, a due date and
+         *     a reminder time when wanted.
+         */
+        post: operations["crm.tasks.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/tasks/{task}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a task
+         * @description `crm:work`. Only what is sent changes; a reminder moved to a new time is due again.
+         */
+        put: operations["crm.tasks.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/tasks/{task}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish, cancel or re-open a task
+         * @description `crm:work`. `status`: `done`, `cancelled` or `open`.
+         */
+        post: operations["crm.tasks.status"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The pipeline board
+         * @description `crm:view`. Every lead, grouped by stage in board order, with each
+         *     stage's count and value, and the open pipeline's total.
+         */
+        get: operations["crm.leads.index"];
+        put?: never;
+        /**
+         * Add a lead
+         * @description `crm:work`. It starts in `new`, owned by whoever adds it unless an owner is named.
+         */
+        post: operations["crm.leads.store"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/leads/{lead}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show a lead
+         * @description With its tasks.
+         */
+        get: operations["crm.leads.show"];
+        /**
+         * Edit a lead
+         * @description `crm:work`. Its own fields; the stage moves through its own action. A won lead is closed to edits (409).
+         */
+        put: operations["crm.leads.update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/leads/{lead}/stage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a lead to another stage
+         * @description `crm:work`. Between the open stages freely; to `lost` with a
+         *     `lost_reason`; a lost lead may be re-opened. `won` is refused here (409
+         *     `convert_to_win`): a lead is won by converting it.
+         */
+        post: operations["crm.leads.stage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/leads/{lead}/convert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Win a lead: convert it to a customer account
+         * @description `crm:work`. Creates a company account with the terms and approval
+         *     overrides given, tagged `dealer` when the lead was one, and records the
+         *     customer's consent (`consent_channel` says how it was given;
+         *     `service_reminders` and `marketing` only when they agreed to them). The
+         *     lead becomes `won` and its tasks move to the account.
+         */
+        post: operations["crm.leads.convert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sanctum/csrf-cookie": {
         parameters: {
             query?: never;
@@ -2936,6 +3779,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/crm/reminders/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A reminder's booking link
+         * @description What the reminder was about and how to book: the branch's online
+         *     booking page (`booking.mode` = `online`), or a booking request the shop
+         *     calls back on (`request`).
+         */
+        get: operations["public.crm.reminders.show"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/crm/reminders/{token}/book": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask to be booked
+         * @description Leaves a booking request on the shop's task list, once per reminder.
+         *     `preferred_date` (today or later) and a `note` are optional.
+         */
+        post: operations["public.crm.reminders.book"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/crm/feedback/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A feedback link
+         * @description Whose feedback it is for, and whether it has been given.
+         */
+        get: operations["public.crm.feedback.show"];
+        put?: never;
+        /**
+         * Give feedback
+         * @description A `score` from 0 to 10 and an optional `comment`. Once: a second answer changes nothing.
+         */
+        post: operations["public.crm.feedback.answer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/crm/unsubscribe/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * An unsubscribe link
+         * @description Which shop and which kind of message; whether the address is already opted out.
+         */
+        get: operations["public.crm.unsubscribe.show"];
+        put?: never;
+        /**
+         * Unsubscribe
+         * @description Opts the address out of the channel and withdraws consent for that kind of message.
+         */
+        post: operations["public.crm.unsubscribe.confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/purchase-orders": {
         parameters: {
             query?: never;
@@ -4799,6 +5733,125 @@ export interface components {
             created_at: string;
             updated_at: string;
         };
+        /**
+         * CrmRequest
+         * @description Every CRM write and list filter. The CRM's forms are small and share their
+         *     field names (a `name`, a `body`, a `template_id`), so one request carries
+         *     them all: shape and type here (R3), what a route REQUIRES by its name, and
+         *     each route reads the part it needs through a typed accessor.
+         */
+        CrmRequest: {
+            name?: string;
+            body?: string;
+            notes?: string | null;
+            note?: string | null;
+            description?: string | null;
+            is_active?: boolean;
+            status?: string;
+            branch_id?: string | null;
+            customer_account_id?: string | null;
+            vehicle_id?: string | null;
+            template_id?: string;
+            q?: string | null;
+            mine?: boolean;
+            purpose?: components["schemas"]["MessagePurpose"];
+            /** @enum {string} */
+            source_type?: "reminder" | "campaign" | "feedback" | "task" | "manual";
+            source_id?: string;
+            per_page?: number;
+            page?: number;
+            pinned?: boolean;
+            title?: string;
+            details?: string | null;
+            /** @enum {string} */
+            kind?: "follow_up" | "call" | "booking_request" | "other";
+            lead_id?: string | null;
+            assignee_id?: string | null;
+            /** Format: date */
+            due_on?: string | null;
+            /** Format: date-time */
+            remind_at?: string | null;
+            company_name?: string;
+            contact_name?: string | null;
+            /** Format: email */
+            contact_email?: string | null;
+            contact_phone?: string | null;
+            value_cents?: number;
+            owner_id?: string | null;
+            next_step?: string | null;
+            /** Format: date */
+            next_step_on?: string | null;
+            source?: string | null;
+            is_dealer?: boolean;
+            stage?: components["schemas"]["LeadStage"];
+            lost_reason?: string | null;
+            /** @enum {string} */
+            consent_channel?: "in_person" | "paper_form" | "email" | "sms" | "phone";
+            payment_terms_days?: number;
+            credit_limit_cents?: number | null;
+            registered_name?: string | null;
+            tin?: string | null;
+            address?: string | null;
+            service_reminders?: boolean;
+            marketing?: boolean;
+            approval_overrides?: {
+                auto_approve_under_cents?: number | null;
+                ops_approval_under_cents?: number | null;
+                sla_hours?: number | null;
+                variance_threshold_pct?: number | null;
+                monthly_budget_cents?: number | null;
+            };
+            channel?: components["schemas"]["MessageChannel"];
+            subject?: string | null;
+            enabled?: boolean;
+            lead_days?: number | null;
+            quiet_start_minutes?: number;
+            quiet_end_minutes?: number;
+            reminder_cooldown_days?: number;
+            lapsed_after_days?: number;
+            campaign_hourly_limit?: number;
+            feedback_enabled?: boolean;
+            loyalty_enabled?: boolean;
+            loyalty_cents_per_point?: number;
+            discount_pct?: number;
+            priority_booking?: boolean;
+            free_addon_ids?: string[];
+            perks?: string | null;
+            position?: number;
+            tier_id?: string;
+            /** Format: date */
+            started_on?: string | null;
+            /** Format: date */
+            expires_on?: string | null;
+            price_cents?: number;
+            credits?: number;
+            detailing_package_id?: string | null;
+            valid_days?: number | null;
+            plan_id?: string;
+            payment_method?: components["schemas"]["PaymentMethod"];
+            payment_reference?: string | null;
+            detailing_booking_id?: string;
+            points?: number;
+            /** @enum {string} */
+            reason?: "redeemed" | "adjusted";
+            filters?: {
+                min_spend_cents?: number | null;
+                max_spend_cents?: number | null;
+                visited_within_days?: number | null;
+                not_visited_for_days?: number | null;
+                makes?: string[];
+                size_classes?: ("small" | "medium" | "large" | "xl")[];
+                tier_ids?: string[];
+                branch_ids?: string[];
+                /** @enum {string|null} */
+                account_type?: "company" | "individual" | null;
+                tags?: string[];
+            };
+            segment_id?: string;
+            /** Format: date-time */
+            scheduled_at?: string | null;
+            hourly_limit?: number | null;
+        };
         /** CustomerAccountCollection */
         CustomerAccountCollection: components["schemas"]["CustomerAccountResource"][];
         /** CustomerAccountResource */
@@ -4948,6 +6001,13 @@ export interface components {
                 total_due_cents: number | null;
                 balance_cents: number | null;
             } | null;
+            prepaid: {
+                package_id: string;
+                reference: string;
+                plan_name: string;
+                amount_cents: number;
+                redeemed_on: string;
+            } | null;
             /** @description What the job is waiting for; the API still checks each step when it is taken. */
             next: {
                 needs_inspection: string;
@@ -4956,7 +6016,9 @@ export interface components {
                 sign_off_blocked_reason: "A job is signed off by someone other than the detailer who worked it." | null;
                 can_invoice: string;
                 can_check_out: string;
-                locked_by_invoice: boolean;
+                /** @description A prepaid credit may settle it instead of an invoice (`POST /crm/prepaid-packages/{id}/redeem`). */
+                can_redeem: string;
+                locked_by_invoice: string;
             };
             status_log: unknown[] | null;
             created_by_name: string;
@@ -5467,7 +6529,7 @@ export interface components {
             period_closed: boolean;
             event: string;
             /** @enum {string} */
-            event_label: "Invoice issued" | "Invoice voided" | "Payment received" | "Payment voided" | "Credit applied to an invoice" | "Credit application reversed" | "Opening stock" | "Goods received" | "Goods receipt voided" | "Parts issued to a job" | "Parts returned from a job" | "Stock consumed" | "Stock adjustment" | "Stock transfer" | "Parts used on equipment" | "Parts returned from equipment";
+            event_label: "Invoice issued" | "Invoice voided" | "Payment received" | "Payment voided" | "Credit applied to an invoice" | "Credit application reversed" | "Opening stock" | "Goods received" | "Goods receipt voided" | "Parts issued to a job" | "Parts returned from a job" | "Stock consumed" | "Stock adjustment" | "Stock transfer" | "Parts used on equipment" | "Parts returned from equipment" | "Prepaid package sold" | "Prepaid credit redeemed";
             is_reversal: boolean;
             source_type: string;
             source_id: string;
@@ -5484,6 +6546,12 @@ export interface components {
             posted_at: string;
             lines: unknown[];
         };
+        /**
+         * LeadStage
+         * @description Where a B2B lead stands. The five open stages may be moved between freely (a deal goes backwards as well as forwards). `won` is reached only by converting the lead into a customer account, and is final. `lost` may be re-opened.
+         * @enum {string}
+         */
+        LeadStage: "new" | "contacted" | "site_visit" | "quote_sent" | "negotiating" | "won" | "lost";
         /** LedgerSettingsRequest */
         LedgerSettingsRequest: {
             /** @enum {string} */
@@ -5550,6 +6618,18 @@ export interface components {
                 theme_tokens: string | null;
             };
         };
+        /**
+         * MessageChannel
+         * @description How a message travels.
+         * @enum {string}
+         */
+        MessageChannel: "email" | "sms";
+        /**
+         * MessagePurpose
+         * @description Why a message is sent, which decides the consent it needs. A reminder or a feedback request is about the customer's own vehicle and service (`service_reminders`); a campaign is marketing (`marketing`); a transactional message (a receipt, a confirmation the customer asked for) needs none.
+         * @enum {string}
+         */
+        MessagePurpose: "service_reminder" | "marketing" | "feedback" | "transactional";
         /** MeterReadingCollection */
         MeterReadingCollection: components["schemas"]["MeterReadingResource"][];
         /** MeterReadingResource */
@@ -5610,6 +6690,12 @@ export interface components {
         PartsSource: "own_stock" | "supplier_provided" | "customer_supplied" | "shop_stock" | "purchased_for_job";
         /** PaymentCollection */
         PaymentCollection: components["schemas"]["PaymentResource"][];
+        /**
+         * PaymentMethod
+         * @description How a payment came in. Everything but cash carries a reference number.
+         * @enum {string}
+         */
+        PaymentMethod: "cash" | "gcash" | "maya" | "card" | "bank_transfer" | "check";
         /** PaymentResource */
         PaymentResource: {
             id: string;
@@ -8413,6 +9499,2570 @@ export interface operations {
             401: components["responses"]["Error.unauthenticated"];
             403: components["responses"]["Error.forbidden"];
             404: components["responses"]["Error.not_found"];
+        };
+    };
+    "crm.segments.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "crm.segments.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            description: string | null;
+                            filters: string;
+                            size: null;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.segments.preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                        meta: {
+                            total: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.segments.members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The segment ID */
+                segment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                        meta: {
+                            total: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "crm.segments.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The segment ID */
+                segment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            description: string | null;
+                            filters: string;
+                            size: null;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.segments.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The segment ID */
+                segment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "crm.campaigns.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "crm.campaigns.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            segment_id: string;
+                            segment_name: string;
+                            template_id: string;
+                            template_name: string;
+                            channel: string;
+                            status: string;
+                            scheduled_at: string | null;
+                            started_at: string | null;
+                            finished_at: string | null;
+                            hourly_limit: number | null;
+                            can_edit: boolean;
+                            can_schedule: boolean;
+                            can_cancel: boolean;
+                            progress: null;
+                            created_by_name: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.campaigns.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The campaign ID */
+                campaign: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            segment_id: string;
+                            segment_name: string;
+                            template_id: string;
+                            template_name: string;
+                            channel: string;
+                            status: string;
+                            scheduled_at: string | null;
+                            started_at: string | null;
+                            finished_at: string | null;
+                            hourly_limit: number | null;
+                            can_edit: boolean;
+                            can_schedule: boolean;
+                            can_cancel: boolean;
+                            progress: {
+                                audience: number;
+                                queued: string;
+                                sent: string;
+                                failed: string;
+                                skipped: string;
+                                skipped_by_reason: string;
+                                remaining: unknown;
+                            };
+                            created_by_name: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "crm.campaigns.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The campaign ID */
+                campaign: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            segment_id: string;
+                            segment_name: string;
+                            template_id: string;
+                            template_name: string;
+                            channel: string;
+                            status: string;
+                            scheduled_at: string | null;
+                            started_at: string | null;
+                            finished_at: string | null;
+                            hourly_limit: number | null;
+                            can_edit: boolean;
+                            can_schedule: boolean;
+                            can_cancel: boolean;
+                            progress: null;
+                            created_by_name: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.campaigns.status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The campaign ID */
+                campaign: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            segment_id: string;
+                            segment_name: string;
+                            template_id: string;
+                            template_name: string;
+                            channel: string;
+                            status: string;
+                            scheduled_at: string | null;
+                            started_at: string | null;
+                            finished_at: string | null;
+                            hourly_limit: number | null;
+                            can_edit: boolean;
+                            can_schedule: boolean;
+                            can_cancel: boolean;
+                            progress: {
+                                audience: number;
+                                queued: string;
+                                sent: string;
+                                failed: string;
+                                skipped: string;
+                                skipped_by_reason: string;
+                                remaining: unknown;
+                            };
+                            created_by_name: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            staff: unknown[];
+                            lead_stages: unknown[];
+                            task_kinds: [
+                                {
+                                    /** @constant */
+                                    value: "follow_up";
+                                    /** @constant */
+                                    label: "Follow-up";
+                                },
+                                {
+                                    /** @constant */
+                                    value: "call";
+                                    /** @constant */
+                                    label: "Call";
+                                },
+                                {
+                                    /** @constant */
+                                    value: "booking_request";
+                                    /** @constant */
+                                    label: "Booking request";
+                                },
+                                {
+                                    /** @constant */
+                                    value: "other";
+                                    /** @constant */
+                                    label: "Other";
+                                }
+                            ];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "crm.customers.index": {
+        parameters: {
+            query?: {
+                name?: string;
+                body?: string;
+                notes?: string | null;
+                note?: string | null;
+                description?: string | null;
+                is_active?: boolean;
+                status?: string;
+                branch_id?: string | null;
+                customer_account_id?: string | null;
+                vehicle_id?: string | null;
+                template_id?: string;
+                q?: string | null;
+                mine?: boolean;
+                purpose?: components["schemas"]["MessagePurpose"];
+                source_type?: "reminder" | "campaign" | "feedback" | "task" | "manual";
+                source_id?: string;
+                per_page?: number;
+                page?: number;
+                pinned?: boolean;
+                title?: string;
+                details?: string | null;
+                kind?: "follow_up" | "call" | "booking_request" | "other";
+                lead_id?: string | null;
+                assignee_id?: string | null;
+                due_on?: string | null;
+                remind_at?: string | null;
+                company_name?: string;
+                contact_name?: string | null;
+                contact_email?: string | null;
+                contact_phone?: string | null;
+                value_cents?: number;
+                owner_id?: string | null;
+                next_step?: string | null;
+                next_step_on?: string | null;
+                source?: string | null;
+                is_dealer?: boolean;
+                stage?: components["schemas"]["LeadStage"];
+                lost_reason?: string | null;
+                consent_channel?: "in_person" | "paper_form" | "email" | "sms" | "phone";
+                payment_terms_days?: number;
+                credit_limit_cents?: number | null;
+                registered_name?: string | null;
+                tin?: string | null;
+                address?: string | null;
+                service_reminders?: boolean;
+                marketing?: boolean;
+                "approval_overrides[auto_approve_under_cents]"?: number | null;
+                "approval_overrides[ops_approval_under_cents]"?: number | null;
+                "approval_overrides[sla_hours]"?: number | null;
+                "approval_overrides[variance_threshold_pct]"?: number | null;
+                "approval_overrides[monthly_budget_cents]"?: number | null;
+                channel?: components["schemas"]["MessageChannel"];
+                subject?: string | null;
+                enabled?: boolean;
+                lead_days?: number | null;
+                quiet_start_minutes?: number;
+                quiet_end_minutes?: number;
+                reminder_cooldown_days?: number;
+                lapsed_after_days?: number;
+                campaign_hourly_limit?: number;
+                feedback_enabled?: boolean;
+                loyalty_enabled?: boolean;
+                loyalty_cents_per_point?: number;
+                discount_pct?: number;
+                priority_booking?: boolean;
+                "free_addon_ids[]"?: string[];
+                perks?: string | null;
+                position?: number;
+                tier_id?: string;
+                started_on?: string | null;
+                expires_on?: string | null;
+                price_cents?: number;
+                credits?: number;
+                detailing_package_id?: string | null;
+                valid_days?: number | null;
+                plan_id?: string;
+                payment_method?: components["schemas"]["PaymentMethod"];
+                payment_reference?: string | null;
+                detailing_booking_id?: string;
+                points?: number;
+                reason?: "redeemed" | "adjusted";
+                "filters[min_spend_cents]"?: number | null;
+                "filters[max_spend_cents]"?: number | null;
+                "filters[visited_within_days]"?: number | null;
+                "filters[not_visited_for_days]"?: number | null;
+                "filters[makes][]"?: string[];
+                "filters[size_classes][]"?: "small" | "medium" | "large" | "xl";
+                "filters[tier_ids][]"?: string[];
+                "filters[branch_ids][]"?: string[];
+                "filters[account_type]"?: "company" | "individual" | null;
+                "filters[tags][]"?: string[];
+                segment_id?: string;
+                scheduled_at?: string | null;
+                hourly_limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            display_name: string;
+                            account_type: string;
+                            status: string;
+                            tags: string;
+                            spend_cents: string;
+                            last_visit_on: string;
+                            tier_name: string | null;
+                            open_tasks: number;
+                        }[];
+                        meta: {
+                            page: number;
+                            per_page: number;
+                            total: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.customers.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The customer account ID */
+                customer_account: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            account: {
+                                id: string;
+                                display_name: string;
+                                account_type: string;
+                                status: string;
+                                tags: string[];
+                                is_dealer: boolean;
+                                email: string | null;
+                                mobile: string | null;
+                                contact_name: string | null;
+                                payment_terms_days: number;
+                                credit_limit_cents: Record<string, never> | null;
+                                source: string | null;
+                                customer_since: string;
+                            };
+                            summary: {
+                                vehicles: number;
+                                jobs: number;
+                                open_jobs: number;
+                                bookings: number;
+                                billed_cents: number;
+                                paid_cents: number;
+                                balance_cents: number;
+                                last_visit_on: unknown;
+                                points: number;
+                                open_tasks: number;
+                                last_score: number | null;
+                            };
+                            contacts: unknown[];
+                            vehicles: unknown[];
+                            work_orders: unknown[];
+                            invoices: unknown[];
+                            payments: unknown[];
+                            bookings: unknown[];
+                            consents: unknown[];
+                            notes: unknown[];
+                            tasks: unknown[];
+                            messages: unknown[];
+                            feedback: unknown[];
+                            membership: {
+                                id: string;
+                                customer_account_id: string;
+                                tier_id: string;
+                                tier_name: string;
+                                discount_pct: string;
+                                priority_booking: boolean;
+                                free_addon_ids: string[];
+                                perks: string | null;
+                                started_on: string;
+                                expires_on: string | null;
+                                status: string;
+                                in_force: string;
+                                notes: string | null;
+                            } | null;
+                            memberships: unknown[];
+                            packages: unknown[];
+                            timeline: unknown[];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "crm.customers.benefits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The customer account ID */
+                customer_account: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            customer_account_id: string;
+                            membership: {
+                                id: string;
+                                customer_account_id: string;
+                                tier_id: string;
+                                tier_name: string;
+                                discount_pct: string;
+                                priority_booking: boolean;
+                                free_addon_ids: string[];
+                                perks: string | null;
+                                started_on: string;
+                                expires_on: string | null;
+                                status: string;
+                                in_force: string;
+                                notes: string | null;
+                            } | null;
+                            packages: unknown[];
+                            points: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "crm.customers.notes.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The customer account ID */
+                customer_account: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            customer_account_id: string;
+                            vehicle_id: string | null;
+                            body: string;
+                            pinned: boolean;
+                            author_name: string;
+                            created_at: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.customers.notes.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The customer account ID */
+                customer_account: string;
+                /** @description The note ID */
+                note: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            customer_account_id: string;
+                            vehicle_id: string | null;
+                            body: string;
+                            pinned: boolean;
+                            author_name: string;
+                            created_at: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.customers.notes.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The customer account ID */
+                customer_account: string;
+                /** @description The note ID */
+                note: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "crm.customers.membership.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The customer account ID */
+                customer_account: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            customer_account_id: string;
+                            tier_id: string;
+                            tier_name: string;
+                            discount_pct: string;
+                            priority_booking: boolean;
+                            free_addon_ids: string[];
+                            perks: string | null;
+                            started_on: string;
+                            expires_on: string | null;
+                            status: string;
+                            in_force: string;
+                            notes: string | null;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.customers.membership.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The customer account ID */
+                customer_account: string;
+                /** @description The membership ID */
+                membership: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            customer_account_id: string;
+                            tier_id: string;
+                            tier_name: string;
+                            discount_pct: string;
+                            priority_booking: boolean;
+                            free_addon_ids: string[];
+                            perks: string | null;
+                            started_on: string;
+                            expires_on: string | null;
+                            status: string;
+                            in_force: string;
+                            notes: string | null;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "crm.customers.points.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The customer account ID */
+                customer_account: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            customer_account_id: string;
+                            points: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.tiers.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "crm.tiers.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            discount_pct: string;
+                            priority_booking: boolean;
+                            free_addon_ids: string[];
+                            perks: string | null;
+                            is_active: boolean;
+                            position: number;
+                            members: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.tiers.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The tier ID */
+                tier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            discount_pct: string;
+                            priority_booking: boolean;
+                            free_addon_ids: string[];
+                            perks: string | null;
+                            is_active: boolean;
+                            position: number;
+                            members: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.prepaid-plans.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "crm.prepaid-plans.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            price_cents: number;
+                            credits: number;
+                            detailing_package_id: string | null;
+                            valid_days: number | null;
+                            is_active: boolean;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.prepaid-plans.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The plan ID */
+                plan: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            price_cents: number;
+                            credits: number;
+                            detailing_package_id: string | null;
+                            valid_days: number | null;
+                            is_active: boolean;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.prepaid-packages.index": {
+        parameters: {
+            query?: {
+                name?: string;
+                body?: string;
+                notes?: string | null;
+                note?: string | null;
+                description?: string | null;
+                is_active?: boolean;
+                status?: string;
+                branch_id?: string | null;
+                customer_account_id?: string | null;
+                vehicle_id?: string | null;
+                template_id?: string;
+                q?: string | null;
+                mine?: boolean;
+                purpose?: components["schemas"]["MessagePurpose"];
+                source_type?: "reminder" | "campaign" | "feedback" | "task" | "manual";
+                source_id?: string;
+                per_page?: number;
+                page?: number;
+                pinned?: boolean;
+                title?: string;
+                details?: string | null;
+                kind?: "follow_up" | "call" | "booking_request" | "other";
+                lead_id?: string | null;
+                assignee_id?: string | null;
+                due_on?: string | null;
+                remind_at?: string | null;
+                company_name?: string;
+                contact_name?: string | null;
+                contact_email?: string | null;
+                contact_phone?: string | null;
+                value_cents?: number;
+                owner_id?: string | null;
+                next_step?: string | null;
+                next_step_on?: string | null;
+                source?: string | null;
+                is_dealer?: boolean;
+                stage?: components["schemas"]["LeadStage"];
+                lost_reason?: string | null;
+                consent_channel?: "in_person" | "paper_form" | "email" | "sms" | "phone";
+                payment_terms_days?: number;
+                credit_limit_cents?: number | null;
+                registered_name?: string | null;
+                tin?: string | null;
+                address?: string | null;
+                service_reminders?: boolean;
+                marketing?: boolean;
+                "approval_overrides[auto_approve_under_cents]"?: number | null;
+                "approval_overrides[ops_approval_under_cents]"?: number | null;
+                "approval_overrides[sla_hours]"?: number | null;
+                "approval_overrides[variance_threshold_pct]"?: number | null;
+                "approval_overrides[monthly_budget_cents]"?: number | null;
+                channel?: components["schemas"]["MessageChannel"];
+                subject?: string | null;
+                enabled?: boolean;
+                lead_days?: number | null;
+                quiet_start_minutes?: number;
+                quiet_end_minutes?: number;
+                reminder_cooldown_days?: number;
+                lapsed_after_days?: number;
+                campaign_hourly_limit?: number;
+                feedback_enabled?: boolean;
+                loyalty_enabled?: boolean;
+                loyalty_cents_per_point?: number;
+                discount_pct?: number;
+                priority_booking?: boolean;
+                "free_addon_ids[]"?: string[];
+                perks?: string | null;
+                position?: number;
+                tier_id?: string;
+                started_on?: string | null;
+                expires_on?: string | null;
+                price_cents?: number;
+                credits?: number;
+                detailing_package_id?: string | null;
+                valid_days?: number | null;
+                plan_id?: string;
+                payment_method?: components["schemas"]["PaymentMethod"];
+                payment_reference?: string | null;
+                detailing_booking_id?: string;
+                points?: number;
+                reason?: "redeemed" | "adjusted";
+                "filters[min_spend_cents]"?: number | null;
+                "filters[max_spend_cents]"?: number | null;
+                "filters[visited_within_days]"?: number | null;
+                "filters[not_visited_for_days]"?: number | null;
+                "filters[makes][]"?: string[];
+                "filters[size_classes][]"?: "small" | "medium" | "large" | "xl";
+                "filters[tier_ids][]"?: string[];
+                "filters[branch_ids][]"?: string[];
+                "filters[account_type]"?: "company" | "individual" | null;
+                "filters[tags][]"?: string[];
+                segment_id?: string;
+                scheduled_at?: string | null;
+                hourly_limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                        meta: {
+                            page: number;
+                            per_page: number;
+                            total: number;
+                        };
+                        summary: {
+                            sold: number;
+                            sold_cents: number;
+                            unearned_cents: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.prepaid-packages.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            reference: string;
+                            customer_account_id: string;
+                            customer_name: string | null;
+                            branch_id: string;
+                            plan_id: string;
+                            plan_name: string;
+                            price_cents: number;
+                            credits_total: number;
+                            credits_used: number;
+                            credits_left: number;
+                            /** @description What is still owed as service: this package's share of Unearned Revenue. */
+                            unearned_cents: number;
+                            detailing_package_id: string | null;
+                            sold_on: string;
+                            expires_on: string | null;
+                            expired: string;
+                            usable: string;
+                            payment_method: string;
+                            payment_reference: string | null;
+                            sold_by_name: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.prepaid-packages.redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The prepaid package ID */
+                prepaid_package: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.settings.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            quiet_start_minutes: number;
+                            quiet_end_minutes: number;
+                            reminder_cooldown_days: number;
+                            lapsed_after_days: number;
+                            campaign_hourly_limit: number;
+                            feedback_enabled: boolean;
+                            loyalty_enabled: boolean;
+                            loyalty_cents_per_point: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "crm.settings.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            quiet_start_minutes: number;
+                            quiet_end_minutes: number;
+                            reminder_cooldown_days: number;
+                            lapsed_after_days: number;
+                            campaign_hourly_limit: number;
+                            feedback_enabled: boolean;
+                            loyalty_enabled: boolean;
+                            loyalty_cents_per_point: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.templates.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                        meta: {
+                            channels: unknown[];
+                            purposes: unknown[];
+                            standard_placeholders: [
+                                "customer_name",
+                                "shop",
+                                "shop_phone",
+                                "link",
+                                "unsubscribe_link"
+                            ];
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "crm.templates.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            channel: string;
+                            /** @enum {string} */
+                            channel_label: "Email" | "SMS";
+                            purpose: string;
+                            /** @enum {string} */
+                            purpose_label: "Service reminder" | "Marketing" | "Feedback request" | "Transactional";
+                            subject: string | null;
+                            body: string;
+                            placeholders: unknown[];
+                            is_active: boolean;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.templates.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The template ID */
+                template: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            name: string;
+                            channel: string;
+                            /** @enum {string} */
+                            channel_label: "Email" | "SMS";
+                            purpose: string;
+                            /** @enum {string} */
+                            purpose_label: "Service reminder" | "Marketing" | "Feedback request" | "Transactional";
+                            subject: string | null;
+                            body: string;
+                            placeholders: unknown[];
+                            is_active: boolean;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.templates.destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The template ID */
+                template: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "crm.reminder-rules.index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "crm.reminder-rules.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            enabled: boolean;
+                            template_id: string;
+                            template_name: string;
+                            lead_days: number | null;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.reminders.run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            candidates: number;
+                            queued: number;
+                            skipped: {
+                                [key: string]: number;
+                            };
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+        };
+    };
+    "crm.messages.index": {
+        parameters: {
+            query?: {
+                name?: string;
+                body?: string;
+                notes?: string | null;
+                note?: string | null;
+                description?: string | null;
+                is_active?: boolean;
+                status?: string;
+                branch_id?: string | null;
+                customer_account_id?: string | null;
+                vehicle_id?: string | null;
+                template_id?: string;
+                q?: string | null;
+                mine?: boolean;
+                purpose?: components["schemas"]["MessagePurpose"];
+                source_type?: "reminder" | "campaign" | "feedback" | "task" | "manual";
+                source_id?: string;
+                per_page?: number;
+                page?: number;
+                pinned?: boolean;
+                title?: string;
+                details?: string | null;
+                kind?: "follow_up" | "call" | "booking_request" | "other";
+                lead_id?: string | null;
+                assignee_id?: string | null;
+                due_on?: string | null;
+                remind_at?: string | null;
+                company_name?: string;
+                contact_name?: string | null;
+                contact_email?: string | null;
+                contact_phone?: string | null;
+                value_cents?: number;
+                owner_id?: string | null;
+                next_step?: string | null;
+                next_step_on?: string | null;
+                source?: string | null;
+                is_dealer?: boolean;
+                stage?: components["schemas"]["LeadStage"];
+                lost_reason?: string | null;
+                consent_channel?: "in_person" | "paper_form" | "email" | "sms" | "phone";
+                payment_terms_days?: number;
+                credit_limit_cents?: number | null;
+                registered_name?: string | null;
+                tin?: string | null;
+                address?: string | null;
+                service_reminders?: boolean;
+                marketing?: boolean;
+                "approval_overrides[auto_approve_under_cents]"?: number | null;
+                "approval_overrides[ops_approval_under_cents]"?: number | null;
+                "approval_overrides[sla_hours]"?: number | null;
+                "approval_overrides[variance_threshold_pct]"?: number | null;
+                "approval_overrides[monthly_budget_cents]"?: number | null;
+                channel?: components["schemas"]["MessageChannel"];
+                subject?: string | null;
+                enabled?: boolean;
+                lead_days?: number | null;
+                quiet_start_minutes?: number;
+                quiet_end_minutes?: number;
+                reminder_cooldown_days?: number;
+                lapsed_after_days?: number;
+                campaign_hourly_limit?: number;
+                feedback_enabled?: boolean;
+                loyalty_enabled?: boolean;
+                loyalty_cents_per_point?: number;
+                discount_pct?: number;
+                priority_booking?: boolean;
+                "free_addon_ids[]"?: string[];
+                perks?: string | null;
+                position?: number;
+                tier_id?: string;
+                started_on?: string | null;
+                expires_on?: string | null;
+                price_cents?: number;
+                credits?: number;
+                detailing_package_id?: string | null;
+                valid_days?: number | null;
+                plan_id?: string;
+                payment_method?: components["schemas"]["PaymentMethod"];
+                payment_reference?: string | null;
+                detailing_booking_id?: string;
+                points?: number;
+                reason?: "redeemed" | "adjusted";
+                "filters[min_spend_cents]"?: number | null;
+                "filters[max_spend_cents]"?: number | null;
+                "filters[visited_within_days]"?: number | null;
+                "filters[not_visited_for_days]"?: number | null;
+                "filters[makes][]"?: string[];
+                "filters[size_classes][]"?: "small" | "medium" | "large" | "xl";
+                "filters[tier_ids][]"?: string[];
+                "filters[branch_ids][]"?: string[];
+                "filters[account_type]"?: "company" | "individual" | null;
+                "filters[tags][]"?: string[];
+                segment_id?: string;
+                scheduled_at?: string | null;
+                hourly_limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                        meta: {
+                            page: number;
+                            per_page: number;
+                            total: number;
+                        };
+                        summary: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.feedback.index": {
+        parameters: {
+            query?: {
+                name?: string;
+                body?: string;
+                notes?: string | null;
+                note?: string | null;
+                description?: string | null;
+                is_active?: boolean;
+                status?: string;
+                branch_id?: string | null;
+                customer_account_id?: string | null;
+                vehicle_id?: string | null;
+                template_id?: string;
+                q?: string | null;
+                mine?: boolean;
+                purpose?: components["schemas"]["MessagePurpose"];
+                source_type?: "reminder" | "campaign" | "feedback" | "task" | "manual";
+                source_id?: string;
+                per_page?: number;
+                page?: number;
+                pinned?: boolean;
+                title?: string;
+                details?: string | null;
+                kind?: "follow_up" | "call" | "booking_request" | "other";
+                lead_id?: string | null;
+                assignee_id?: string | null;
+                due_on?: string | null;
+                remind_at?: string | null;
+                company_name?: string;
+                contact_name?: string | null;
+                contact_email?: string | null;
+                contact_phone?: string | null;
+                value_cents?: number;
+                owner_id?: string | null;
+                next_step?: string | null;
+                next_step_on?: string | null;
+                source?: string | null;
+                is_dealer?: boolean;
+                stage?: components["schemas"]["LeadStage"];
+                lost_reason?: string | null;
+                consent_channel?: "in_person" | "paper_form" | "email" | "sms" | "phone";
+                payment_terms_days?: number;
+                credit_limit_cents?: number | null;
+                registered_name?: string | null;
+                tin?: string | null;
+                address?: string | null;
+                service_reminders?: boolean;
+                marketing?: boolean;
+                "approval_overrides[auto_approve_under_cents]"?: number | null;
+                "approval_overrides[ops_approval_under_cents]"?: number | null;
+                "approval_overrides[sla_hours]"?: number | null;
+                "approval_overrides[variance_threshold_pct]"?: number | null;
+                "approval_overrides[monthly_budget_cents]"?: number | null;
+                channel?: components["schemas"]["MessageChannel"];
+                subject?: string | null;
+                enabled?: boolean;
+                lead_days?: number | null;
+                quiet_start_minutes?: number;
+                quiet_end_minutes?: number;
+                reminder_cooldown_days?: number;
+                lapsed_after_days?: number;
+                campaign_hourly_limit?: number;
+                feedback_enabled?: boolean;
+                loyalty_enabled?: boolean;
+                loyalty_cents_per_point?: number;
+                discount_pct?: number;
+                priority_booking?: boolean;
+                "free_addon_ids[]"?: string[];
+                perks?: string | null;
+                position?: number;
+                tier_id?: string;
+                started_on?: string | null;
+                expires_on?: string | null;
+                price_cents?: number;
+                credits?: number;
+                detailing_package_id?: string | null;
+                valid_days?: number | null;
+                plan_id?: string;
+                payment_method?: components["schemas"]["PaymentMethod"];
+                payment_reference?: string | null;
+                detailing_booking_id?: string;
+                points?: number;
+                reason?: "redeemed" | "adjusted";
+                "filters[min_spend_cents]"?: number | null;
+                "filters[max_spend_cents]"?: number | null;
+                "filters[visited_within_days]"?: number | null;
+                "filters[not_visited_for_days]"?: number | null;
+                "filters[makes][]"?: string[];
+                "filters[size_classes][]"?: "small" | "medium" | "large" | "xl";
+                "filters[tier_ids][]"?: string[];
+                "filters[branch_ids][]"?: string[];
+                "filters[account_type]"?: "company" | "individual" | null;
+                "filters[tags][]"?: string[];
+                segment_id?: string;
+                scheduled_at?: string | null;
+                hourly_limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                        summary: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.tasks.index": {
+        parameters: {
+            query?: {
+                name?: string;
+                body?: string;
+                notes?: string | null;
+                note?: string | null;
+                description?: string | null;
+                is_active?: boolean;
+                status?: string;
+                branch_id?: string | null;
+                customer_account_id?: string | null;
+                vehicle_id?: string | null;
+                template_id?: string;
+                q?: string | null;
+                mine?: boolean;
+                purpose?: components["schemas"]["MessagePurpose"];
+                source_type?: "reminder" | "campaign" | "feedback" | "task" | "manual";
+                source_id?: string;
+                per_page?: number;
+                page?: number;
+                pinned?: boolean;
+                title?: string;
+                details?: string | null;
+                kind?: "follow_up" | "call" | "booking_request" | "other";
+                lead_id?: string | null;
+                assignee_id?: string | null;
+                due_on?: string | null;
+                remind_at?: string | null;
+                company_name?: string;
+                contact_name?: string | null;
+                contact_email?: string | null;
+                contact_phone?: string | null;
+                value_cents?: number;
+                owner_id?: string | null;
+                next_step?: string | null;
+                next_step_on?: string | null;
+                source?: string | null;
+                is_dealer?: boolean;
+                stage?: components["schemas"]["LeadStage"];
+                lost_reason?: string | null;
+                consent_channel?: "in_person" | "paper_form" | "email" | "sms" | "phone";
+                payment_terms_days?: number;
+                credit_limit_cents?: number | null;
+                registered_name?: string | null;
+                tin?: string | null;
+                address?: string | null;
+                service_reminders?: boolean;
+                marketing?: boolean;
+                "approval_overrides[auto_approve_under_cents]"?: number | null;
+                "approval_overrides[ops_approval_under_cents]"?: number | null;
+                "approval_overrides[sla_hours]"?: number | null;
+                "approval_overrides[variance_threshold_pct]"?: number | null;
+                "approval_overrides[monthly_budget_cents]"?: number | null;
+                channel?: components["schemas"]["MessageChannel"];
+                subject?: string | null;
+                enabled?: boolean;
+                lead_days?: number | null;
+                quiet_start_minutes?: number;
+                quiet_end_minutes?: number;
+                reminder_cooldown_days?: number;
+                lapsed_after_days?: number;
+                campaign_hourly_limit?: number;
+                feedback_enabled?: boolean;
+                loyalty_enabled?: boolean;
+                loyalty_cents_per_point?: number;
+                discount_pct?: number;
+                priority_booking?: boolean;
+                "free_addon_ids[]"?: string[];
+                perks?: string | null;
+                position?: number;
+                tier_id?: string;
+                started_on?: string | null;
+                expires_on?: string | null;
+                price_cents?: number;
+                credits?: number;
+                detailing_package_id?: string | null;
+                valid_days?: number | null;
+                plan_id?: string;
+                payment_method?: components["schemas"]["PaymentMethod"];
+                payment_reference?: string | null;
+                detailing_booking_id?: string;
+                points?: number;
+                reason?: "redeemed" | "adjusted";
+                "filters[min_spend_cents]"?: number | null;
+                "filters[max_spend_cents]"?: number | null;
+                "filters[visited_within_days]"?: number | null;
+                "filters[not_visited_for_days]"?: number | null;
+                "filters[makes][]"?: string[];
+                "filters[size_classes][]"?: "small" | "medium" | "large" | "xl";
+                "filters[tier_ids][]"?: string[];
+                "filters[branch_ids][]"?: string[];
+                "filters[account_type]"?: "company" | "individual" | null;
+                "filters[tags][]"?: string[];
+                segment_id?: string;
+                scheduled_at?: string | null;
+                hourly_limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                        meta: {
+                            page: number;
+                            per_page: number;
+                            total: number;
+                        };
+                        summary: {
+                            open: number;
+                            overdue: number;
+                            reminders_due: number;
+                            booking_requests: number;
+                            unassigned: number;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.tasks.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            title: string;
+                            details: string | null;
+                            kind: string;
+                            status: string;
+                            customer_account_id: string | null;
+                            customer_name: string | null;
+                            lead_id: string | null;
+                            lead_name: string | null;
+                            vehicle_id: string | null;
+                            assignee_id: string | null;
+                            assignee_name: string | null;
+                            due_on: string | null;
+                            remind_at: string | null;
+                            overdue: string;
+                            reminder_due: string;
+                            completed_at: string | null;
+                            completed_by_name: string | null;
+                            created_by_name: string;
+                            created_at: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.tasks.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The task ID */
+                task: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            title: string;
+                            details: string | null;
+                            kind: string;
+                            status: string;
+                            customer_account_id: string | null;
+                            customer_name: string | null;
+                            lead_id: string | null;
+                            lead_name: string | null;
+                            vehicle_id: string | null;
+                            assignee_id: string | null;
+                            assignee_name: string | null;
+                            due_on: string | null;
+                            remind_at: string | null;
+                            overdue: string;
+                            reminder_due: string;
+                            completed_at: string | null;
+                            completed_by_name: string | null;
+                            created_by_name: string;
+                            created_at: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.tasks.status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The task ID */
+                task: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            title: string;
+                            details: string | null;
+                            kind: string;
+                            status: string;
+                            customer_account_id: string | null;
+                            customer_name: string | null;
+                            lead_id: string | null;
+                            lead_name: string | null;
+                            vehicle_id: string | null;
+                            assignee_id: string | null;
+                            assignee_name: string | null;
+                            due_on: string | null;
+                            remind_at: string | null;
+                            overdue: string;
+                            reminder_due: string;
+                            completed_at: string | null;
+                            completed_by_name: string | null;
+                            created_by_name: string;
+                            created_at: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.leads.index": {
+        parameters: {
+            query?: {
+                name?: string;
+                body?: string;
+                notes?: string | null;
+                note?: string | null;
+                description?: string | null;
+                is_active?: boolean;
+                status?: string;
+                branch_id?: string | null;
+                customer_account_id?: string | null;
+                vehicle_id?: string | null;
+                template_id?: string;
+                q?: string | null;
+                mine?: boolean;
+                purpose?: components["schemas"]["MessagePurpose"];
+                source_type?: "reminder" | "campaign" | "feedback" | "task" | "manual";
+                source_id?: string;
+                per_page?: number;
+                page?: number;
+                pinned?: boolean;
+                title?: string;
+                details?: string | null;
+                kind?: "follow_up" | "call" | "booking_request" | "other";
+                lead_id?: string | null;
+                assignee_id?: string | null;
+                due_on?: string | null;
+                remind_at?: string | null;
+                company_name?: string;
+                contact_name?: string | null;
+                contact_email?: string | null;
+                contact_phone?: string | null;
+                value_cents?: number;
+                owner_id?: string | null;
+                next_step?: string | null;
+                next_step_on?: string | null;
+                source?: string | null;
+                is_dealer?: boolean;
+                stage?: components["schemas"]["LeadStage"];
+                lost_reason?: string | null;
+                consent_channel?: "in_person" | "paper_form" | "email" | "sms" | "phone";
+                payment_terms_days?: number;
+                credit_limit_cents?: number | null;
+                registered_name?: string | null;
+                tin?: string | null;
+                address?: string | null;
+                service_reminders?: boolean;
+                marketing?: boolean;
+                "approval_overrides[auto_approve_under_cents]"?: number | null;
+                "approval_overrides[ops_approval_under_cents]"?: number | null;
+                "approval_overrides[sla_hours]"?: number | null;
+                "approval_overrides[variance_threshold_pct]"?: number | null;
+                "approval_overrides[monthly_budget_cents]"?: number | null;
+                channel?: components["schemas"]["MessageChannel"];
+                subject?: string | null;
+                enabled?: boolean;
+                lead_days?: number | null;
+                quiet_start_minutes?: number;
+                quiet_end_minutes?: number;
+                reminder_cooldown_days?: number;
+                lapsed_after_days?: number;
+                campaign_hourly_limit?: number;
+                feedback_enabled?: boolean;
+                loyalty_enabled?: boolean;
+                loyalty_cents_per_point?: number;
+                discount_pct?: number;
+                priority_booking?: boolean;
+                "free_addon_ids[]"?: string[];
+                perks?: string | null;
+                position?: number;
+                tier_id?: string;
+                started_on?: string | null;
+                expires_on?: string | null;
+                price_cents?: number;
+                credits?: number;
+                detailing_package_id?: string | null;
+                valid_days?: number | null;
+                plan_id?: string;
+                payment_method?: components["schemas"]["PaymentMethod"];
+                payment_reference?: string | null;
+                detailing_booking_id?: string;
+                points?: number;
+                reason?: "redeemed" | "adjusted";
+                "filters[min_spend_cents]"?: number | null;
+                "filters[max_spend_cents]"?: number | null;
+                "filters[visited_within_days]"?: number | null;
+                "filters[not_visited_for_days]"?: number | null;
+                "filters[makes][]"?: string[];
+                "filters[size_classes][]"?: "small" | "medium" | "large" | "xl";
+                "filters[tier_ids][]"?: string[];
+                "filters[branch_ids][]"?: string[];
+                "filters[account_type]"?: "company" | "individual" | null;
+                "filters[tags][]"?: string[];
+                segment_id?: string;
+                scheduled_at?: string | null;
+                hourly_limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            stages: {
+                                value: string;
+                                label: string;
+                                open: string;
+                                count: number;
+                                value_cents: number;
+                                leads: unknown[];
+                            }[];
+                            summary: {
+                                open: number;
+                                open_value_cents: number;
+                                won: number;
+                                won_value_cents: number;
+                                lost: number;
+                            };
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.leads.store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            branch_id: string | null;
+                            company_name: string;
+                            contact_name: string | null;
+                            contact_email: string | null;
+                            contact_phone: string | null;
+                            stage: string;
+                            /** @enum {string} */
+                            stage_label: "New" | "Contacted" | "Site visit" | "Quote sent" | "Negotiating" | "Won" | "Lost";
+                            is_open: boolean;
+                            value_cents: number;
+                            owner_id: string | null;
+                            owner_name: string | null;
+                            next_step: string | null;
+                            next_step_on: string | null;
+                            next_step_overdue: string;
+                            source: string | null;
+                            is_dealer: boolean;
+                            notes: string | null;
+                            lost_reason: string | null;
+                            customer_account_id: string | null;
+                            stage_changed_at: string;
+                            created_at: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.leads.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The lead ID */
+                lead: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+        };
+    };
+    "crm.leads.update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The lead ID */
+                lead: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            branch_id: string | null;
+                            company_name: string;
+                            contact_name: string | null;
+                            contact_email: string | null;
+                            contact_phone: string | null;
+                            stage: string;
+                            /** @enum {string} */
+                            stage_label: "New" | "Contacted" | "Site visit" | "Quote sent" | "Negotiating" | "Won" | "Lost";
+                            is_open: boolean;
+                            value_cents: number;
+                            owner_id: string | null;
+                            owner_name: string | null;
+                            next_step: string | null;
+                            next_step_on: string | null;
+                            next_step_overdue: string;
+                            source: string | null;
+                            is_dealer: boolean;
+                            notes: string | null;
+                            lost_reason: string | null;
+                            customer_account_id: string | null;
+                            stage_changed_at: string;
+                            created_at: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.leads.stage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The lead ID */
+                lead: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            id: string;
+                            branch_id: string | null;
+                            company_name: string;
+                            contact_name: string | null;
+                            contact_email: string | null;
+                            contact_phone: string | null;
+                            stage: string;
+                            /** @enum {string} */
+                            stage_label: "New" | "Contacted" | "Site visit" | "Quote sent" | "Negotiating" | "Won" | "Lost";
+                            is_open: boolean;
+                            value_cents: number;
+                            owner_id: string | null;
+                            owner_name: string | null;
+                            next_step: string | null;
+                            next_step_on: string | null;
+                            next_step_overdue: string;
+                            source: string | null;
+                            is_dealer: boolean;
+                            notes: string | null;
+                            lost_reason: string | null;
+                            customer_account_id: string | null;
+                            stage_changed_at: string;
+                            created_at: string;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "crm.leads.convert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The lead ID */
+                lead: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CrmRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: unknown[];
+                    };
+                };
+            };
+            401: components["responses"]["Error.unauthenticated"];
+            403: components["responses"]["Error.forbidden"];
+            404: components["responses"]["Error.not_found"];
+            422: components["responses"]["Error.validation"];
         };
     };
     "sanctum.csrf-cookie": {
@@ -11732,7 +15382,7 @@ export interface operations {
                 from?: string;
                 to?: string;
                 account_id?: string;
-                event?: "invoice_issued" | "invoice_voided" | "payment_received" | "payment_voided" | "credit_applied" | "credit_reversed" | "stock_opening" | "stock_receipt" | "stock_receipt_return" | "stock_issue" | "stock_return" | "stock_consumption" | "stock_adjustment" | "stock_transfer" | "stock_maintenance" | "stock_maintenance_return";
+                event?: "invoice_issued" | "invoice_voided" | "payment_received" | "payment_voided" | "credit_applied" | "credit_reversed" | "stock_opening" | "stock_receipt" | "stock_receipt_return" | "stock_issue" | "stock_return" | "stock_consumption" | "stock_adjustment" | "stock_transfer" | "stock_maintenance" | "stock_maintenance_return" | "prepaid_sold" | "prepaid_redeemed";
                 branch_id?: string;
                 source_id?: string;
                 q?: string;
@@ -12934,6 +16584,173 @@ export interface operations {
                 };
             };
             422: components["responses"]["Error.validation"];
+        };
+    };
+    "public.crm.reminders.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    "public.crm.reminders.book": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** Format: date */
+                    preferred_date?: string | null;
+                    note?: string | null;
+                };
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "public.crm.feedback.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    "public.crm.feedback.answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    score: number;
+                    comment?: string | null;
+                };
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+            422: components["responses"]["Error.validation"];
+        };
+    };
+    "public.crm.unsubscribe.show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    "public.crm.unsubscribe.confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
         };
     };
     "purchase-orders.index": {

@@ -57,10 +57,13 @@ export type Capability =
   | "detailing:qc"
   | "detailing:manage"
   | "equipment:view"
-  | "equipment:manage";
+  | "equipment:manage"
+  | "crm:view"
+  | "crm:work"
+  | "crm:manage";
 
 /** A module the API gates screens behind. */
-export type ModuleKey = "repair_pms" | "detailing" | "equipment" | "cafe_pos";
+export type ModuleKey = "repair_pms" | "detailing" | "equipment" | "cafe_pos" | "crm";
 
 export interface BranchRef {
   id: string;

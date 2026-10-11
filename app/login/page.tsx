@@ -57,6 +57,9 @@ export default function LoginPage({ searchParams }: { searchParams: { next?: str
           <Link href="/workflow" className="mt-6 inline-flex items-center gap-2 rounded text-xs font-medium text-chrome-active transition-colors hover:text-chrome-foreground">
             Explore the service workflow <ArrowRight className="size-3.5" />
           </Link>
+          <Link href="/documentation" className="ml-6 mt-6 inline-flex items-center gap-2 rounded text-xs font-medium text-chrome-active transition-colors hover:text-chrome-foreground">
+            Read the documentation <ArrowRight className="size-3.5" />
+          </Link>
         </div>
         <p className="relative text-[10px] tracking-wide text-chrome-muted">{PLATFORM.productName} &middot; {PLATFORM.productDescription} Platform</p>
       </aside>

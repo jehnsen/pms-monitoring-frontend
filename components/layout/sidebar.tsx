@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, OctagonAlert, Wrench } from "lucide-react";
+import { ArrowUpRight, OctagonAlert, Wrench, BookOpen } from "lucide-react";
 import { homeHrefFor, navSectionsFor } from "@/lib/nav";
 import { useBranding, useFleetSummary, useRequests } from "@/lib/store";
 import { useSession } from "@/lib/auth";
@@ -140,6 +140,14 @@ export function Sidebar() {
           <span className="flex-1">
             <span className="block text-xs font-medium">Service workflow</span>
             <span className="mt-1 block text-[10px] text-chrome-muted">From check-in to handover</span>
+          </span>
+          <ArrowUpRight className="size-3.5 text-chrome-muted group-hover:text-chrome-foreground" />
+        </Link>
+        <Link href="/documentation" className="group mt-2 flex items-center gap-3 rounded-lg border border-chrome-border bg-chrome-foreground/[0.03] p-3 transition-colors hover:bg-chrome-foreground/[0.07]">
+          <BookOpen className="size-4 shrink-0 text-chrome-active" />
+          <span className="flex-1">
+            <span className="block text-xs font-medium">Documentation</span>
+            <span className="mt-1 block text-[10px] text-chrome-muted">Modules, roles and processes</span>
           </span>
           <ArrowUpRight className="size-3.5 text-chrome-muted group-hover:text-chrome-foreground" />
         </Link>

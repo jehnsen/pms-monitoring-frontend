@@ -25,6 +25,9 @@ export const PLATFORM = {
    * (`TenantSettings.supportEmail`).
    */
   supportEmail: "support@torquelane.ph",
+  /** Who makes the software: shown in the documentation's credits. */
+  builtBy: "3rdloop Solutions",
+  designedBy: { name: "Jehnsen Enrique", title: "Chief Technology Officer", company: "3rdloop Solutions" },
 } as const;
 
 /**

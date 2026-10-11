@@ -140,7 +140,9 @@ export interface DetailingBooking {
   materials: { consumedAt: string; cost: number } | null;
   margin: { revenue: number; materialsCost: number; margin: number; marginPct: string | null } | null;
   invoice: { id: string; number: string | null; status: string; totalDue: number; balance: number } | null;
-  next: { needsInspection: boolean; canSignOff: boolean; signOffBlockedReason: string | null; canInvoice: boolean; canCheckOut: boolean; lockedByInvoice: boolean };
+  /** The prepaid credit that settled the job instead of an invoice (CRM), when one did. Pesos. */
+  prepaid: { packageId: string; reference: string; planName: string; amount: number; redeemedOn: string } | null;
+  next: { needsInspection: boolean; canSignOff: boolean; signOffBlockedReason: string | null; canInvoice: boolean; canCheckOut: boolean; canRedeem: boolean; lockedByInvoice: boolean };
   statusLog: { id: string; fromStatus: BookingStatus | null; toStatus: BookingStatus; notes: string; actorName: string; changedAt: string }[];
   createdByName: string;
   createdAt: string;

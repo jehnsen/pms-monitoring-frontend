@@ -99,6 +99,19 @@ its endpoint, with the Phase 5 verification results.
   `BILLING_ROOTS`. Which starts are free (and why not), where a job sits day by
   day, when it ends, what it comes to and what it is waiting for (`next`) are
   all the API's; nothing is planned or totalled in the browser.
+- **The CRM** (Phase 11) has its own seam too: `lib/api/crm.ts` (`CRM_ROOT`,
+  `camel()`, `pesos()`), `lib/crm.ts` (hooks and `useCrmActions()`),
+  `lib/crm-public.ts` (the pages a message's link opens: no session) and
+  `types/crm.ts`. Two things differ from the older seams, on purpose: the
+  mapper is ONE generic deep camel-caser (the CRM's payloads are flat and many;
+  it changes key names and nothing else), and money stays in CENTAVOS
+  (`…Cents`), formatted where it is shown with `pesos()`. A segment's
+  `filters` object keeps the API's key names because it is sent straight back.
+  Every CRM query key starts with `crm`. Selling a prepaid package and
+  redeeming a credit post to the books, so those writes also refresh
+  `BILLING_ROOTS` (and a redemption the detailing queries); winning a lead
+  opens a customer account, so it refreshes the directory. A CRM record is
+  the organization's: these lists do not narrow with the branch switcher.
 - **`lib/mappers.ts`** — the seam between API resources and `types/index.ts`:
   snake_case → camelCase, centavos → pesos (**display only**), and the defaults
   components rely on (`""`, `[]`) for nullable fields. A new field on a domain
@@ -237,6 +250,35 @@ its endpoint, with the Phase 5 verification results.
   its rated life is in the bell with the rest (`equipment_*` kinds). The form's
   lists and the values a category suggests come from `GET /equipment/options`.
   `equipment:view` reads; `equipment:manage` writes (`DeniedAction` otherwise).
+- **The CRM** (Phase 11; `/shop/crm/*`, staff only, behind the `crm` module):
+  Customers (`/shop/crm`), Customer 360 (`/shop/crm/customers/[id]`: one
+  customer whole, with jobs, invoices, payments and bookings from EVERY branch,
+  consents, notes, tasks, messages, membership, packages and a timeline the API
+  builds from those records), Tasks (`/tasks`, including the booking requests
+  customers leave from a reminder), Pipeline (`/pipeline`: leads by stage;
+  losing asks why, winning converts to a company account with its terms and
+  consent), Memberships & packages (`/memberships`: tiers, prepaid plans,
+  packages sold and what they still owe as service), Reminder rules
+  (`/reminders`: the four kinds, quiet hours and the other limits, "Run now"),
+  Templates (`/templates`), Message log (`/messages`: sent, queued, failed and
+  NOT sent with the reason, plus feedback and the NPS) and Segments & campaigns
+  (`/campaigns`). `crm:view` reads, `crm:work` keeps notes and tasks, works
+  leads, enrols and sells, `crm:manage` sets up; each gated with `DeniedAction`.
+  **Nothing is decided in the browser**: who may be sent a message (consent,
+  opt-out, cooldown, quiet hours), a task's `overdue`, a segment's size, a
+  campaign's progress and a package's credits are the API's. The sale and the
+  redemption of a prepaid credit each mint their `Idempotency-Key` once.
+  On the detailing screens, `CustomerBenefitsNote` shows what a customer holds
+  when they are picked for a booking, and `RedeemCredit` offers to settle a
+  finished job with a prepaid credit where the API says it may
+  (`next.canRedeem`); both render nothing for a session without the CRM.
+- **A message's links** (`/r/[token]`, `/feedback/[token]`,
+  `/unsubscribe/[token]`): no sign-in; the token in the URL is the credential.
+  A reminder's link sends the customer to the branch's online booking where it
+  has one, else takes a booking request; feedback takes one 0–10 answer;
+  unsubscribe changes nothing until its button is pressed (mail scanners
+  follow links). A dead token gets one message that never says whether it
+  ever existed.
 - **Public booking** (`/book/[branchSlug]`, and
   `/book/[branchSlug]/confirmation/[token]`): no sign-in. The page wears the
   BRANCH's look: `BranchTheme` sets the branch's `theme_tokens` (the same
@@ -249,6 +291,16 @@ its endpoint, with the Phase 5 verification results.
   Detailing settings → Displays carries a display token in its URL fragment; the
   page keeps it on the device, sends it as `X-Display-Token` (never a cookie),
   and shows a "disconnected" message once the token is revoked.
+- **The guide** (`/documentation`) and **the walkthrough** (`/workflow`): both
+  public, no sign-in. `lib/guide.ts` holds the modules and the eight processes
+  as plain data (no imports, so server components read it); the documentation
+  page shows them in full, the workflow page shows the six that are not
+  animated as step strips linking back to it. The role tables on the
+  documentation page are drawn from `lib/rbac.ts` (`ROLE_CAPABILITIES`,
+  `ROLE_DESCRIPTION`), the same table the access page shows. **When a screen,
+  a rule or a grant changes, change its sentence in `lib/guide.ts` or its row
+  in `lib/rbac.ts`**: neither is consulted to allow anything, so nothing will
+  fail if they go stale; they will just be wrong.
 - **Documents** upload as multipart to the API (10 MB); a document on no vehicle
   is filed against an account (the portal user's own, or one staff pick).
   Downloads open a short-lived signed URL.

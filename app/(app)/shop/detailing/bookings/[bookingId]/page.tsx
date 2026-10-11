@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { DeniedAction } from "@/components/auth/denied-action";
 import { BookingStatusBadge, bookingStatusLabel, formatDay } from "@/components/detailing/booking-status";
 import { InspectionPanel } from "@/components/detailing/inspection-panel";
+import { RedeemCredit } from "@/components/crm/customer-benefits";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input, Textarea } from "@/components/ui/input";
@@ -423,6 +424,12 @@ export default function JobCardPage() {
             ) : booking.status === "completed" && booking.qc.status !== "passed" && !booking.invoice ? (
               <p className="text-2xs text-subtle-foreground">Sign the job off to bill it.</p>
             ) : null}
+            {booking.prepaid ? (
+              <p className="text-xs">
+                Settled with a prepaid credit of {booking.prepaid.planName} ({booking.prepaid.reference}), worth {formatPesos(booking.prepaid.amount)}. Nothing to invoice.
+              </p>
+            ) : null}
+            <RedeemCredit bookingId={booking.id} accountId={booking.customerAccountId} packageId={booking.package.id} canRedeem={booking.next.canRedeem} />
           </section>
         </aside>
       </div>
